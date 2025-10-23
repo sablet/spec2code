@@ -1,0 +1,18 @@
+# Config with intentional error: selecting 2 transforms in exclusive mode
+version: "1"
+meta:
+  config_name: "error-test-multiple-exclusive"
+  description: "Intentional error: selecting 2 transforms in exclusive mode"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+execution:
+  stages:
+    - stage_id: "normalization"
+      # exclusive mode: ERROR - selecting 2 instead of 1
+      selected:
+        - transform_id: normalize_minmax
+        - transform_id: normalize_zscore
+
+    - stage_id: "feature_engineering"
+      selected:
+        - transform_id: add_rolling_mean

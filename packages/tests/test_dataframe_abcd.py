@@ -138,7 +138,9 @@ def test_dataframe_abcd_transform_functions(dataframe_abcd_spec_path, tmp_path):
     generate_skeleton(spec, project_root=tmp_path)
 
     # Check transform_a_to_b file
-    transform_a_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
+    transform_a_file = (
+        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
+    )
     assert transform_a_file.exists()
 
     code_a = transform_a_file.read_text()
@@ -156,7 +158,9 @@ def test_dataframe_abcd_transform_functions(dataframe_abcd_spec_path, tmp_path):
     assert "Check[" in code_a
 
     # Check transform_bc_to_d file
-    transform_bc_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
+    transform_bc_file = (
+        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
+    )
     assert transform_bc_file.exists()
 
     code_bc = transform_bc_file.read_text()
@@ -177,7 +181,9 @@ def test_dataframe_abcd_type_annotations(dataframe_abcd_spec_path, tmp_path):
     generate_skeleton(spec, project_root=tmp_path)
 
     # Check transform_a_to_b file
-    transform_a_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
+    transform_a_file = (
+        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
+    )
     code_a = transform_a_file.read_text()
 
     # Input parameters should have ExampleValue
@@ -188,7 +194,9 @@ def test_dataframe_abcd_type_annotations(dataframe_abcd_spec_path, tmp_path):
     assert "check_b" in code_a
 
     # Check transform_bc_to_d file
-    transform_bc_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
+    transform_bc_file = (
+        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
+    )
     code_bc = transform_bc_file.read_text()
 
     # Both input parameters should have ExampleValue
@@ -203,31 +211,31 @@ def test_dataframe_abcd_example_data_structure(dataframe_abcd_spec_path):
     """Test that example data is correctly structured for all datatypes"""
     spec = load_spec(dataframe_abcd_spec_path)
 
-    # Check ex_a
+    # Check ex_a (single row object)
     ex_a = next(e for e in spec.examples if e.id == "ex_a")
-    assert "rows" in ex_a.input
-    assert len(ex_a.input["rows"]) == 2
-    assert ex_a.input["rows"][0]["id"] == 1
-    assert ex_a.input["rows"][0]["value"] == 100
+    assert "id" in ex_a.input
+    assert "value" in ex_a.input
+    assert ex_a.input["id"] == 1
+    assert ex_a.input["value"] == 100
 
-    # Check ex_b
+    # Check ex_b (single row object)
     ex_b = next(e for e in spec.examples if e.id == "ex_b")
-    assert "rows" in ex_b.input
-    assert "processed" in ex_b.input["rows"][0]
-    assert ex_b.input["rows"][0]["processed"] == 110
+    assert "id" in ex_b.input
+    assert "value" in ex_b.input
+    assert "processed" in ex_b.input
+    assert ex_b.input["processed"] == 110
 
-    # Check ex_c
+    # Check ex_c (single row object)
     ex_c = next(e for e in spec.examples if e.id == "ex_c")
-    assert "rows" in ex_c.input
-    assert "factor" in ex_c.input["rows"][0]
-    assert ex_c.input["rows"][0]["factor"] == 1.5
+    assert "id" in ex_c.input
+    assert "factor" in ex_c.input
+    assert ex_c.input["factor"] == 1.5
 
-    # Check ex_d
+    # Check ex_d (single row object)
     ex_d = next(e for e in spec.examples if e.id == "ex_d")
-    assert "rows" in ex_d.input
-    assert "result" in ex_d.input["rows"][0]
-    assert ex_d.input["rows"][0]["result"] == 165
-    assert ex_d.input["rows"][1]["result"] == 440
+    assert "id" in ex_d.input
+    assert "result" in ex_d.input
+    assert ex_d.input["result"] == 165
 
 
 def test_dataframe_abcd_dag_execution_flow(dataframe_abcd_spec_path, tmp_path):
@@ -239,7 +247,9 @@ def test_dataframe_abcd_dag_execution_flow(dataframe_abcd_spec_path, tmp_path):
     generate_skeleton(spec, project_root=tmp_path)
 
     # Implement actual transform logic
-    transform_a_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
+    transform_a_file = (
+        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
+    )
     transform_a_impl = '''# Auto-generated skeleton for Transform: transform_a_to_b
 from spec2code.engine import Check, ExampleValue
 from typing import Annotated
@@ -254,7 +264,9 @@ def transform_a_to_b(data_a: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'id
 '''
     transform_a_file.write_text(transform_a_impl)
 
-    transform_bc_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
+    transform_bc_file = (
+        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
+    )
     transform_bc_impl = '''# Auto-generated skeleton for Transform: transform_bc_to_d
 from spec2code.engine import Check, ExampleValue
 from typing import Annotated
@@ -270,18 +282,13 @@ def transform_bc_to_d(data_b: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'i
     transform_bc_file.write_text(transform_bc_impl)
 
     # Create input data
-    data_a = pd.DataFrame([
-        {'id': 1, 'value': 100},
-        {'id': 2, 'value': 200}
-    ])
+    data_a = pd.DataFrame([{"id": 1, "value": 100}, {"id": 2, "value": 200}])
 
-    data_c = pd.DataFrame([
-        {'id': 1, 'factor': 1.5},
-        {'id': 2, 'factor': 2.0}
-    ])
+    data_c = pd.DataFrame([{"id": 1, "factor": 1.5}, {"id": 2, "factor": 2.0}])
 
     # Manually execute the DAG to verify data flow
     import sys
+
     packages_dir = str((tmp_path / "packages").resolve())
     if packages_dir not in sys.path:
         sys.path.insert(0, packages_dir)
@@ -298,20 +305,20 @@ def transform_bc_to_d(data_b: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'i
     data_b = module_a.transform_a_to_b(data_a)
 
     # Verify intermediate result (data_b)
-    assert 'processed' in data_b.columns
+    assert "processed" in data_b.columns
     assert len(data_b) == 2
-    assert abs(data_b.loc[0, 'processed'] - 110.0) < 0.01  # 100 * 1.1
-    assert abs(data_b.loc[1, 'processed'] - 220.0) < 0.01  # 200 * 1.1
+    assert abs(data_b.loc[0, "processed"] - 110.0) < 0.01  # 100 * 1.1
+    assert abs(data_b.loc[1, "processed"] - 220.0) < 0.01  # 200 * 1.1
 
     # Execute transform_bc_to_d with the result from transform_a_to_b
     module_bc = importlib.import_module("dataframe-abcd.transforms.transform_bc_to_d")
     data_d = module_bc.transform_bc_to_d(data_b, data_c)
 
     # Verify final result (data_d)
-    assert 'result' in data_d.columns
+    assert "result" in data_d.columns
     assert len(data_d) == 2
-    assert abs(data_d.loc[0, 'result'] - 165.0) < 0.01   # 110 * 1.5
-    assert abs(data_d.loc[1, 'result'] - 440.0) < 0.01   # 220 * 2.0
+    assert abs(data_d.loc[0, "result"] - 165.0) < 0.01  # 110 * 1.5
+    assert abs(data_d.loc[1, "result"] - 440.0) < 0.01  # 220 * 2.0
 
     # Verify all columns are present in final result
-    assert set(data_d.columns) == {'id', 'value', 'processed', 'factor', 'result'}
+    assert set(data_d.columns) == {"id", "value", "processed", "factor", "result"}

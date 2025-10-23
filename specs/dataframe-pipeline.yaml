@@ -16,33 +16,21 @@ checks:
 
 examples:
   - id: ex_step_a
-    description: "Step A example data"
+    description: "Step A example row"
     input:
-      rows:
-        - timestamp: "2024-01-01"
-          value: 100
-        - timestamp: "2024-01-02"
-          value: 150
-        - timestamp: "2024-01-03"
-          value: 120
+      timestamp: "2024-01-01"
+      value: 100
     expected:
-      row_count: 3
+      valid: true
 
   - id: ex_step_b
-    description: "Step B example data"
+    description: "Step B example row"
     input:
-      rows:
-        - timestamp: "2024-01-01"
-          value: 100
-          normalized: 0.67
-        - timestamp: "2024-01-02"
-          value: 150
-          normalized: 1.0
-        - timestamp: "2024-01-03"
-          value: 120
-          normalized: 0.8
+      timestamp: "2024-01-01"
+      value: 100
+      normalized: 0.67
     expected:
-      row_count: 3
+      valid: true
 
 datatypes:
   - id: StepAFrame

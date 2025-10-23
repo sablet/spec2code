@@ -1,0 +1,27 @@
+# Config 3: Robust normalization + all features
+version: "1"
+meta:
+  config_name: "robust-all-features"
+  description: "Use Robust normalization with all available features"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+execution:
+  stages:
+    - stage_id: "normalization"
+      # exclusive mode: select robust
+      selected:
+        - transform_id: normalize_robust
+
+    - stage_id: "feature_engineering"
+      # multiple mode: select all 3 features
+      selected:
+        - transform_id: add_rolling_mean
+          params:
+            window: 5  # larger window
+        - transform_id: add_diff
+        - transform_id: add_lag_features
+          params:
+            n_lags: 2  # override default (1 -> 2)
+
+    - stage_id: "output"
+      # single mode: auto-selected

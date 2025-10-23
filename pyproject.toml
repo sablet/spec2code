@@ -15,3 +15,12 @@ dev = [
     "pandas>=2.3.3",
     "pytest>=8.4.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v"
+# Exclude problematic directories
+norecursedirs = ["TransformFn", ".venv", ".git", "__pycache__", "apps", "output"]

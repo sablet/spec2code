@@ -1,0 +1,46 @@
+# Config 4: Invalid examples (for validation testing)
+version: "1"
+meta:
+  config_name: "invalid-examples"
+  description: "Examples of invalid configurations that should fail validation"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+# Example invalid configs (commented out, used for testing):
+
+# INVALID 1: exclusive mode with 0 selections
+# execution:
+#   stages:
+#     - stage_id: "normalization"
+#       selected: []  # ERROR: must select exactly 1
+
+# INVALID 2: exclusive mode with 2 selections
+# execution:
+#   stages:
+#     - stage_id: "normalization"
+#       selected:
+#         - transform_id: normalize_minmax
+#         - transform_id: normalize_zscore  # ERROR: can only select 1
+
+# INVALID 3: multiple mode with 0 selections
+# execution:
+#   stages:
+#     - stage_id: "feature_engineering"
+#       selected: []  # ERROR: min_select=1, must select at least 1
+
+# INVALID 4: unknown transform_id
+# execution:
+#   stages:
+#     - stage_id: "normalization"
+#       selected:
+#         - transform_id: normalize_unknown  # ERROR: not in candidates
+
+# VALID minimal config (for testing)
+execution:
+  stages:
+    - stage_id: "normalization"
+      selected:
+        - transform_id: normalize_minmax
+
+    - stage_id: "feature_engineering"
+      selected:
+        - transform_id: add_rolling_mean

@@ -293,9 +293,9 @@ def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
 '''
             functions.append(func_code)
 
-        code = f'''# Auto-generated skeleton for Check functions
+        code = f"""# Auto-generated skeleton for Check functions
 {chr(10).join(functions)}
-'''
+"""
         file_path.write_text(code)
         print(f"  ✅ Generated: {file_path}")
 
@@ -627,10 +627,56 @@ def main():
     validate_parser = subparsers.add_parser("validate", help="仕様と実装の整合性を検証")
     validate_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
 
+    # run-config コマンド
+    run_config_parser = subparsers.add_parser(
+        "run-config", help="Config-based DAG execution"
+    )
+    run_config_parser.add_argument("config_file", help="Config file (YAML)")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
+        return
+
+    # run-config コマンドは別処理
+    if args.command == "run-config":
+        from packages.spec2code.config_runner import ConfigRunner
+        import pandas as pd
+
+        try:
+            runner = ConfigRunner(args.config_file)
+
+            # Create sample initial data (StepAFrame)
+            initial_data = pd.DataFrame(
+                {
+                    "timestamp": [
+                        "2024-01-01",
+                        "2024-01-02",
+                        "2024-01-03",
+                        "2024-01-04",
+                        "2024-01-05",
+                    ],
+                    "value": [100, 150, 120, 180, 140],
+                }
+            )
+
+            print(f"\n📊 Initial data:")
+            print(initial_data)
+            print()
+
+            result = runner.run(initial_data)
+
+            print(f"\n📊 Final result:")
+            print(result)
+
+        except Exception as e:
+            print(f"❌ Config execution failed: {e}")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+
         return
 
     # 仕様読み込み

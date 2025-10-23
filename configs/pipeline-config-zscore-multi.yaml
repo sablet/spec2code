@@ -1,0 +1,25 @@
+# Config 2: Z-score normalization + multiple features
+version: "1"
+meta:
+  config_name: "zscore-multi-features"
+  description: "Use Z-score normalization with rolling mean and diff features"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+execution:
+  stages:
+    - stage_id: "normalization"
+      # exclusive mode: select Z-score
+      selected:
+        - transform_id: normalize_zscore
+
+    - stage_id: "feature_engineering"
+      # multiple mode: select 2 features
+      selected:
+        - transform_id: add_rolling_mean
+          params:
+            window: 2  # use default value
+        - transform_id: add_diff
+          # no params needed
+
+    - stage_id: "output"
+      # single mode: auto-selected

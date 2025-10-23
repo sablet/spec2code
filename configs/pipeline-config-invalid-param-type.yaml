@@ -1,0 +1,18 @@
+# Config with invalid parameter type (for testing validation)
+version: "1"
+meta:
+  config_name: "invalid-param-type-test"
+  description: "Test config with invalid parameter type"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+execution:
+  stages:
+    - stage_id: "normalization"
+      selected:
+        - transform_id: normalize_minmax
+
+    - stage_id: "feature_engineering"
+      selected:
+        - transform_id: add_rolling_mean
+          params:
+            window: "not_an_int"  # Should be int

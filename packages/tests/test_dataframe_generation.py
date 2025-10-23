@@ -8,7 +8,9 @@ from spec2code.engine import load_spec, generate_skeleton
 @pytest.fixture
 def dataframe_spec_path(tmp_path):
     """Copy dataframe-pipeline.yaml to temp directory"""
-    spec_file = Path(__file__).parent.parent.parent / "specs" / "dataframe-pipeline.yaml"
+    spec_file = (
+        Path(__file__).parent.parent.parent / "specs" / "dataframe-pipeline.yaml"
+    )
     return spec_file
 
 
@@ -76,37 +78,39 @@ def test_dataframe_pipeline_generates_correct_code(dataframe_spec_path, tmp_path
     assert "def transform_step_a_to_step_b(" in generated_code
     assert "step_a_data: Annotated[" in generated_code
     assert "pd.DataFrame" in generated_code
-    assert 'ExampleValue[' in generated_code
+    assert "ExampleValue[" in generated_code
 
     # Verify that input does NOT have Check (only Example)
-    lines = generated_code.split('\n')
+    lines = generated_code.split("\n")
     param_lines = []
     in_param = False
     for line in lines:
-        if 'step_a_data:' in line:
+        if "step_a_data:" in line:
             in_param = True
         if in_param:
             param_lines.append(line)
-            if ')' in line and '->' in line:
+            if ")" in line and "->" in line:
                 break
 
-    param_section = '\n'.join(param_lines)
+    param_section = "\n".join(param_lines)
     # Input should have ExampleValue but NOT Check
-    assert 'ExampleValue[' in param_section
+    assert "ExampleValue[" in param_section
     # Check that Check is NOT in the parameter annotation
     # (Check should only be in return type)
-    check_in_param = 'Check[' in param_section and '->' not in param_section.split('Check[')[0]
+    check_in_param = (
+        "Check[" in param_section and "->" not in param_section.split("Check[")[0]
+    )
     assert not check_in_param, "Input parameter should not have Check annotation"
 
     # Verify return type - with Check only
-    assert '-> Annotated[' in generated_code
-    return_section = generated_code.split('-> Annotated[')[1].split(':')[0]
-    assert 'pd.DataFrame' in return_section
-    assert 'Check[' in return_section
-    assert 'check_step_b' in generated_code
+    assert "-> Annotated[" in generated_code
+    return_section = generated_code.split("-> Annotated[")[1].split(":")[0]
+    assert "pd.DataFrame" in return_section
+    assert "Check[" in return_section
+    assert "check_step_b" in generated_code
 
     # Verify that return does NOT have ExampleValue
-    assert 'ExampleValue[' not in return_section
+    assert "ExampleValue[" not in return_section
 
 
 def test_dataframe_pipeline_generates_check_files(dataframe_spec_path, tmp_path):
@@ -154,16 +158,16 @@ def test_example_data_structure(dataframe_spec_path):
     """Test that example data is correctly structured"""
     spec = load_spec(dataframe_spec_path)
 
-    # Check ex_step_a
+    # Check ex_step_a (single row object)
     ex_step_a = next(e for e in spec.examples if e.id == "ex_step_a")
-    assert "rows" in ex_step_a.input
-    assert len(ex_step_a.input["rows"]) == 3
-    assert ex_step_a.input["rows"][0]["timestamp"] == "2024-01-01"
-    assert ex_step_a.input["rows"][0]["value"] == 100
+    assert "timestamp" in ex_step_a.input
+    assert "value" in ex_step_a.input
+    assert ex_step_a.input["timestamp"] == "2024-01-01"
+    assert ex_step_a.input["value"] == 100
 
-    # Check ex_step_b
+    # Check ex_step_b (single row object)
     ex_step_b = next(e for e in spec.examples if e.id == "ex_step_b")
-    assert "rows" in ex_step_b.input
-    assert len(ex_step_b.input["rows"]) == 3
-    assert "normalized" in ex_step_b.input["rows"][0]
-    assert ex_step_b.input["rows"][1]["normalized"] == 1.0
+    assert "timestamp" in ex_step_b.input
+    assert "value" in ex_step_b.input
+    assert "normalized" in ex_step_b.input
+    assert ex_step_b.input["normalized"] == 0.67

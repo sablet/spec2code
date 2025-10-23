@@ -26,56 +26,40 @@ checks:
 
 examples:
   - id: ex_a
-    description: "DataFrame A example data"
+    description: "DataFrame A example row"
     input:
-      rows:
-        - id: 1
-          value: 100
-        - id: 2
-          value: 200
+      id: 1
+      value: 100
     expected:
-      row_count: 2
+      valid: true
 
   - id: ex_b
-    description: "DataFrame B example data"
+    description: "DataFrame B example row"
     input:
-      rows:
-        - id: 1
-          value: 100
-          processed: 110
-        - id: 2
-          value: 200
-          processed: 220
+      id: 1
+      value: 100
+      processed: 110
     expected:
-      row_count: 2
+      valid: true
 
   - id: ex_c
-    description: "DataFrame C example data"
+    description: "DataFrame C example row"
     input:
-      rows:
-        - id: 1
-          factor: 1.5
-        - id: 2
-          factor: 2.0
+      id: 1
+      factor: 1.5
     expected:
-      row_count: 2
+      valid: true
 
   - id: ex_d
-    description: "DataFrame D example data"
+    description: "DataFrame D example row"
     input:
-      rows:
-        - id: 1
-          value: 100
-          processed: 110
-          factor: 1.5
-          result: 165
-        - id: 2
-          value: 200
-          processed: 220
-          factor: 2.0
-          result: 440
+      id: 1
+      value: 100
+      processed: 110
+      factor: 1.5
+      result: 165
     expected:
-      row_count: 2
+      valid: true
 
 datatypes:
   - id: DataFrameA

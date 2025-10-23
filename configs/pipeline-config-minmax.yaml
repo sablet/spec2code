@@ -1,0 +1,25 @@
+# Config 1: MinMax normalization + rolling mean only
+version: "1"
+meta:
+  config_name: "minmax-rolling"
+  description: "Use MinMax normalization with rolling mean feature"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+execution:
+  stages:
+    - stage_id: "normalization"
+      # exclusive mode: must select exactly 1
+      selected:
+        - transform_id: normalize_minmax
+
+    - stage_id: "feature_engineering"
+      # multiple mode: select 1 or more
+      selected:
+        - transform_id: add_rolling_mean
+          params:
+            window: 3  # override default (2 -> 3)
+
+    - stage_id: "output"
+      # single mode: auto-selected (no config needed)
+      # selected:
+      #   - transform_id: finalize_step_b

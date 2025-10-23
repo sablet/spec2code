@@ -1,0 +1,18 @@
+# Config with invalid negative parameter value (for testing validation)
+version: "1"
+meta:
+  config_name: "invalid-negative-test"
+  description: "Test config with invalid negative parameter value"
+  base_spec: "specs/dataframe-pipeline-extended.yaml"
+
+execution:
+  stages:
+    - stage_id: "normalization"
+      selected:
+        - transform_id: normalize_minmax
+
+    - stage_id: "feature_engineering"
+      selected:
+        - transform_id: add_rolling_mean
+          params:
+            window: -1  # Invalid: must be positive
