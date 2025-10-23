@@ -104,6 +104,7 @@ class Transform(BaseModel):
     file_path: str
     parameters: list[Parameter]
     return_datatype_ref: str | None = None
+    return_native: str | None = None  # "module:type"形式（戻り値の型指定）
     default_args: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -158,87 +159,104 @@ def load_spec(spec_path: str | Path) -> Spec:
 def _build_type_annotation(
     spec: Spec, param: Parameter, app_root: Path
 ) -> tuple[str, set[str]]:
-    """パラメータの型アノテーションを構築
+    """パラメータの型アノテーションを構築（Inputパラメータ用：Exampleのみ適用）
 
     Returns:
         (型文字列, importセット)
     """
     imports = set()
 
+    # ベース型を決定
+    base_type = "dict"  # デフォルト
+
+    if param.native:
+        # native が指定されていればそれを使う
+        module, type_name = param.native.split(":")
+        if module != "builtins":
+            # pandas の場合は pd として import
+            if module == "pandas":
+                imports.add("import pandas as pd")
+                base_type = f"pd.{type_name}"
+            else:
+                imports.add(f"import {module}")
+                base_type = f"{module}.{type_name}"
+        else:
+            base_type = type_name
+
+    # Example は datatype_ref から取得（Inputパラメータ用）
+    example_annotations = []
+
     if param.datatype_ref:
-        # DataType参照を解決
         datatype = next(
             (dt for dt in spec.datatypes if dt.id == param.datatype_ref), None
         )
-        if not datatype:
-            return "dict", imports
+        if datatype:
+            # Example参照のみ追加（Checkは追加しない）
+            for example_id in datatype.example_ids:
+                example = next((e for e in spec.examples if e.id == example_id), None)
+                if example:
+                    example_annotations.append(f"ExampleValue[{example.input}]")
+                    imports.add("from spec2code.engine import ExampleValue")
 
-        # Check参照を追加
-        check_annotations = []
-        for check_id in datatype.check_ids:
-            check_def = next((c for c in spec.checks if c.id == check_id), None)
-            if check_def:
-                check_annotations.append(f'Check["{check_def.impl}"]')
-                imports.add("from spec2code.engine import Check")
+    # Annotatedを使用
+    if example_annotations:
+        imports.add("from typing import Annotated")
+        annotations = ", ".join(example_annotations)
+        return f"Annotated[{base_type}, {annotations}]", imports
 
-        # Example参照を追加
-        example_annotations = []
-        for example_id in datatype.example_ids:
-            example = next((e for e in spec.examples if e.id == example_id), None)
-            if example:
-                example_annotations.append(f"ExampleValue[{example.input}]")
-                imports.add("from spec2code.engine import ExampleValue")
-
-        # Annotatedを使用
-        if check_annotations or example_annotations:
-            imports.add("from typing import Annotated")
-            annotations = ", ".join(check_annotations + example_annotations)
-            return f"Annotated[dict, {annotations}]", imports
-
-        return "dict", imports
-
-    elif param.native:
-        # ネイティブ型を解決
-        _, type_name = param.native.split(":")
-        return type_name, imports
-
-    return "Any", {"from typing import Any"}
+    return base_type, imports
 
 
 def _build_return_annotation(
     spec: Spec, transform: Transform, app_root: Path
 ) -> tuple[str, set[str]]:
-    """戻り値の型アノテーションを構築
+    """戻り値の型アノテーションを構築（Outputパラメータ用：Checkのみ適用）
 
     Returns:
         (型文字列, importセット)
     """
     imports = set()
 
-    if not transform.return_datatype_ref:
-        return "dict", imports
+    # ベース型を決定
+    base_type = "dict"  # デフォルト
 
-    datatype = next(
-        (dt for dt in spec.datatypes if dt.id == transform.return_datatype_ref), None
-    )
-    if not datatype:
-        return "dict", imports
+    if transform.return_native:
+        # return_native が指定されていればそれを使う
+        module, type_name = transform.return_native.split(":")
+        if module != "builtins":
+            # pandas の場合は pd として import
+            if module == "pandas":
+                imports.add("import pandas as pd")
+                base_type = f"pd.{type_name}"
+            else:
+                imports.add(f"import {module}")
+                base_type = f"{module}.{type_name}"
+        else:
+            base_type = type_name
 
-    # Check参照を追加
+    # Check は return_datatype_ref から取得（Outputパラメータ用）
     check_annotations = []
-    for check_id in datatype.check_ids:
-        check_def = next((c for c in spec.checks if c.id == check_id), None)
-        if check_def:
-            check_annotations.append(f'Check["{check_def.impl}"]')
-            imports.add("from spec2code.engine import Check")
+
+    if transform.return_datatype_ref:
+        datatype = next(
+            (dt for dt in spec.datatypes if dt.id == transform.return_datatype_ref),
+            None,
+        )
+        if datatype:
+            # Check参照のみ追加（Exampleは追加しない）
+            for check_id in datatype.check_ids:
+                check_def = next((c for c in spec.checks if c.id == check_id), None)
+                if check_def:
+                    check_annotations.append(f'Check["{check_def.impl}"]')
+                    imports.add("from spec2code.engine import Check")
 
     # Annotatedを使用
     if check_annotations:
         imports.add("from typing import Annotated")
         annotations = ", ".join(check_annotations)
-        return f"Annotated[dict, {annotations}]", imports
+        return f"Annotated[{base_type}, {annotations}]", imports
 
-    return "dict", imports
+    return base_type, imports
 
 
 def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
@@ -249,21 +267,34 @@ def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
     app_root = project_root / "apps" / spec.meta.name
     print(f"  📁 Target directory: {app_root}")
 
-    # Check関数のスケルトン生成
+    # Check関数のスケルトン生成（同じファイルに複数の関数を追加）
+    check_files = {}  # file_path -> list of check functions
     for check in spec.checks:
         file_path = app_root / check.file_path
+        if file_path not in check_files:
+            check_files[file_path] = []
+        check_files[file_path].append(check)
+
+    for file_path, checks in check_files.items():
         if file_path.exists():
             print(f"  ⏭️  Skip (exists): {file_path}")
             continue
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        func_name = check.impl.split(":")[-1]
 
-        code = f'''# Auto-generated skeleton for Check: {check.id}
-def {func_name}(payload: dict) -> bool:
+        # Generate all check functions for this file
+        functions = []
+        for check in checks:
+            func_name = check.impl.split(":")[-1]
+            func_code = f'''def {func_name}(payload: dict) -> bool:
     """{check.description}"""
     # TODO: implement validation logic
     return True
+'''
+            functions.append(func_code)
+
+        code = f'''# Auto-generated skeleton for Check functions
+{chr(10).join(functions)}
 '''
         file_path.write_text(code)
         print(f"  ✅ Generated: {file_path}")

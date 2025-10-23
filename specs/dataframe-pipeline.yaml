@@ -1,0 +1,101 @@
+version: "1"
+meta:
+  name: "dataframe-pipeline"
+  description: "DataFrame pipeline test with step_a -> step_b"
+
+checks:
+  - id: check_step_a
+    description: "Step A DataFrame validation"
+    impl: "apps.dataframe-pipeline.checks.dataframe_checks:check_step_a"
+    file_path: "checks/dataframe_checks.py"
+
+  - id: check_step_b
+    description: "Step B DataFrame validation"
+    impl: "apps.dataframe-pipeline.checks.dataframe_checks:check_step_b"
+    file_path: "checks/dataframe_checks.py"
+
+examples:
+  - id: ex_step_a
+    description: "Step A example data"
+    input:
+      rows:
+        - timestamp: "2024-01-01"
+          value: 100
+        - timestamp: "2024-01-02"
+          value: 150
+        - timestamp: "2024-01-03"
+          value: 120
+    expected:
+      row_count: 3
+
+  - id: ex_step_b
+    description: "Step B example data"
+    input:
+      rows:
+        - timestamp: "2024-01-01"
+          value: 100
+          normalized: 0.67
+        - timestamp: "2024-01-02"
+          value: 150
+          normalized: 1.0
+        - timestamp: "2024-01-03"
+          value: 120
+          normalized: 0.8
+    expected:
+      row_count: 3
+
+datatypes:
+  - id: StepAFrame
+    description: "Step A output DataFrame (raw values)"
+    check_ids:
+      - check_step_a
+    example_ids:
+      - ex_step_a
+    schema:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date
+        value:
+          type: number
+      required:
+        - timestamp
+        - value
+
+  - id: StepBFrame
+    description: "Step B output DataFrame (normalized values)"
+    check_ids:
+      - check_step_b
+    example_ids:
+      - ex_step_b
+    schema:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date
+        value:
+          type: number
+        normalized:
+          type: number
+      required:
+        - timestamp
+        - value
+        - normalized
+
+transforms:
+  - id: transform_step_a_to_step_b
+    description: "Transform from Step A to Step B (add normalized column)"
+    impl: "apps.dataframe-pipeline.transforms.pipeline:transform_step_a_to_step_b"
+    file_path: "transforms/pipeline.py"
+    parameters:
+      - name: step_a_data
+        datatype_ref: StepAFrame
+        native: "pandas:DataFrame"
+    return_datatype_ref: StepBFrame
+    return_native: "pandas:DataFrame"
+
+dag:
+  - from: transform_step_a_to_step_b
+    to: null

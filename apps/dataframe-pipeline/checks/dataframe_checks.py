@@ -1,11 +1,11 @@
 # Auto-generated skeleton for Check functions
-def len_gt_0(payload: dict) -> bool:
-    """文字列長 > 0"""
+def check_step_a(payload: dict) -> bool:
+    """Step A DataFrame validation"""
     # TODO: implement validation logic
     return True
 
 
-def length_positive(payload: dict) -> bool:
-    """length フィールドが正の整数"""
+def check_step_b(payload: dict) -> bool:
+    """Step B DataFrame validation"""
     # TODO: implement validation logic
     return True

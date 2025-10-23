@@ -25,6 +25,9 @@ help: ## ヘルプを表示
 gen: ## スケルトンコード生成
 	@echo "🔨 スケルトンコード生成中: $(SPEC)"
 	uv run python spec2code_cli.py gen $(SPEC)
+	@echo "🎨 生成されたコードをフォーマット中..."
+	@uv run ruff format apps/ 2>/dev/null || true
+	@echo "✅ フォーマット完了"
 
 run: ## DAG実行・検証
 	@echo "🚀 DAG実行・検証中: $(SPEC)"
@@ -63,6 +66,8 @@ gen-all: ## 全てのspecファイルからスケルトン生成
 		uv run python spec2code_cli.py gen $$spec; \
 	done
 	@echo ""
+	@echo "🎨 生成されたコードをフォーマット中..."
+	@uv run ruff format apps/ 2>/dev/null || true
 	@echo "✅ 全てのスケルトン生成完了"
 
 # 複数のspecを一括実行
