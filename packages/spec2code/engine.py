@@ -124,6 +124,19 @@ class Meta(BaseModel):
     description: str
 
 
+class DAGStage(BaseModel):
+    """DAG stage definition (for unified dag_stages representation)"""
+
+    stage_id: str
+    description: str
+    selection_mode: str = "single"  # single, exclusive, multiple
+    max_select: int | None = None
+    input_type: str
+    output_type: str
+    candidates: list[str] = Field(default_factory=list)  # transform_ids
+    default_transform_id: str | None = None
+
+
 class Spec(BaseModel):
     """仕様全体のルートモデル"""
 
@@ -134,6 +147,7 @@ class Spec(BaseModel):
     datatypes: list[DataType] = Field(default_factory=list)
     transforms: list[Transform] = Field(default_factory=list)
     dag: list[DAGEdge] = Field(default_factory=list)
+    dag_stages: list[DAGStage] = Field(default_factory=list)
 
 
 # ==================== 仕様読み込み・検証 ====================
@@ -150,7 +164,76 @@ def load_spec(spec_path: str | Path) -> Spec:
         else:
             raise ValueError(f"未対応のファイル形式: {spec_path.suffix}")
 
-    return Spec(**data)
+    spec = Spec(**data)
+    _convert_dag_to_stages(spec)
+    return spec
+
+
+def _convert_dag_to_stages(spec: Spec) -> None:
+    """Convert legacy dag format to dag_stages format
+
+    If dag_stages is empty but dag exists, generate dag_stages from DAG topology.
+    Each transform becomes a single-mode stage with one candidate.
+    """
+    if spec.dag_stages:
+        # Already has dag_stages, no conversion needed
+        return
+
+    if not spec.dag:
+        # No dag to convert
+        return
+
+    # Build transform lookup
+    transform_by_id = {t.id: t for t in spec.transforms}
+
+    # Build DAG graph to determine execution order
+    import networkx as nx
+
+    G = nx.DiGraph()
+    for edge in spec.dag:
+        if edge.to is not None:
+            G.add_edge(edge.from_, edge.to)
+        else:
+            # Terminal node (no outgoing edges)
+            G.add_node(edge.from_)
+
+    # Topological sort to get execution order
+    try:
+        ordered_transforms = list(nx.topological_sort(G))
+    except nx.NetworkXError:
+        # Graph has cycles or other issues, fallback to original order
+        ordered_transforms = [edge.from_ for edge in spec.dag]
+
+    # Create single-mode stages for each transform
+    stages = []
+    for i, transform_id in enumerate(ordered_transforms):
+        if transform_id not in transform_by_id:
+            continue
+
+        transform = transform_by_id[transform_id]
+
+        # Determine input/output types
+        input_type = ""
+        output_type = ""
+
+        if transform.parameters:
+            first_param = transform.parameters[0]
+            input_type = first_param.datatype_ref or first_param.native or "Any"
+
+        output_type = transform.return_datatype_ref or transform.return_native or "Any"
+
+        stage = DAGStage(
+            stage_id=f"stage_{i+1}_{transform_id}",
+            description=transform.description or f"Stage {i+1}: {transform_id}",
+            selection_mode="single",
+            input_type=input_type,
+            output_type=output_type,
+            candidates=[transform_id],
+            default_transform_id=transform_id,
+        )
+        stages.append(stage)
+
+    spec.dag_stages = stages
 
 
 # ==================== スケルトンコード生成 ====================

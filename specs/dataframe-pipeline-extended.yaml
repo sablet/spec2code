@@ -201,35 +201,12 @@ transforms:
     return_datatype_ref: StepBFrame
     return_native: "pandas:DataFrame"
 
-# Traditional DAG format (for skeleton generation compatibility)
-dag:
-  - from: normalize_minmax
-    to: add_rolling_mean
-  - from: normalize_minmax
-    to: add_diff
-  - from: normalize_minmax
-    to: add_lag_features
-  - from: normalize_zscore
-    to: add_rolling_mean
-  - from: normalize_zscore
-    to: add_diff
-  - from: normalize_zscore
-    to: add_lag_features
-  - from: normalize_robust
-    to: add_rolling_mean
-  - from: normalize_robust
-    to: add_diff
-  - from: normalize_robust
-    to: add_lag_features
-  - from: add_rolling_mean
-    to: finalize_step_b
-  - from: add_diff
-    to: finalize_step_b
-  - from: add_lag_features
-    to: finalize_step_b
+# DAG edges are auto-generated from dag_stages below
+# (no need for manual dag specification)
 
-# Extended DAG format (for config-based execution)
-# candidates are auto-collected based on input_type/output_type matching
+# Extended DAG format with stage-based configuration
+# - candidates are auto-collected based on input_type/output_type matching
+# - default_transform_id is auto-set to candidates[0] for DAG generation
 dag_stages:
   - stage_id: "normalization"
     description: "Choose normalization method"
@@ -237,6 +214,7 @@ dag_stages:
     input_type: StepAFrame
     output_type: NormalizedFrame
     # candidates auto-collected: normalize_minmax, normalize_zscore, normalize_robust
+    # default_transform_id auto-set to: normalize_minmax
 
   - stage_id: "feature_engineering"
     description: "Select feature engineering transforms"
@@ -245,6 +223,7 @@ dag_stages:
     input_type: NormalizedFrame
     output_type: NormalizedFrame
     # candidates auto-collected: add_rolling_mean, add_diff, add_lag_features
+    # default_transform_id auto-set to: add_rolling_mean
 
   - stage_id: "output"
     description: "Finalize output format"
@@ -252,3 +231,4 @@ dag_stages:
     input_type: NormalizedFrame
     output_type: StepBFrame
     # candidates auto-collected: finalize_step_b
+    # default_transform_id auto-set to: finalize_step_b
