@@ -8,7 +8,7 @@ import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 import jsonschema
 import networkx as nx
@@ -16,10 +16,39 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 
+# ==================== 型アノテーション用マーカー ====================
+
+T = TypeVar("T")
+
+
+class Check(Generic[T]):
+    """型アノテーション用のCheck参照マーカー
+
+    Usage:
+        Annotated[Out, Check["module.path.check_function"]]
+    """
+
+    def __class_getitem__(cls, item: str) -> type:
+        """文字列でチェック関数を参照"""
+        return type(f"Check[{item}]", (), {"__check_ref__": item})
+
+
+class ExampleValue(Generic[T]):
+    """型アノテーション用のExample値マーカー
+
+    Usage:
+        Annotated[In, ExampleValue[{"text": "hello world"}]]
+    """
+
+    def __class_getitem__(cls, item: dict[str, Any]) -> type:
+        """辞書で例示値を参照"""
+        return type(f"ExampleValue[{item}]", (), {"__example_value__": item})
+
+
 # ==================== データモデル定義 ====================
 
 
-class Check(BaseModel):
+class CheckDef(BaseModel):
     """チェック関数定義"""
 
     id: str
@@ -99,7 +128,7 @@ class Spec(BaseModel):
 
     version: str
     meta: Meta
-    checks: list[Check] = Field(default_factory=list)
+    checks: list[CheckDef] = Field(default_factory=list)
     examples: list[Example] = Field(default_factory=list)
     datatypes: list[DataType] = Field(default_factory=list)
     transforms: list[Transform] = Field(default_factory=list)
@@ -124,6 +153,90 @@ def load_spec(spec_path: str | Path) -> Spec:
 
 
 # ==================== スケルトンコード生成 ====================
+
+
+def _build_type_annotation(
+    spec: Spec, param: Parameter, app_root: Path
+) -> tuple[str, set[str]]:
+    """パラメータの型アノテーションを構築
+
+    Returns:
+        (型文字列, importセット)
+    """
+    imports = set()
+
+    if param.datatype_ref:
+        # DataType参照を解決
+        datatype = next((dt for dt in spec.datatypes if dt.id == param.datatype_ref), None)
+        if not datatype:
+            return "dict", imports
+
+        # Check参照を追加
+        check_annotations = []
+        for check_id in datatype.check_ids:
+            check_def = next((c for c in spec.checks if c.id == check_id), None)
+            if check_def:
+                check_annotations.append(f'Check["{check_def.impl}"]')
+                imports.add("from spec2code.engine import Check")
+
+        # Example参照を追加
+        example_annotations = []
+        for example_id in datatype.example_ids:
+            example = next((e for e in spec.examples if e.id == example_id), None)
+            if example:
+                example_annotations.append(f"ExampleValue[{example.input}]")
+                imports.add("from spec2code.engine import ExampleValue")
+
+        # Annotatedを使用
+        if check_annotations or example_annotations:
+            imports.add("from typing import Annotated")
+            annotations = ", ".join(check_annotations + example_annotations)
+            return f"Annotated[dict, {annotations}]", imports
+
+        return "dict", imports
+
+    elif param.native:
+        # ネイティブ型を解決
+        _, type_name = param.native.split(":")
+        return type_name, imports
+
+    return "Any", {"from typing import Any"}
+
+
+def _build_return_annotation(
+    spec: Spec, transform: Transform, app_root: Path
+) -> tuple[str, set[str]]:
+    """戻り値の型アノテーションを構築
+
+    Returns:
+        (型文字列, importセット)
+    """
+    imports = set()
+
+    if not transform.return_datatype_ref:
+        return "dict", imports
+
+    datatype = next(
+        (dt for dt in spec.datatypes if dt.id == transform.return_datatype_ref), None
+    )
+    if not datatype:
+        return "dict", imports
+
+    # Check参照を追加
+    check_annotations = []
+    for check_id in datatype.check_ids:
+        check_def = next((c for c in spec.checks if c.id == check_id), None)
+        if check_def:
+            check_annotations.append(f'Check["{check_def.impl}"]')
+            imports.add("from spec2code.engine import Check")
+
+    # Annotatedを使用
+    if check_annotations:
+        imports.add("from typing import Annotated")
+        annotations = ", ".join(check_annotations)
+        return f"Annotated[dict, {annotations}]", imports
+
+    return "dict", imports
 
 
 def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
@@ -163,11 +276,49 @@ def {func_name}(payload: dict) -> bool:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         func_name = transform.impl.split(":")[-1]
 
+        # パラメータの型アノテーションを構築
+        param_strs = []
+        all_imports = set()
+
+        for param in transform.parameters:
+            type_str, imports = _build_type_annotation(spec, param, app_root)
+            all_imports.update(imports)
+            param_strs.append(f"{param.name}: {type_str}")
+
+        # 戻り値の型アノテーションを構築
+        return_type, return_imports = _build_return_annotation(spec, transform, app_root)
+        all_imports.update(return_imports)
+
+        # import文を生成（spec2code.engineからのimportを統合）
+        import_lines = []
+        spec2code_imports = set()
+        other_imports = set()
+
+        for imp in all_imports:
+            if imp.startswith("from spec2code.engine import"):
+                # spec2code.engineからのimportを抽出
+                parts = imp.split("import", 1)[1].strip()
+                spec2code_imports.add(parts)
+            else:
+                other_imports.add(imp)
+
+        # spec2code.engineのimportを統合
+        if spec2code_imports:
+            combined_import = f"from spec2code.engine import {', '.join(sorted(spec2code_imports))}"
+            import_lines.append(combined_import)
+
+        # その他のimportを追加
+        import_lines.extend(sorted(other_imports))
+
+        import_section = "\n".join(import_lines) if import_lines else ""
+
         # パラメータリスト作成
-        params = ", ".join(p.name for p in transform.parameters)
+        params = ", ".join(param_strs)
 
         code = f'''# Auto-generated skeleton for Transform: {transform.id}
-def {func_name}({params}) -> dict:
+{import_section}
+
+def {func_name}({params}) -> {return_type}:
     """{transform.description}"""
     # TODO: implement transform logic
     return {{}}
@@ -225,6 +376,126 @@ class Engine:
                 print(f"  ✅ {datatype.id}: schema valid")
             except jsonschema.SchemaError as e:
                 print(f"  ❌ {datatype.id}: schema invalid - {e}")
+
+    def validate_integrity(self, project_root: Path = Path(".")) -> dict[str, list[str]]:
+        """仕様と実装の整合性を検証
+
+        Returns:
+            エラーマップ {category: [error_messages]}
+        """
+        print("🔍 Validating spec-implementation integrity...")
+        errors: dict[str, list[str]] = {
+            "check_functions": [],
+            "check_locations": [],
+            "transform_functions": [],
+            "transform_signatures": [],
+            "example_schemas": [],
+        }
+
+        # sys.pathにpackagesディレクトリを追加
+        packages_dir = str((project_root / "packages").resolve())
+        if packages_dir not in sys.path:
+            sys.path.insert(0, packages_dir)
+
+        app_root = project_root / "apps" / self.spec.meta.name
+
+        # 1. Check関数の存在と位置を検証
+        for check in self.spec.checks:
+            module_path, func_name = check.impl.split(":")
+            expected_file = app_root / check.file_path
+
+            # 関数が読み込めるか
+            try:
+                module = importlib.import_module(module_path)
+                func = getattr(module, func_name)
+                print(f"  ✅ Check {check.id}: function exists")
+
+                # ファイル位置の検証
+                import inspect
+                actual_file = Path(inspect.getfile(func)).resolve()
+                expected_file_resolved = expected_file.resolve()
+
+                if actual_file != expected_file_resolved:
+                    error_msg = (
+                        f"Check '{check.id}' location mismatch:\n"
+                        f"    Expected: {expected_file}\n"
+                        f"    Actual:   {actual_file}"
+                    )
+                    errors["check_locations"].append(error_msg)
+                    print(f"  ⚠️  {error_msg}")
+
+            except (ImportError, AttributeError) as e:
+                error_msg = f"Check '{check.id}' not found: {e}"
+                errors["check_functions"].append(error_msg)
+                print(f"  ❌ {error_msg}")
+
+        # 2. Transform関数の存在と位置を検証
+        for transform in self.spec.transforms:
+            module_path, func_name = transform.impl.split(":")
+            expected_file = app_root / transform.file_path
+
+            try:
+                module = importlib.import_module(module_path)
+                func = getattr(module, func_name)
+                print(f"  ✅ Transform {transform.id}: function exists")
+
+                # ファイル位置の検証
+                import inspect
+                actual_file = Path(inspect.getfile(func)).resolve()
+                expected_file_resolved = expected_file.resolve()
+
+                if actual_file != expected_file_resolved:
+                    error_msg = (
+                        f"Transform '{transform.id}' location mismatch:\n"
+                        f"    Expected: {expected_file}\n"
+                        f"    Actual:   {actual_file}"
+                    )
+                    errors["transform_functions"].append(error_msg)
+                    print(f"  ⚠️  {error_msg}")
+
+                # シグネチャの検証
+                sig = inspect.signature(func)
+                expected_params = {p.name for p in transform.parameters}
+                actual_params = set(sig.parameters.keys())
+
+                if expected_params != actual_params:
+                    error_msg = (
+                        f"Transform '{transform.id}' signature mismatch:\n"
+                        f"    Expected params: {sorted(expected_params)}\n"
+                        f"    Actual params:   {sorted(actual_params)}"
+                    )
+                    errors["transform_signatures"].append(error_msg)
+                    print(f"  ⚠️  {error_msg}")
+
+            except (ImportError, AttributeError) as e:
+                error_msg = f"Transform '{transform.id}' not found: {e}"
+                errors["transform_functions"].append(error_msg)
+                print(f"  ❌ {error_msg}")
+
+        # 3. Example値のスキーマ適合性を検証
+        for example in self.spec.examples:
+            # このExampleが参照されているDataTypeを探す
+            for datatype in self.spec.datatypes:
+                if example.id in datatype.example_ids:
+                    try:
+                        jsonschema.validate(example.input, datatype.schema)
+                        print(f"  ✅ Example {example.id}: schema valid for {datatype.id}")
+                    except jsonschema.ValidationError as e:
+                        error_msg = (
+                            f"Example '{example.id}' invalid for DataType '{datatype.id}':\n"
+                            f"    {e.message}"
+                        )
+                        errors["example_schemas"].append(error_msg)
+                        print(f"  ❌ {error_msg}")
+
+        # サマリー表示
+        total_errors = sum(len(errs) for errs in errors.values())
+        if total_errors == 0:
+            print("\n✅ All integrity checks passed!")
+        else:
+            print(f"\n⚠️  Found {total_errors} integrity issue(s)")
+
+        return errors
 
     def run_checks(self) -> None:
         """Check関数を実行"""
@@ -309,6 +580,12 @@ def main():
     run_parser = subparsers.add_parser("run", help="DAG実行・検証")
     run_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
 
+    # validate コマンド
+    validate_parser = subparsers.add_parser(
+        "validate", help="仕様と実装の整合性を検証"
+    )
+    validate_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -336,6 +613,15 @@ def main():
         results = engine.run_examples()
         print(f"📊 Example report: {results}")
         print("✅ Execution completed")
+
+    elif args.command == "validate":
+        engine = Engine(spec)
+        errors = engine.validate_integrity()
+
+        # エラーがあれば終了コード1で終了
+        total_errors = sum(len(errs) for errs in errors.values())
+        if total_errors > 0:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

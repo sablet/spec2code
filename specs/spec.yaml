@@ -9,6 +9,11 @@ checks:
     impl: "apps.sample-pipeline.checks.text_checks:len_gt_0"
     file_path: "checks/text_checks.py"
 
+  - id: length_positive
+    description: "length フィールドが正の整数"
+    impl: "apps.sample-pipeline.checks.text_checks:length_positive"
+    file_path: "checks/text_checks.py"
+
 examples:
   - id: ex_hello
     description: "Hello例"
@@ -34,7 +39,8 @@ datatypes:
 
   - id: TextLength
     description: "テキスト長情報"
-    check_ids: []
+    check_ids:
+      - length_positive
     example_ids: []
     schema:
       type: object
