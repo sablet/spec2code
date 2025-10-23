@@ -144,7 +144,7 @@ execution:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config, spec)
 
-        assert "requires at least 1 selections" in str(exc_info.value)
+        assert "requires at least 1 selection" in str(exc_info.value)
 
     def test_invalid_unknown_transform(self, tmp_path):
         """Unknown transform_id fails validation"""
@@ -212,7 +212,7 @@ execution:
         assert "type" in str(exc_info.value).lower()
 
     def test_invalid_missing_required_parameter(self, tmp_path, sample_initial_data):
-        """Missing required parameter causes execution error"""
+        """Missing required parameter is caught by validation"""
         invalid_config = tmp_path / "invalid_missing_param.yaml"
         invalid_config.write_text(
             """
@@ -230,18 +230,20 @@ execution:
     - stage_id: "feature_engineering"
       selected:
         - transform_id: add_rolling_mean
-          # Missing 'window' parameter (no default in config or spec)
+          # Missing 'window' parameter (no default in spec - should be provided in transform's default_args)
           params: {}
 """
         )
 
         config = load_config(str(invalid_config))
-        runner = ConfigRunner(str(invalid_config))
+        spec = load_extended_spec("specs/dataframe-pipeline-extended.yaml")
 
-        # In this case, default_params from spec provides window=2
-        # So execution should succeed
-        result = runner.run(sample_initial_data)
-        assert "rolling_mean" in result.columns
+        # Validation should catch missing required parameter
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config, spec, check_implementations=True)
+
+        assert "window" in str(exc_info.value).lower()
+        assert "missing required parameter" in str(exc_info.value).lower()
 
     def test_invalid_negative_parameter_value(self, tmp_path, sample_initial_data):
         """Invalid parameter value (negative) is caught by validation"""
@@ -329,6 +331,8 @@ execution:
     - stage_id: "feature_engineering"
       selected:
         - transform_id: add_rolling_mean
+          params:
+            window: 2  # Provide required parameter
 """
         )
 

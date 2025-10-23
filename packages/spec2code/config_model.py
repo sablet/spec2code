@@ -52,20 +52,22 @@ class DAGCandidate(BaseModel):
     """A candidate transform in a DAG stage"""
 
     transform_id: str
-    default_params: dict[str, Any] = Field(default_factory=dict)
 
 
 class DAGStage(BaseModel):
-    """DAG stage definition with selection mode"""
+    """DAG stage definition with selection mode
+
+    candidates will be auto-collected from transforms if not specified.
+    Transforms are matched by: param[0].datatype_ref == input_type AND return_datatype_ref == output_type
+    """
 
     stage_id: str
     description: str
     selection_mode: Literal["single", "exclusive", "multiple"]
-    min_select: int = Field(default=1)
     max_select: int | None = Field(default=None)  # None = unlimited
     input_type: str
     output_type: str
-    candidates: list[DAGCandidate]
+    candidates: list[DAGCandidate] = Field(default_factory=list)  # Optional: auto-collected if empty
 
 
 class ExtendedSpec(BaseModel):
@@ -105,4 +107,38 @@ def load_extended_spec(spec_path: str) -> ExtendedSpec:
     with open(spec_path_obj) as f:
         data = yaml.safe_load(f)
 
-    return ExtendedSpec.model_validate(data)
+    spec = ExtendedSpec.model_validate(data)
+    _auto_collect_candidates(spec)
+    return spec
+
+
+def _auto_collect_candidates(spec: ExtendedSpec) -> None:
+    """Auto-collect candidates for DAG stages based on input_type/output_type
+
+    For each stage with empty candidates list, find all transforms where:
+    - First parameter's datatype_ref matches stage's input_type
+    - return_datatype_ref matches stage's output_type
+    """
+    transforms = spec.transforms
+
+    for stage in spec.dag_stages:
+        if stage.candidates:
+            # Already specified, skip auto-collection
+            continue
+
+        matched_transforms = []
+        for transform in transforms:
+            # Check if transform matches input/output types
+            params = transform.get("parameters", [])
+            if not params:
+                continue
+
+            first_param = params[0]
+            param_type = first_param.get("datatype_ref")
+            return_type = transform.get("return_datatype_ref")
+
+            if param_type == stage.input_type and return_type == stage.output_type:
+                matched_transforms.append(DAGCandidate(transform_id=transform["id"]))
+
+        if matched_transforms:
+            stage.candidates = matched_transforms

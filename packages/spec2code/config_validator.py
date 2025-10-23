@@ -186,13 +186,13 @@ def validate_config(
                 )
 
         elif stage.selection_mode == "multiple":
-            # Multiple mode: must select min_select <= n <= max_select
-            min_sel = stage.min_select
+            # Multiple mode: must select at least 1 (fixed min), max_select is configurable
+            min_sel = 1  # Always require at least one selection
             max_sel = stage.max_select
 
             if num_selected < min_sel:
                 errors.append(
-                    f"Stage '{stage_id}' requires at least {min_sel} selections, "
+                    f"Stage '{stage_id}' requires at least {min_sel} selection(s), "
                     f"but got {num_selected}"
                 )
 
@@ -226,14 +226,9 @@ def validate_config(
             # Build execution entry
             transform_def = transform_by_id[transform_id]
 
-            # Merge default params from stage candidate + config overrides
-            candidate = next(
-                (c for c in stage.candidates if c.transform_id == transform_id), None
-            )
-            final_params = {}
-            if candidate:
-                final_params.update(candidate.default_params)
-            final_params.update(selection.params)
+            # Use params from config selection
+            # (default_params removed - handled by transform's default_args)
+            final_params = selection.params.copy()
 
             # Validate parameters if check_implementations is enabled
             if check_implementations:
@@ -274,9 +269,10 @@ def validate_config(
             transform_def = transform_by_id[transform_id]
 
             # Validate parameters if check_implementations is enabled
+            # (No default_params - use empty dict)
             if check_implementations:
                 param_errors = _validate_transform_parameters(
-                    transform_id, transform_def, candidate.default_params
+                    transform_id, transform_def, {}
                 )
                 errors.extend(param_errors)
 
@@ -285,7 +281,7 @@ def validate_config(
                     "stage_id": stage.stage_id,
                     "transform_id": transform_id,
                     "transform_def": transform_def,
-                    "params": candidate.default_params,
+                    "params": {},
                 }
             )
 

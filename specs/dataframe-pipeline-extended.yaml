@@ -229,37 +229,26 @@ dag:
     to: finalize_step_b
 
 # Extended DAG format (for config-based execution)
+# candidates are auto-collected based on input_type/output_type matching
 dag_stages:
   - stage_id: "normalization"
     description: "Choose normalization method"
     selection_mode: "exclusive"  # 3つから1つ必須
     input_type: StepAFrame
     output_type: NormalizedFrame
-    candidates:
-      - transform_id: normalize_minmax
-      - transform_id: normalize_zscore
-      - transform_id: normalize_robust
+    # candidates auto-collected: normalize_minmax, normalize_zscore, normalize_robust
 
   - stage_id: "feature_engineering"
     description: "Select feature engineering transforms"
     selection_mode: "multiple"   # N個から1個以上選択可
-    min_select: 1
     max_select: null  # null = unlimited
     input_type: NormalizedFrame
     output_type: NormalizedFrame
-    candidates:
-      - transform_id: add_rolling_mean
-        default_params:
-          window: 2
-      - transform_id: add_diff
-      - transform_id: add_lag_features
-        default_params:
-          n_lags: 1
+    # candidates auto-collected: add_rolling_mean, add_diff, add_lag_features
 
   - stage_id: "output"
     description: "Finalize output format"
     selection_mode: "single"     # 候補1つ（従来通り）
     input_type: NormalizedFrame
     output_type: StepBFrame
-    candidates:
-      - transform_id: finalize_step_b
+    # candidates auto-collected: finalize_step_b
