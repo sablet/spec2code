@@ -69,13 +69,13 @@ class Example(BaseModel):
 class DataType(BaseModel):
     """データ構造定義"""
 
-    model_config = {"protected_namespaces": (), "use_attribute_docstrings": True}
+    model_config = {"protected_namespaces": ()}
 
     id: str
     description: str
     check_ids: list[str] = Field(default_factory=list)
     example_ids: list[str] = Field(default_factory=list)
-    schema: dict[str, Any]  # JSON Schema
+    schema_def: dict[str, Any] = Field(alias="schema")  # JSON Schema
 
 
 class Parameter(BaseModel):
@@ -167,7 +167,9 @@ def _build_type_annotation(
 
     if param.datatype_ref:
         # DataType参照を解決
-        datatype = next((dt for dt in spec.datatypes if dt.id == param.datatype_ref), None)
+        datatype = next(
+            (dt for dt in spec.datatypes if dt.id == param.datatype_ref), None
+        )
         if not datatype:
             return "dict", imports
 
@@ -286,7 +288,9 @@ def {func_name}(payload: dict) -> bool:
             param_strs.append(f"{param.name}: {type_str}")
 
         # 戻り値の型アノテーションを構築
-        return_type, return_imports = _build_return_annotation(spec, transform, app_root)
+        return_type, return_imports = _build_return_annotation(
+            spec, transform, app_root
+        )
         all_imports.update(return_imports)
 
         # import文を生成（spec2code.engineからのimportを統合）
@@ -304,7 +308,9 @@ def {func_name}(payload: dict) -> bool:
 
         # spec2code.engineのimportを統合
         if spec2code_imports:
-            combined_import = f"from spec2code.engine import {', '.join(sorted(spec2code_imports))}"
+            combined_import = (
+                f"from spec2code.engine import {', '.join(sorted(spec2code_imports))}"
+            )
             import_lines.append(combined_import)
 
         # その他のimportを追加
@@ -372,12 +378,14 @@ class Engine:
         for datatype in self.spec.datatypes:
             try:
                 # スキーマ自体の妥当性チェック
-                jsonschema.Draft7Validator.check_schema(datatype.schema)
+                jsonschema.Draft7Validator.check_schema(datatype.schema_def)
                 print(f"  ✅ {datatype.id}: schema valid")
             except jsonschema.SchemaError as e:
                 print(f"  ❌ {datatype.id}: schema invalid - {e}")
 
-    def validate_integrity(self, project_root: Path = Path(".")) -> dict[str, list[str]]:
+    def validate_integrity(
+        self, project_root: Path = Path(".")
+    ) -> dict[str, list[str]]:
         """仕様と実装の整合性を検証
 
         Returns:
@@ -412,6 +420,7 @@ class Engine:
 
                 # ファイル位置の検証
                 import inspect
+
                 actual_file = Path(inspect.getfile(func)).resolve()
                 expected_file_resolved = expected_file.resolve()
 
@@ -441,6 +450,7 @@ class Engine:
 
                 # ファイル位置の検証
                 import inspect
+
                 actual_file = Path(inspect.getfile(func)).resolve()
                 expected_file_resolved = expected_file.resolve()
 
@@ -478,8 +488,10 @@ class Engine:
             for datatype in self.spec.datatypes:
                 if example.id in datatype.example_ids:
                     try:
-                        jsonschema.validate(example.input, datatype.schema)
-                        print(f"  ✅ Example {example.id}: schema valid for {datatype.id}")
+                        jsonschema.validate(example.input, datatype.schema_def)
+                        print(
+                            f"  ✅ Example {example.id}: schema valid for {datatype.id}"
+                        )
                     except jsonschema.ValidationError as e:
                         error_msg = (
                             f"Example '{example.id}' invalid for DataType '{datatype.id}':\n"
@@ -581,9 +593,7 @@ def main():
     run_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
 
     # validate コマンド
-    validate_parser = subparsers.add_parser(
-        "validate", help="仕様と実装の整合性を検証"
-    )
+    validate_parser = subparsers.add_parser("validate", help="仕様と実装の整合性を検証")
     validate_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
 
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-.PHONY: help gen run clean format check test
+.PHONY: help gen run validate clean format check test gen-all run-all validate-all tree setup
 
 # デフォルトのspec
 SPEC ?= specs/spec.yaml
@@ -9,6 +9,7 @@ help: ## ヘルプを表示
 	@echo "使い方:"
 	@echo "  make gen [SPEC=specs/xxx.yaml]    スケルトンコード生成"
 	@echo "  make run [SPEC=specs/xxx.yaml]    DAG実行・検証"
+	@echo "  make validate [SPEC=specs/xxx.yaml] 仕様と実装の整合性検証"
 	@echo "  make clean                         生成されたコードを削除"
 	@echo "  make format                        コードフォーマット"
 	@echo "  make check                         コード品質チェック"
@@ -18,6 +19,7 @@ help: ## ヘルプを表示
 	@echo "  make gen                           デフォルト仕様でスケルトン生成"
 	@echo "  make gen SPEC=specs/custom.yaml    カスタム仕様でスケルトン生成"
 	@echo "  make run                           デフォルト仕様でDAG実行"
+	@echo "  make validate                      デフォルト仕様で整合性検証"
 	@echo ""
 
 gen: ## スケルトンコード生成
@@ -27,6 +29,10 @@ gen: ## スケルトンコード生成
 run: ## DAG実行・検証
 	@echo "🚀 DAG実行・検証中: $(SPEC)"
 	uv run python spec2code_cli.py run $(SPEC)
+
+validate: ## 仕様と実装の整合性検証
+	@echo "🔍 整合性検証中: $(SPEC)"
+	uv run python spec2code_cli.py validate $(SPEC)
 
 clean: ## 生成されたコードを削除
 	@echo "🗑️  生成されたコードを削除中..."
@@ -43,7 +49,9 @@ check: ## コード品質チェック
 	uv run ruff check .
 	@echo "✅ チェック完了"
 
-test: format check ## テスト実行（フォーマット + チェック）
+test: format check ## テスト実行（フォーマット + チェック + pytest）
+	@echo "🧪 pytestテスト実行中..."
+	uv run python -m pytest -v
 	@echo "✅ 全テスト完了"
 
 # 複数のspecを一括生成
@@ -67,6 +75,17 @@ run-all: ## 全てのspecファイルでDAG実行
 	done
 	@echo ""
 	@echo "✅ 全てのDAG実行完了"
+
+# 複数のspecを一括検証
+validate-all: ## 全てのspecファイルで整合性検証
+	@echo "🔍 全specファイルで整合性検証中..."
+	@for spec in specs/*.yaml; do \
+		echo ""; \
+		echo "📄 処理中: $$spec"; \
+		uv run python spec2code_cli.py validate $$spec; \
+	done
+	@echo ""
+	@echo "✅ 全ての整合性検証完了"
 
 # プロジェクト構造表示
 tree: ## プロジェクト構造を表示
