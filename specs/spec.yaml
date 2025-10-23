@@ -1,0 +1,67 @@
+version: "1"
+meta:
+  name: "sample-pipeline"
+  description: "DAG化したコード構造の定義サンプル"
+
+checks:
+  - id: len_gt_0
+    description: "文字列長 > 0"
+    impl: "apps.sample-pipeline.checks.text_checks:len_gt_0"
+    file_path: "checks/text_checks.py"
+
+examples:
+  - id: ex_hello
+    description: "Hello例"
+    input:
+      text: "hello"
+    expected:
+      length: 5
+
+datatypes:
+  - id: Text
+    description: "テキスト入力"
+    check_ids:
+      - len_gt_0
+    example_ids:
+      - ex_hello
+    schema:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+
+  - id: TextLength
+    description: "テキスト長情報"
+    check_ids: []
+    example_ids: []
+    schema:
+      type: object
+      properties:
+        length:
+          type: integer
+        normalized:
+          type: boolean
+      required:
+        - length
+
+transforms:
+  - id: measure_length
+    description: "文字数を数える"
+    impl: "apps.sample-pipeline.transforms.text_ops:measure_length"
+    file_path: "transforms/text_ops.py"
+    parameters:
+      - name: payload
+        datatype_ref: Text
+      - name: normalize
+        native: "builtins:bool"
+    return_datatype_ref: TextLength
+    default_args:
+      payload:
+        text: "hello world"
+      normalize: true
+
+dag:
+  - from: measure_length
+    to: null
