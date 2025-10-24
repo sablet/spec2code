@@ -355,6 +355,122 @@ def _stage_from_transform(transform: Transform, index: int) -> DAGStage:
     )
 
 
+# ==================== デフォルトConfig生成 ====================
+
+
+def _infer_default_value_for_param(param: Parameter) -> Any:  # noqa: ANN401
+    """Infer a reasonable default value for a parameter based on its type."""
+    if param.native:
+        type_name = param.native.split(":")[-1]
+        if type_name == "int":
+            if param.name in {"window", "n_lags", "size", "length", "count"}:
+                return 2
+            return 0
+        if type_name == "float":
+            return 0.0
+        if type_name == "str":
+            return ""
+        if type_name == "bool":
+            return False
+    return None
+
+
+def _build_default_stage_config(spec: Spec, stage: DAGStage) -> dict[str, Any] | None:
+    """Build default config for a single DAG stage."""
+    if stage.selection_mode == "single":
+        return None
+
+    if not stage.default_transform_id:
+        return None
+
+    transform = next((t for t in spec.transforms if t.id == stage.default_transform_id), None)
+    if not transform:
+        return None
+
+    params: dict[str, Any] = {}
+    for idx, param in enumerate(transform.parameters):
+        if idx == 0:
+            continue
+
+        has_default = "default" in getattr(param, "model_fields_set", set())
+        if has_default and param.default is not None:
+            params[param.name] = param.default
+        elif param.optional:
+            continue
+        else:
+            inferred_value = _infer_default_value_for_param(param)
+            if inferred_value is not None:
+                params[param.name] = inferred_value
+
+    selection = {"transform_id": transform.id}
+    if params:
+        selection["params"] = params
+
+    return {"stage_id": stage.stage_id, "selected": [selection]}
+
+
+def _auto_collect_stage_candidates(spec: Spec) -> None:
+    """Auto-collect candidates for DAG stages based on input_type/output_type."""
+    for stage in spec.dag_stages:
+        if stage.candidates:
+            continue
+
+        matched_transforms = []
+        for transform in spec.transforms:
+            if not transform.parameters:
+                continue
+
+            first_param = transform.parameters[0]
+            param_type = first_param.datatype_ref
+            return_type = transform.return_datatype_ref
+
+            if param_type == stage.input_type and return_type == stage.output_type:
+                matched_transforms.append(transform.id)
+
+        if matched_transforms:
+            stage.candidates = matched_transforms
+
+        if not stage.default_transform_id and stage.candidates:
+            stage.default_transform_id = stage.candidates[0]
+
+
+def generate_default_config(spec: Spec, project_root: Path = Path(".")) -> None:
+    """Generate default config file from spec with dag_stages."""
+    print("📝 Generating default config...")
+
+    if not spec.dag_stages:
+        print("  ⏭️  No dag_stages defined in spec (skipped)")
+        return
+
+    _auto_collect_stage_candidates(spec)
+
+    app_package = _infer_app_package(spec)
+    config_dir = project_root / "configs"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    config_filename = f"{app_package}-default-config.yaml"
+    config_path = config_dir / config_filename
+
+    stages = []
+    for stage in spec.dag_stages:
+        stage_config = _build_default_stage_config(spec, stage)
+        if stage_config:
+            stages.append(stage_config)
+
+    config_data = {
+        "version": spec.version,
+        "meta": {
+            "config_name": f"{app_package}-default",
+            "description": f"Default configuration for {spec.meta.name}",
+            "base_spec": f"specs/{spec.meta.name}.yaml",
+        },
+        "execution": {"stages": stages},
+    }
+
+    config_path.write_text(yaml.dump(config_data, default_flow_style=False, sort_keys=False))
+    print(f"  ✅ Generated: {config_path}")
+
+
 # ==================== スケルトンコード生成 ====================
 
 
@@ -1183,6 +1299,7 @@ def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
     _generate_check_skeletons(spec, app_root)
     _generate_transform_skeletons(spec, app_root)
     _ensure_package_inits(app_root)
+    generate_default_config(spec, project_root)
 
 
 # ==================== DAG検証・実行エンジン ====================
@@ -1682,6 +1799,9 @@ def _create_parser() -> argparse.ArgumentParser:
     run_config_parser = subparsers.add_parser("run-config", help="Config-based DAG execution")
     run_config_parser.add_argument("config_file", help="Config file (YAML)")
 
+    validate_config_parser = subparsers.add_parser("validate-config", help="Config整合性検証")
+    validate_config_parser.add_argument("config_file", help="Config file (YAML)")
+
     return parser
 
 
@@ -1714,6 +1834,44 @@ def _handle_run_config(config_file: str) -> None:
         print(result)
     except Exception as exc:  # noqa: BLE001 - surface full error details
         print(f"❌ Config execution failed: {exc}")
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def _handle_validate_config(config_file: str) -> None:
+    """Validate config file against spec."""
+    from packages.spec2code.config_runner import ConfigRunner
+    from packages.spec2code.config_validator import ConfigValidationError
+
+    try:
+        print("🔍 Loading config...")
+        runner = ConfigRunner(config_file)
+        print(f"✅ Config loaded: {runner.config.meta.config_name}")
+        print(f"📄 Base spec: {runner.config.meta.base_spec}")
+        print()
+
+        print("🔍 Validating config against spec...")
+        validation_result = runner.validate(check_implementations=True)
+        print("✅ Config validation passed!")
+        print()
+
+        execution_plan = validation_result["execution_plan"]
+        print(f"📋 Execution plan: {len(execution_plan)} transform(s)")
+        for idx, step in enumerate(execution_plan, start=1):
+            print(f"  {idx}. Stage: {step['stage_id']}")
+            print(f"     Transform: {step['transform_id']}")
+            if step["params"]:
+                print(f"     Params: {step['params']}")
+        print()
+        print("✅ Config validation completed successfully")
+
+    except ConfigValidationError as exc:
+        print(f"❌ Config validation failed:\n{exc}")
+        sys.exit(1)
+    except Exception as exc:  # noqa: BLE001 - surface full error details
+        print(f"❌ Config validation error: {exc}")
         import traceback
 
         traceback.print_exc()
@@ -1758,6 +1916,10 @@ def main() -> None:
 
     if args.command == "run-config":
         _handle_run_config(args.config_file)
+        return
+
+    if args.command == "validate-config":
+        _handle_validate_config(args.config_file)
         return
 
     try:

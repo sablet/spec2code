@@ -1,0 +1,15 @@
+version: '1'
+meta:
+  config_name: dataframe-pipeline-extended-default
+  description: Default configuration for dataframe-pipeline-extended
+  base_spec: specs/dataframe-pipeline-extended.yaml
+execution:
+  stages:
+  - stage_id: normalization
+    selected:
+    - transform_id: normalize_minmax
+  - stage_id: feature_engineering
+    selected:
+    - transform_id: add_rolling_mean
+      params:
+        window: 2
