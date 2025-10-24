@@ -1,0 +1,7 @@
+version: '1'
+meta:
+  config_name: algo-trade-pipeline-default
+  description: Default configuration for algo-trade-pipeline
+  base_spec: specs/algo-trade-pipeline.yaml
+execution:
+  stages: []

@@ -1,0 +1,7 @@
+version: '1'
+meta:
+  config_name: sample-pipeline-default
+  description: Default configuration for sample-pipeline
+  base_spec: specs/sample-pipeline.yaml
+execution:
+  stages: []

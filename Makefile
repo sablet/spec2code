@@ -17,7 +17,6 @@ help: ## ヘルプを表示
 	@echo "  make gen [SPEC=specs/xxx.yaml]        スケルトンコード生成"
 	@echo "  make run [SPEC=specs/xxx.yaml]        DAG実行・検証"
 	@echo "  make validate [SPEC=specs/xxx.yaml]   仕様と実装の整合性検証"
-	@echo "  make clean                            生成されたコードを削除"
 	@echo ""
 	@echo "Config実行コマンド:"
 	@echo "  make run-config [CONFIG=configs/xxx.yaml]      Config駆動でDAG実行"
@@ -77,9 +76,6 @@ validate-config-all: ## 全てのconfigファイルで整合性検証
 		uv run python spec2code_cli.py validate-config $$config || true; \
 	done
 	echo ""
-
-clean: ## 生成されたコードを削除
-	rm -rf apps/*
 
 format: ## コードフォーマット
 	uv run ruff format $(CHECK_DIRS)
