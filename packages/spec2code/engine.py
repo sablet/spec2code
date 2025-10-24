@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import builtins
 import importlib
 import inspect
@@ -947,14 +948,8 @@ def _collect_pydantic_model_lines(spec: Spec, datatype: DataType, app_root: Path
     return lines, imports
 
 
-def _write_transform_skeleton(spec: Spec, transform: Transform, app_root: Path) -> None:
-    """Create a skeleton file for a single transform."""
-    file_path = app_root / transform.file_path
-    if file_path.exists():
-        print(f"  ⏭️  Skip (exists): {file_path}")
-        return
-
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+def _render_transform_function(spec: Spec, transform: Transform, app_root: Path) -> tuple[str, set[str]]:
+    """Render transform function skeleton and required imports."""
     func_name = transform.impl.split(":")[-1]
 
     param_strs = []
@@ -977,24 +972,186 @@ def _write_transform_skeleton(spec: Spec, transform: Transform, app_root: Path) 
     return_type, return_imports = _build_return_annotation(spec, transform, app_root)
     all_imports.update(return_imports)
 
-    import_section = _render_imports(all_imports)
     params = ", ".join(param_strs)
     code = f'''# Auto-generated skeleton for Transform: {transform.id}
-{import_section}
-
 def {func_name}({params}) -> {return_type}:
     """{transform.description}"""
     # TODO: implement transform logic
     return {{}}
 '''
-    file_path.write_text(code)
-    print(f"  ✅ Generated: {file_path}")
+    return code, all_imports
+
+
+def _extract_existing_function_names(source: str) -> set[str]:
+    """Extract function names defined in existing Python source."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    return {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+
+
+def _ensure_trailing_newline(text: str) -> str:
+    """Ensure text ends with a newline."""
+    return text if text.endswith("\n") else f"{text}\n"
+
+
+def _find_import_block_range(lines: list[str]) -> tuple[int | None, int | None]:
+    """Find the range of existing import statements."""
+    first_import_idx: int | None = None
+    last_import_idx: int | None = None
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("import ", "from ")):
+            if first_import_idx is None:
+                first_import_idx = idx
+            last_import_idx = idx
+        elif first_import_idx is not None:
+            break
+    return first_import_idx, last_import_idx
+
+
+def _extract_existing_imports(lines: list[str], start_idx: int, end_idx: int) -> set[str]:
+    """Extract existing import statements from a line range."""
+    existing_imports: set[str] = set()
+    for idx in range(start_idx, end_idx + 1):
+        stripped = lines[idx].strip()
+        if stripped.startswith(("import ", "from ")):
+            existing_imports.add(stripped)
+    return existing_imports
+
+
+def _find_insertion_point(lines: list[str]) -> int:
+    """Find the appropriate position to insert import statements."""
+    insertion_idx = 0
+    while insertion_idx < len(lines):
+        stripped = lines[insertion_idx].strip()
+        if not stripped or stripped.startswith("#"):
+            insertion_idx += 1
+            continue
+        if stripped.startswith(("'''", '"""')):
+            insertion_idx = _skip_docstring(lines, insertion_idx, stripped[:3])
+            continue
+        break
+    return insertion_idx
+
+
+def _skip_docstring(lines: list[str], start_idx: int, quote: str) -> int:
+    """Skip over a docstring block and return the index after it."""
+    idx = start_idx + 1
+    while idx < len(lines):
+        if quote in lines[idx]:
+            return idx + 1
+        idx += 1
+    return idx
+
+
+def _merge_with_existing_imports(lines: list[str], first_idx: int, last_idx: int, new_imports: set[str]) -> str:
+    """Merge new imports with existing import block."""
+    existing_imports = _extract_existing_imports(lines, first_idx, last_idx)
+    combined_imports = existing_imports | new_imports
+    rendered = _render_imports(combined_imports)
+    prefix = lines[:first_idx]
+    suffix = lines[last_idx + 1 :]
+    rendered_lines = rendered.splitlines()
+    if suffix and suffix[0].strip():
+        rendered_lines.append("")
+    merged = prefix + rendered_lines + suffix
+    return _ensure_trailing_newline("\n".join(merged))
+
+
+def _insert_imports_at_top(lines: list[str], new_imports: set[str]) -> str:
+    """Insert new imports at the appropriate position at the top of the file."""
+    rendered = _render_imports(new_imports)
+    if not rendered:
+        return _ensure_trailing_newline("\n".join(lines))
+
+    insertion_idx = _find_insertion_point(lines)
+    new_lines = lines[:insertion_idx] + rendered.splitlines()
+    remaining = lines[insertion_idx:]
+    if remaining and (not remaining[0].strip()):
+        new_lines += remaining
+    else:
+        new_lines += [""] + remaining
+    return _ensure_trailing_newline("\n".join(new_lines))
+
+
+def _merge_imports_into_code(source: str, new_imports: set[str]) -> str:
+    """Insert or update import statements in the existing source."""
+    if not new_imports:
+        return _ensure_trailing_newline(source)
+
+    lines = source.splitlines()
+    first_import_idx, last_import_idx = _find_import_block_range(lines)
+
+    if first_import_idx is not None and last_import_idx is not None:
+        return _merge_with_existing_imports(lines, first_import_idx, last_import_idx, new_imports)
+
+    return _insert_imports_at_top(lines, new_imports)
+
+
+def _write_transform_file(spec: Spec, transforms: list[Transform], app_root: Path) -> None:
+    """Create or update a transform module with the provided transforms."""
+    relative_path = transforms[0].file_path
+    file_path = app_root / relative_path
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_code = ""
+    existing_functions: set[str] = set()
+    if file_path.exists():
+        existing_code = file_path.read_text()
+        existing_functions = _extract_existing_function_names(existing_code)
+
+    new_blocks: list[str] = []
+    required_imports: set[str] = set()
+    for transform in transforms:
+        func_name = transform.impl.split(":")[-1]
+        if func_name in existing_functions:
+            print(f"  ⏭️  Skip (exists): {file_path}::{func_name}")
+            continue
+        block, imports = _render_transform_function(spec, transform, app_root)
+        new_blocks.append(block)
+        required_imports.update(imports)
+
+    if not file_path.exists():
+        if not new_blocks:
+            print(f"  ⏭️  Skip (exists): {file_path}")
+            return
+        header = "# Auto-generated skeleton for Transform functions\n"
+        imports_block = _render_imports(required_imports)
+        sections = [header]
+        if imports_block:
+            sections.append(f"{imports_block}\n")
+        sections.append("\n\n".join(new_blocks))
+        content = "\n".join(sections)
+        if not content.endswith("\n"):
+            content += "\n"
+        file_path.write_text(content)
+        print(f"  ✅ Generated: {file_path}")
+        return
+
+    if not new_blocks:
+        print(f"  ⏭️  Skip (up-to-date): {file_path}")
+        return
+
+    updated_code = _merge_imports_into_code(existing_code, required_imports)
+    append_block = "\n\n".join(new_blocks)
+    updated_code = updated_code.rstrip("\n")
+    updated_code = f"{updated_code}\n\n{append_block}\n"
+    file_path.write_text(updated_code)
+    print(f"  ✏️  Appended {len(new_blocks)} transform(s): {file_path}")
 
 
 def _generate_transform_skeletons(spec: Spec, app_root: Path) -> None:
-    """Generate skeleton files for all transforms."""
+    """Generate skeleton files for all transforms, grouping by file path."""
+    grouped: dict[str, list[Transform]] = {}
     for transform in spec.transforms:
-        _write_transform_skeleton(spec, transform, app_root)
+        grouped.setdefault(transform.file_path, []).append(transform)
+
+    for transforms in grouped.values():
+        _write_transform_file(spec, transforms, app_root)
 
 
 def _ensure_package_inits(app_root: Path) -> None:

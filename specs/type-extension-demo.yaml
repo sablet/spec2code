@@ -14,6 +14,11 @@ checks:
     impl: "apps.type_extension_demo.checks.validation:check_performance"
     file_path: "checks/validation.py"
 
+  - id: check_multiindex
+    description: "Validate MultiIndex structure"
+    impl: "apps.type_extension_demo.checks.validation:check_multiindex"
+    file_path: "checks/validation.py"
+
 examples:
   - id: ex_signal
     description: "Example trading signal"
@@ -92,6 +97,18 @@ datatypes:
 
   - id: PriceData
     description: "Alias for price DataFrame"
+    type_alias:
+      type: simple
+      target: "pandas:DataFrame"
+
+  - id: TimeSeriesIndex
+    description: "MultiIndex for time series with symbol and date"
+    type_alias:
+      type: simple
+      target: "pandas:MultiIndex"
+
+  - id: MultiIndexDataFrame
+    description: "DataFrame with MultiIndex"
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -177,6 +194,29 @@ transforms:
       - name: target
         native: "pandas:DataFrame"
     return_datatype_ref: FeatureTarget
+
+  - id: create_multiindex_data
+    description: "Create DataFrame with MultiIndex"
+    impl: "apps.type_extension_demo.transforms.indexing:create_multiindex_data"
+    file_path: "transforms/indexing.py"
+    parameters:
+      - name: data
+        datatype_ref: PriceData
+      - name: symbols
+        native: "builtins:list"
+    return_datatype_ref: MultiIndexDataFrame
+
+  - id: process_multiindex
+    description: "Process MultiIndex DataFrame"
+    impl: "apps.type_extension_demo.transforms.indexing:process_multiindex"
+    file_path: "transforms/indexing.py"
+    parameters:
+      - name: df
+        datatype_ref: MultiIndexDataFrame
+      - name: level
+        native: "builtins:int"
+        default: 0
+    return_datatype_ref: PriceData
 
 dag:
   - from: generate_signals

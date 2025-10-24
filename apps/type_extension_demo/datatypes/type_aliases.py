@@ -9,3 +9,9 @@ FeatureTarget: TypeAlias = tuple[pd.DataFrame, pd.DataFrame]
 
 # Alias for price DataFrame
 PriceData: TypeAlias = pd.DataFrame
+
+# MultiIndex for time series with symbol and date
+TimeSeriesIndex: TypeAlias = pd.MultiIndex
+
+# DataFrame with MultiIndex
+MultiIndexDataFrame: TypeAlias = pd.DataFrame
