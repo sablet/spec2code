@@ -1,0 +1,186 @@
+version: "1"
+meta:
+  name: "type-extension-demo"
+  description: "Demonstration of all type extension features"
+
+checks:
+  - id: check_trading_signal
+    description: "Validate trading signal structure"
+    impl: "apps.type_extension_demo.checks.validation:check_trading_signal"
+    file_path: "checks/validation.py"
+
+  - id: check_performance
+    description: "Validate performance metrics"
+    impl: "apps.type_extension_demo.checks.validation:check_performance"
+    file_path: "checks/validation.py"
+
+examples:
+  - id: ex_signal
+    description: "Example trading signal"
+    input:
+      symbol: "USDJPY"
+      timestamp: "2024-01-01T00:00:00"
+      signal: 1
+    expected:
+      valid: true
+
+datatypes:
+  # 1. Enum type definition
+  - id: PositionSignal
+    description: "Trading position signal"
+    enum:
+      base_type: int
+      members:
+        - name: BUY
+          value: 1
+          description: "Long position"
+        - name: SELL
+          value: -1
+          description: "Short position"
+        - name: HOLD
+          value: 0
+          description: "No position"
+
+  # 2. Pydantic Model definition
+  - id: CVConfig
+    description: "Cross-validation configuration"
+    pydantic_model:
+      fields:
+        - name: n_splits
+          type:
+            native: "builtins:int"
+          default: 5
+          description: "Number of CV splits"
+        - name: test_size
+          type:
+            native: "builtins:float"
+          optional: true
+          description: "Test set size ratio"
+        - name: gap
+          type:
+            native: "builtins:int"
+          default: 0
+          description: "Gap between train and test"
+
+  - id: PerformanceMetrics
+    description: "Trading performance metrics"
+    check_ids:
+      - check_performance
+    pydantic_model:
+      fields:
+        - name: annual_return
+          type:
+            native: "builtins:float"
+          description: "Annualized return"
+        - name: sharpe_ratio
+          type:
+            native: "builtins:float"
+          description: "Sharpe ratio"
+        - name: max_drawdown
+          type:
+            native: "builtins:float"
+          description: "Maximum drawdown"
+
+  # 3. TypeAlias definition
+  - id: FeatureTarget
+    description: "Feature and target DataFrame tuple"
+    type_alias:
+      type: tuple
+      elements:
+        - native: "pandas:DataFrame"
+        - native: "pandas:DataFrame"
+
+  - id: PriceData
+    description: "Alias for price DataFrame"
+    type_alias:
+      type: simple
+      target: "pandas:DataFrame"
+
+  # 4. Generic type definition
+  - id: SignalList
+    description: "List of position signals"
+    generic:
+      container: list
+      element_type:
+        datatype_ref: PositionSignal
+
+  - id: ConfigDict
+    description: "Configuration dictionary"
+    generic:
+      container: dict
+      key_type:
+        native: "builtins:str"
+      value_type:
+        native: "typing:Any"
+
+  # 5. Schema-based datatype (for JSON validation)
+  - id: TradingSignalData
+    description: "Trading signal data structure"
+    check_ids:
+      - check_trading_signal
+    example_ids:
+      - ex_signal
+    schema:
+      type: object
+      properties:
+        symbol:
+          type: string
+        timestamp:
+          type: string
+        signal:
+          type: integer
+      required:
+        - symbol
+        - timestamp
+        - signal
+
+transforms:
+  - id: generate_signals
+    description: "Generate trading signals from price data"
+    impl: "apps.type_extension_demo.transforms.signals:generate_signals"
+    file_path: "transforms/signals.py"
+    parameters:
+      - name: data
+        datatype_ref: PriceData
+      - name: method
+        literal:
+          - "momentum"
+          - "mean_reversion"
+          - "breakout"
+        default: "momentum"
+      - name: cv_config
+        datatype_ref: CVConfig
+        optional: true
+    return_datatype_ref: SignalList
+
+  - id: calculate_performance
+    description: "Calculate performance metrics from signals"
+    impl: "apps.type_extension_demo.transforms.performance:calculate_performance"
+    file_path: "transforms/performance.py"
+    parameters:
+      - name: signals
+        datatype_ref: SignalList
+      - name: price_data
+        datatype_ref: PriceData
+      - name: params
+        datatype_ref: ConfigDict
+        optional: true
+    return_datatype_ref: PerformanceMetrics
+
+  - id: align_features
+    description: "Align features and target data"
+    impl: "apps.type_extension_demo.transforms.features:align_features"
+    file_path: "transforms/features.py"
+    parameters:
+      - name: features
+        native: "pandas:DataFrame"
+      - name: target
+        native: "pandas:DataFrame"
+    return_datatype_ref: FeatureTarget
+
+dag:
+  - from: generate_signals
+    to: calculate_performance
+  - from: calculate_performance
+    to: null
+

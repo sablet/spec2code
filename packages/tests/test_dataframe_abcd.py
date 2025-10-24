@@ -241,7 +241,6 @@ def test_dataframe_abcd_example_data_structure(dataframe_abcd_spec_path):
 def test_dataframe_abcd_dag_execution_flow(dataframe_abcd_spec_path, tmp_path):
     """Test that DAG execution passes data from a->b->d correctly"""
     import pandas as pd
-    from spec2code.engine import Engine
 
     spec = load_spec(dataframe_abcd_spec_path)
     generate_skeleton(spec, project_root=tmp_path)

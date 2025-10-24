@@ -6,24 +6,25 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
-from packages.spec2code.config_model import Config, load_config, load_extended_spec
+from packages.spec2code.config_model import load_config, load_extended_spec
 from packages.spec2code.config_validator import validate_config
 
 
 class ConfigRunner:
     """Execute DAG based on config file"""
 
-    def __init__(self, config_path: str):
+    def __init__(self: "ConfigRunner", config_path: str) -> None:
         self.config = load_config(config_path)
         self.spec_path = self.config.meta.base_spec
         self.extended_spec = load_extended_spec(self.spec_path)
 
-    def validate(self, check_implementations: bool = True) -> dict[str, Any]:
+    def validate(
+        self: "ConfigRunner", check_implementations: bool = True
+    ) -> dict[str, Any]:
         """Validate config against spec
 
         Args:
@@ -34,11 +35,11 @@ class ConfigRunner:
         """
         return validate_config(self.config, self.extended_spec, check_implementations)
 
-    def run(self, initial_data: pd.DataFrame) -> pd.DataFrame:
+    def run(self: "ConfigRunner", initial_data: pd.DataFrame) -> pd.DataFrame:
         """Execute DAG with initial data"""
-        print(f"🔍 Validating config...")
+        print("🔍 Validating config...")
         validation_result = self.validate()
-        print(f"✅ Config validation passed")
+        print("✅ Config validation passed")
 
         execution_plan = validation_result["execution_plan"]
 
@@ -48,76 +49,78 @@ class ConfigRunner:
         print()
 
         current_data = initial_data
-        stage_results = {}
+        stage_results: dict[str, list[pd.DataFrame]] = {}
 
         for step in execution_plan:
-            stage_id = step["stage_id"]
-            transform_id = step["transform_id"]
-            transform_def = step["transform_def"]
-            params = step["params"]
-
-            print(f"▶️  Stage: {stage_id}")
-            print(f"   Transform: {transform_id}")
-            if params:
-                print(f"   Params: {params}")
-
-            # Import transform function
-            impl = transform_def["impl"]
-            module_path, func_name = impl.rsplit(":", 1)
-            module = importlib.import_module(module_path)
-            func = getattr(module, func_name)
-
-            # Build function arguments
-            sig = inspect.signature(func)
-            func_args = {}
-
-            # First parameter is always the data
-            first_param = list(sig.parameters.keys())[0]
-            func_args[first_param] = current_data
-
-            # Add other parameters from config
-            for param_name in list(sig.parameters.keys())[1:]:
-                if param_name in params:
-                    func_args[param_name] = params[param_name]
-
-            # Execute transform
-            try:
-                result = func(**func_args)
-                print(f"   ✅ Success: {len(result)} rows")
-
-                # Store stage result
-                if stage_id not in stage_results:
-                    stage_results[stage_id] = []
-                stage_results[stage_id].append(result)
-
-                # For multiple-mode stages, accumulate features
-                # For exclusive-mode stages, use the result directly
-                stage = next(
-                    (
-                        s
-                        for s in self.extended_spec.dag_stages
-                        if s.stage_id == stage_id
-                    ),
-                    None,
-                )
-
-                if stage and stage.selection_mode == "multiple":
-                    # Merge features from multiple transforms
-                    current_data = result
-                else:
-                    # Use result directly
-                    current_data = result
-
-            except Exception as e:
-                print(f"   ❌ Error: {e}")
-                raise
-
+            current_data = self._execute_step(step, current_data, stage_results)
             print()
 
-        print(f"✅ Execution completed")
-        print(
-            f"📊 Final data: {len(current_data)} rows, {len(current_data.columns)} columns"
-        )
+        print("✅ Execution completed")
+        final_row_count = len(current_data)
+        final_col_count = len(current_data.columns)
+        print(f"📊 Final data: {final_row_count} rows, {final_col_count} columns")
         print(f"   Columns: {list(current_data.columns)}")
 
         return current_data
+
+    def _execute_step(
+        self: "ConfigRunner",
+        step: dict[str, Any],
+        current_data: pd.DataFrame,
+        stage_results: dict[str, list[pd.DataFrame]],
+    ) -> pd.DataFrame:
+        stage_id: str = step["stage_id"]
+        transform_id: str = step["transform_id"]
+        transform_def: dict[str, Any] = step["transform_def"]
+        params: dict[str, Any] = step["params"]
+
+        print(f"▶️  Stage: {stage_id}")
+        print(f"   Transform: {transform_id}")
+        if params:
+            print(f"   Params: {params}")
+
+        func, signature = self._import_transform_callable(transform_def["impl"])
+        func_args = self._build_function_args(signature, current_data, params)
+
+        try:
+            result = func(**func_args)
+            print(f"   ✅ Success: {len(result)} rows")
+        except Exception as exc:
+            print(f"   ❌ Error: {exc}")
+            raise
+
+        return self._post_process_result(stage_id, result, stage_results)
+
+    def _import_transform_callable(
+        self: "ConfigRunner", impl: str
+    ) -> tuple[Callable[..., Any], inspect.Signature]:
+        module_path, func_name = impl.rsplit(":", 1)
+        module = importlib.import_module(module_path)
+        func = getattr(module, func_name)
+        return func, inspect.signature(func)
+
+    def _build_function_args(
+        self: "ConfigRunner",
+        signature: inspect.Signature,
+        current_data: pd.DataFrame,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        param_names = list(signature.parameters.keys())
+        func_args: dict[str, Any] = {}
+        if not param_names:
+            return func_args
+
+        func_args[param_names[0]] = current_data
+        for param_name in param_names[1:]:
+            if param_name in params:
+                func_args[param_name] = params[param_name]
+        return func_args
+
+    def _post_process_result(
+        self: "ConfigRunner",
+        stage_id: str,
+        result: pd.DataFrame,
+        stage_results: dict[str, list[pd.DataFrame]],
+    ) -> pd.DataFrame:
+        stage_results.setdefault(stage_id, []).append(result)
+        return result

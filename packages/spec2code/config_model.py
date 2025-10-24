@@ -55,13 +55,14 @@ class DAGCandidate(BaseModel):
 
 
 class DAGStage(BaseModel):
-    """DAG stage definition with selection mode
+    """DAG stage definition with selection mode.
 
-    candidates will be auto-collected from transforms if not specified.
-    Transforms are matched by: param[0].datatype_ref == input_type AND return_datatype_ref == output_type
+    Candidates are auto-collected from transforms when not specified. A transform
+    qualifies when its first parameter's `datatype_ref` matches `input_type` and the
+    transform's `return_datatype_ref` matches `output_type`.
 
-    default_transform_id specifies which transform to use for DAG edge generation.
-    This enables DAG edges to be auto-generated from dag_stages, eliminating the need for separate dag field.
+    `default_transform_id` determines which transform to use when generating DAG edges
+    from `dag_stages`, removing the need for an explicit `dag` field.
     """
 
     stage_id: str
@@ -70,7 +71,9 @@ class DAGStage(BaseModel):
     max_select: int | None = Field(default=None)  # None = unlimited
     input_type: str
     output_type: str
-    candidates: list[DAGCandidate] = Field(default_factory=list)  # Optional: auto-collected if empty
+    candidates: list[DAGCandidate] = Field(
+        default_factory=list
+    )  # Optional: auto-collected if empty
     default_transform_id: str | None = Field(
         default=None
     )  # For DAG edge generation (auto-set to candidates[0] if not specified)
@@ -145,7 +148,9 @@ def _auto_collect_candidates(spec: ExtendedSpec) -> None:
                 return_type = transform.get("return_datatype_ref")
 
                 if param_type == stage.input_type and return_type == stage.output_type:
-                    matched_transforms.append(DAGCandidate(transform_id=transform["id"]))
+                    matched_transforms.append(
+                        DAGCandidate(transform_id=transform["id"])
+                    )
 
             if matched_transforms:
                 stage.candidates = matched_transforms
@@ -156,15 +161,15 @@ def _auto_collect_candidates(spec: ExtendedSpec) -> None:
 
 
 def _generate_dag_from_stages(spec: ExtendedSpec) -> None:
-    """Generate DAG edges from dag_stages using default_transform_id
+    """Generate DAG edges from `dag_stages` using `default_transform_id`.
 
-    If spec.dag is already populated, skip generation (backward compatibility).
-    Otherwise, build DAG edges by connecting stages via their default_transform_id.
+    Skip generation when `spec.dag` is already populated (backward compatibility).
+    Otherwise, connect stages through their `default_transform_id` to derive edges.
 
     Algorithm:
-    1. For each stage, use default_transform_id as the representative transform
-    2. Connect stages sequentially: stage[i].default_transform_id -> stage[i+1].default_transform_id
-    3. This creates a linear pipeline by default
+    1. Use each stage's `default_transform_id` as the representative transform.
+    2. Connect stages sequentially: stage[i] -> stage[i+1].
+    3. Produce a linear pipeline by default.
     """
     if spec.dag:
         # DAG already exists (backward compatibility or manually specified)
@@ -180,7 +185,7 @@ def _generate_dag_from_stages(spec: ExtendedSpec) -> None:
         next_stage = spec.dag_stages[i + 1]
 
         if not current_stage.default_transform_id:
-            # Skip if no default_transform_id (shouldn't happen after _auto_collect_candidates)
+            # Skip when auto-collection failed to produce a default candidate
             continue
 
         if not next_stage.default_transform_id:

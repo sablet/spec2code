@@ -1,9 +1,14 @@
-.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all tree setup
+.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all tree setup duplication lint typecheck complexity
+
+# UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
+# export UV_CACHE_DIR
 
 # デフォルトのspec
 SPEC ?= specs/spec.yaml
 # デフォルトのconfig
 CONFIG ?= configs/pipeline-config-minmax.yaml
+# チェック対象ディレクトリ
+CHECK_DIRS ?= packages apps
 
 help: ## ヘルプを表示
 	@echo "Spec2Code - スケルトンコード生成・検証システム"
@@ -20,7 +25,11 @@ help: ## ヘルプを表示
 	@echo ""
 	@echo "開発コマンド:"
 	@echo "  make format                           コードフォーマット"
-	@echo "  make check                            コード品質チェック"
+	@echo "  make lint                             Lintチェック"
+	@echo "  make typecheck                        型チェック"
+	@echo "  make complexity                       複雑度チェック"
+	@echo "  make duplication                      重複コードチェック"
+	@echo "  make check                            品質チェック（全て）"
 	@echo "  make test                             テスト実行"
 	@echo ""
 	@echo "一括実行コマンド:"
@@ -60,10 +69,21 @@ clean: ## 生成されたコードを削除
 	rm -rf apps/*
 
 format: ## コードフォーマット
-	uv run ruff format .
+	uv run ruff format $(CHECK_DIRS)
 
-check: ## コード品質チェック
-	uv run ruff check .
+lint: ## Lintチェック
+	uv run ruff check --fix --unsafe-fixes packages/spec2code
+
+typecheck: ## 型チェック
+	uv run mypy packages/spec2code
+
+complexity: ## 複雑度チェック
+	uv run xenon -b B -m B -a A packages/spec2code
+
+duplication: ## 重複コードチェック
+	npx jscpd --config .jscpd.json packages/spec2code
+
+check: duplication format lint typecheck complexity ## コード品質チェック（全て）
 
 test:
 	uv run python -m pytest -v

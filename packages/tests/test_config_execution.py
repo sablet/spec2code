@@ -114,7 +114,7 @@ execution:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config, spec)
 
-        assert "must select exactly 1 transform" in str(exc_info.value)
+        assert "requires exactly one selection" in str(exc_info.value)
         assert "got 2" in str(exc_info.value)
 
     def test_invalid_multiple_no_selections(self, tmp_path):
@@ -144,7 +144,7 @@ execution:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config, spec)
 
-        assert "requires at least 1 selection" in str(exc_info.value)
+        assert "requires at least one selection" in str(exc_info.value)
 
     def test_invalid_unknown_transform(self, tmp_path):
         """Unknown transform_id fails validation"""
@@ -337,8 +337,9 @@ execution:
         )
 
         # First, ensure implementations exist by running generation
-        from packages.spec2code.engine import load_spec, generate_skeleton
-        spec = load_spec("specs/dataframe-pipeline-extended.yaml")
+        from packages.spec2code.engine import load_spec
+
+        load_spec("specs/dataframe-pipeline-extended.yaml")
 
         # Now test validation with implementations
         config = load_config(str(invalid_config))
@@ -357,7 +358,7 @@ execution:
             validate_config(config, spec)
 
         # Should fail because exclusive mode requires exactly 1 selection
-        assert "must select exactly 1 transform" in str(exc_info.value)
+        assert "requires exactly one selection" in str(exc_info.value)
         assert "got 2" in str(exc_info.value)
 
     def test_invalid_param_type_config_file(self):

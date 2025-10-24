@@ -1,0 +1,8 @@
+{
+  "threshold": 0,
+  "languages": ["python"],
+  "reporters": ["console"],
+  "ignore": ["**/tests/**", "**/.venv/**", "**/output/**", "**/__pycache__/**"],
+  "path": ["packages/spec2code"],
+  "minTokens": 50
+}

@@ -12,8 +12,14 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.18.2",
     "pandas>=2.3.3",
+    "pandas-stubs>=2.3.2.250926",
     "pytest>=8.4.2",
+    "types-jsonschema>=4.25.1.20251009",
+    "types-networkx>=3.5.0.20251001",
+    "types-pyyaml>=6.0.12.20250915",
+    "xenon>=0.9.3",
 ]
 
 [tool.pytest.ini_options]
@@ -24,3 +30,21 @@ python_functions = ["test_*"]
 addopts = "-v"
 # Exclude problematic directories
 norecursedirs = ["TransformFn", ".venv", ".git", "__pycache__", "apps", "output"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "ANN", "B", "S", "C90", "PLR"]
+ignore = ["S101", "B008", "ANN204", "B017", "ANN201"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["ALL"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 7
+max-branches = 12
+max-statements = 50
