@@ -25,9 +25,7 @@ def normalize_minmax(
     df = data.copy()
     min_val = df["value"].min()
     max_val = df["value"].max()
-    df["normalized"] = (
-        (df["value"] - min_val) / (max_val - min_val) if max_val > min_val else 0.0
-    )
+    df["normalized"] = (df["value"] - min_val) / (max_val - min_val) if max_val > min_val else 0.0
     return df
 
 

@@ -79,16 +79,12 @@ def _expected_basic_type(annotation: object) -> type | None:
     return basic_types.get(as_str, None)
 
 
-def _validate_unknown_parameters(
-    transform_id: str, signature: inspect.Signature, params: dict[str, Any]
-) -> list[str]:
+def _validate_unknown_parameters(transform_id: str, signature: inspect.Signature, params: dict[str, Any]) -> list[str]:
     """Ensure provided params exist in the callable signature."""
     errors = []
     for param_name in params:
         if param_name not in signature.parameters:
-            errors.append(
-                f"Transform '{transform_id}': unknown parameter '{param_name}'"
-            )
+            errors.append(f"Transform '{transform_id}': unknown parameter '{param_name}'")
     return errors
 
 
@@ -111,12 +107,7 @@ def _validate_parameter_type(
 
     if expected_type in (int, float) and isinstance(param_value, (int, float)):
         if param_name in POSITIVE_PARAM_NAMES and param_value <= 0:
-            return [
-                (
-                    f"Transform '{transform_id}': parameter '{param_name}' must be "
-                    f"positive, got {param_value}"
-                )
-            ]
+            return [(f"Transform '{transform_id}': parameter '{param_name}' must be " f"positive, got {param_value}")]
 
     return []
 
@@ -133,9 +124,7 @@ def _validate_required_parameters(
         if param_name == data_param:
             continue
         if param_spec.default == inspect.Parameter.empty and param_name not in params:
-            errors.append(
-                f"Transform '{transform_id}': missing required parameter '{param_name}'"
-            )
+            errors.append(f"Transform '{transform_id}': missing required parameter '{param_name}'")
     return errors
 
 
@@ -169,13 +158,9 @@ def _validate_transform_parameters(
         if param_name not in signature.parameters:
             continue
         param_spec = signature.parameters[param_name]
-        errors.extend(
-            _validate_parameter_type(transform_id, param_name, param_value, param_spec)
-        )
+        errors.extend(_validate_parameter_type(transform_id, param_name, param_value, param_spec))
 
-    errors.extend(
-        _validate_required_parameters(transform_id, signature, params, data_param)
-    )
+    errors.extend(_validate_required_parameters(transform_id, signature, params, data_param))
 
     return errors
 
@@ -189,30 +174,21 @@ def _validate_selection_counts(stage: DAGStage, num_selected: int) -> list[str]:
     if mode == "single":
         if num_selected > 0:
             message = (
-                f"Stage '{stage_id}' is single mode with {num_selected} selection(s)."
-                " Remove this stage from config."
+                f"Stage '{stage_id}' is single mode with {num_selected} selection(s)." " Remove this stage from config."
             )
             errors.append(message)
         return errors
 
     if mode == "exclusive":
         if num_selected != 1:
-            errors.append(
-                f"Stage '{stage_id}' requires exactly one selection, got {num_selected}"
-            )
+            errors.append(f"Stage '{stage_id}' requires exactly one selection, got {num_selected}")
         return errors
 
     if mode == "multiple":
         if num_selected < 1:
-            errors.append(
-                f"Stage '{stage_id}' requires at least one selection, "
-                f"got {num_selected}"
-            )
+            errors.append(f"Stage '{stage_id}' requires at least one selection, " f"got {num_selected}")
         if stage.max_select is not None and num_selected > stage.max_select:
-            errors.append(
-                f"Stage '{stage_id}' allows at most {stage.max_select} selections, "
-                f"got {num_selected}"
-            )
+            errors.append(f"Stage '{stage_id}' allows at most {stage.max_select} selections, " f"got {num_selected}")
         return errors
 
     errors.append(f"Stage '{stage_id}' has unsupported selection_mode '{mode}'")
@@ -233,8 +209,7 @@ def _build_plan_entry(
 
     if transform_id not in candidate_ids:
         errors.append(
-            f"Stage '{stage_id}': transform '{transform_id}' "
-            f"is not in candidates: {sorted(candidate_ids)}"
+            f"Stage '{stage_id}': transform '{transform_id}' " f"is not in candidates: {sorted(candidate_ids)}"
         )
         return errors, None
 
@@ -245,9 +220,7 @@ def _build_plan_entry(
 
     params = selection.params.copy()
     if check_implementations:
-        errors.extend(
-            _validate_transform_parameters(transform_id, transform_def, params)
-        )
+        errors.extend(_validate_transform_parameters(transform_id, transform_def, params))
 
     plan_entry = {
         "stage_id": stage_id,
@@ -304,8 +277,7 @@ def _auto_select_single_stages(
 
         if len(stage.candidates) != 1:
             errors.append(
-                f"Stage '{stage.stage_id}' is single mode but has "
-                f"{len(stage.candidates)} candidates (expected 1)"
+                f"Stage '{stage.stage_id}' is single mode but has " f"{len(stage.candidates)} candidates (expected 1)"
             )
             continue
 
@@ -316,9 +288,7 @@ def _auto_select_single_stages(
             continue
 
         if check_implementations:
-            errors.extend(
-                _validate_transform_parameters(transform_id, transform_def, {})
-            )
+            errors.extend(_validate_transform_parameters(transform_id, transform_def, {}))
 
         execution_entries.append(
             {
@@ -332,9 +302,7 @@ def _auto_select_single_stages(
     return errors, execution_entries
 
 
-def validate_config(
-    config: Config, extended_spec: ExtendedSpec, check_implementations: bool = True
-) -> dict[str, Any]:
+def validate_config(config: Config, extended_spec: ExtendedSpec, check_implementations: bool = True) -> dict[str, Any]:
     """Validate config against extended spec and build an execution plan.
 
     Args:
@@ -349,9 +317,7 @@ def validate_config(
     execution_plan: list[dict[str, Any]] = []
 
     stage_by_id = {stage.stage_id: stage for stage in extended_spec.dag_stages}
-    transform_by_id = {
-        transform["id"]: transform for transform in extended_spec.transforms
-    }
+    transform_by_id = {transform["id"]: transform for transform in extended_spec.transforms}
 
     for stage_exec in config.execution.stages:
         stage_errors, stage_entries = _process_stage_execution(
@@ -360,9 +326,7 @@ def validate_config(
         errors.extend(stage_errors)
         execution_plan.extend(stage_entries)
 
-    auto_errors, auto_entries = _auto_select_single_stages(
-        extended_spec, transform_by_id, check_implementations
-    )
+    auto_errors, auto_entries = _auto_select_single_stages(extended_spec, transform_by_id, check_implementations)
     errors.extend(auto_errors)
     execution_plan.extend(auto_entries)
 

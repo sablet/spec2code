@@ -71,9 +71,7 @@ class DAGStage(BaseModel):
     max_select: int | None = Field(default=None)  # None = unlimited
     input_type: str
     output_type: str
-    candidates: list[DAGCandidate] = Field(
-        default_factory=list
-    )  # Optional: auto-collected if empty
+    candidates: list[DAGCandidate] = Field(default_factory=list)  # Optional: auto-collected if empty
     default_transform_id: str | None = Field(
         default=None
     )  # For DAG edge generation (auto-set to candidates[0] if not specified)
@@ -148,9 +146,7 @@ def _auto_collect_candidates(spec: ExtendedSpec) -> None:
                 return_type = transform.get("return_datatype_ref")
 
                 if param_type == stage.input_type and return_type == stage.output_type:
-                    matched_transforms.append(
-                        DAGCandidate(transform_id=transform["id"])
-                    )
+                    matched_transforms.append(DAGCandidate(transform_id=transform["id"]))
 
             if matched_transforms:
                 stage.candidates = matched_transforms

@@ -9,9 +9,7 @@ def transform_a_to_b(
         pd.DataFrame,
         ExampleValue[{"rows": [{"id": 1, "value": 100}, {"id": 2, "value": 200}]}],
     ],
-) -> Annotated[
-    pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_b"]
-]:
+) -> Annotated[pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_b"]]:
     """Transform from A to B (add processed column)"""
     # TODO: implement transform logic
     return {}

@@ -49,10 +49,7 @@ def extended_to_simple_spec(extended_spec: ExtendedSpec) -> dict[str, Any]:
         prev_stage = stage
 
     # If last stage has single output, connect to null
-    if (
-        extended_spec.dag_stages
-        and extended_spec.dag_stages[-1].selection_mode == "single"
-    ):
+    if extended_spec.dag_stages and extended_spec.dag_stages[-1].selection_mode == "single":
         last_stage = extended_spec.dag_stages[-1]
         if last_stage.candidates:
             # Already handled in loop above

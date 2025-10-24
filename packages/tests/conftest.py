@@ -17,9 +17,7 @@ def clean_module_cache():
     """各テスト実行前にtest-pipelineモジュールをクリア"""
     yield
     # test-pipelineモジュールをクリア
-    modules_to_remove = [
-        key for key in sys.modules.keys() if key.startswith("test-pipeline")
-    ]
+    modules_to_remove = [key for key in sys.modules.keys() if key.startswith("test-pipeline")]
     for module in modules_to_remove:
         del sys.modules[module]
 

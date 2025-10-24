@@ -62,19 +62,13 @@ def test_type_alias_generation(temp_project_dir, sample_spec_yaml):
     spec = load_spec(spec_path)
     generate_skeleton(spec, project_root=temp_project_dir)
 
-    alias_file = (
-        temp_project_dir / "apps" / "test-pipeline" / "datatypes" / "type_aliases.py"
-    )
+    alias_file = temp_project_dir / "apps" / "test-pipeline" / "datatypes" / "type_aliases.py"
     assert alias_file.exists()
     content = alias_file.read_text()
     assert "FeatureFrame: TypeAlias = pd.DataFrame" in content
-    assert (
-        "AlignedFeatureTarget: TypeAlias = tuple[pd.DataFrame, pd.DataFrame]" in content
-    )
+    assert "AlignedFeatureTarget: TypeAlias = tuple[pd.DataFrame, pd.DataFrame]" in content
 
-    transform_file = (
-        temp_project_dir / "apps" / "test-pipeline" / "transforms" / "alias_module.py"
-    )
+    transform_file = temp_project_dir / "apps" / "test-pipeline" / "transforms" / "alias_module.py"
     transform_code = transform_file.read_text()
     assert "from ..datatypes.type_aliases import AlignedFeatureTarget" in transform_code
     assert "from ..datatypes.type_aliases import FeatureFrame" in transform_code
@@ -165,13 +159,8 @@ def test_literal_parameter_generation(temp_project_dir, sample_spec_yaml):
     spec = load_spec(spec_path)
     generate_skeleton(spec, project_root=temp_project_dir)
 
-    transform_file = (
-        temp_project_dir / "apps" / "test-pipeline" / "transforms" / "sim.py"
-    )
+    transform_file = temp_project_dir / "apps" / "test-pipeline" / "transforms" / "sim.py"
     transform_code = transform_file.read_text()
     assert "from typing import Literal" in transform_code
-    assert (
-        "allocation_method: Literal['equal', 'weighted', 'risk_parity'] = 'equal'"
-        in transform_code
-    )
+    assert "allocation_method: Literal['equal', 'weighted', 'risk_parity'] = 'equal'" in transform_code
     assert "-> bool" in transform_code

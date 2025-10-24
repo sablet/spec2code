@@ -8,9 +8,7 @@ from spec2code.engine import load_spec, generate_skeleton
 @pytest.fixture
 def dataframe_spec_path(tmp_path):
     """Copy dataframe-pipeline.yaml to temp directory"""
-    spec_file = (
-        Path(__file__).parent.parent.parent / "specs" / "dataframe-pipeline.yaml"
-    )
+    spec_file = Path(__file__).parent.parent.parent / "specs" / "dataframe-pipeline.yaml"
     return spec_file
 
 
@@ -61,9 +59,7 @@ def test_dataframe_pipeline_generates_correct_code(dataframe_spec_path, tmp_path
     generate_skeleton(spec, project_root=tmp_path)
 
     # Check generated transform file
-    transform_file = (
-        tmp_path / "apps" / "dataframe-pipeline" / "transforms" / "pipeline.py"
-    )
+    transform_file = tmp_path / "apps" / "dataframe-pipeline" / "transforms" / "pipeline.py"
     assert transform_file.exists()
 
     # Read generated code
@@ -97,9 +93,7 @@ def test_dataframe_pipeline_generates_correct_code(dataframe_spec_path, tmp_path
     assert "ExampleValue[" in param_section
     # Check that Check is NOT in the parameter annotation
     # (Check should only be in return type)
-    check_in_param = (
-        "Check[" in param_section and "->" not in param_section.split("Check[")[0]
-    )
+    check_in_param = "Check[" in param_section and "->" not in param_section.split("Check[")[0]
     assert not check_in_param, "Input parameter should not have Check annotation"
 
     # Verify return type - with Check only
@@ -119,9 +113,7 @@ def test_dataframe_pipeline_generates_check_files(dataframe_spec_path, tmp_path)
     generate_skeleton(spec, project_root=tmp_path)
 
     # Check generated check file
-    check_file = (
-        tmp_path / "apps" / "dataframe-pipeline" / "checks" / "dataframe_checks.py"
-    )
+    check_file = tmp_path / "apps" / "dataframe-pipeline" / "checks" / "dataframe_checks.py"
     assert check_file.exists()
 
     # Read generated code

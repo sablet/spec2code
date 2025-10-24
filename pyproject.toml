@@ -32,7 +32,7 @@ addopts = "-v"
 norecursedirs = ["TransformFn", ".venv", ".git", "__pycache__", "apps", "output"]
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "ANN", "B", "S", "C90", "PLR"]

@@ -17,9 +17,7 @@ def transform_step_a_to_step_b(
             }
         ],
     ],
-) -> Annotated[
-    pd.DataFrame, Check["apps.dataframe-pipeline.checks.dataframe_checks:check_step_b"]
-]:
+) -> Annotated[pd.DataFrame, Check["apps.dataframe-pipeline.checks.dataframe_checks:check_step_b"]]:
     """Transform from Step A to Step B (add normalized column)"""
     # TODO: implement transform logic
     return {}

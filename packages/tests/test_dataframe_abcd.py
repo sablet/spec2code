@@ -138,9 +138,7 @@ def test_dataframe_abcd_transform_functions(dataframe_abcd_spec_path, tmp_path):
     generate_skeleton(spec, project_root=tmp_path)
 
     # Check transform_a_to_b file
-    transform_a_file = (
-        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
-    )
+    transform_a_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
     assert transform_a_file.exists()
 
     code_a = transform_a_file.read_text()
@@ -158,9 +156,7 @@ def test_dataframe_abcd_transform_functions(dataframe_abcd_spec_path, tmp_path):
     assert "Check[" in code_a
 
     # Check transform_bc_to_d file
-    transform_bc_file = (
-        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
-    )
+    transform_bc_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
     assert transform_bc_file.exists()
 
     code_bc = transform_bc_file.read_text()
@@ -181,9 +177,7 @@ def test_dataframe_abcd_type_annotations(dataframe_abcd_spec_path, tmp_path):
     generate_skeleton(spec, project_root=tmp_path)
 
     # Check transform_a_to_b file
-    transform_a_file = (
-        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
-    )
+    transform_a_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
     code_a = transform_a_file.read_text()
 
     # Input parameters should have ExampleValue
@@ -194,9 +188,7 @@ def test_dataframe_abcd_type_annotations(dataframe_abcd_spec_path, tmp_path):
     assert "check_b" in code_a
 
     # Check transform_bc_to_d file
-    transform_bc_file = (
-        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
-    )
+    transform_bc_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
     code_bc = transform_bc_file.read_text()
 
     # Both input parameters should have ExampleValue
@@ -246,9 +238,7 @@ def test_dataframe_abcd_dag_execution_flow(dataframe_abcd_spec_path, tmp_path):
     generate_skeleton(spec, project_root=tmp_path)
 
     # Implement actual transform logic
-    transform_a_file = (
-        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
-    )
+    transform_a_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_a_to_b.py"
     transform_a_impl = '''# Auto-generated skeleton for Transform: transform_a_to_b
 from spec2code.engine import Check, ExampleValue
 from typing import Annotated
@@ -263,9 +253,7 @@ def transform_a_to_b(data_a: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'id
 '''
     transform_a_file.write_text(transform_a_impl)
 
-    transform_bc_file = (
-        tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
-    )
+    transform_bc_file = tmp_path / "apps" / "dataframe-abcd" / "transforms" / "transform_bc_to_d.py"
     transform_bc_impl = '''# Auto-generated skeleton for Transform: transform_bc_to_d
 from spec2code.engine import Check, ExampleValue
 from typing import Annotated

@@ -44,9 +44,7 @@ class TestConfigModel:
         config = load_config("configs/pipeline-config-minmax.yaml")
         assert config.version == "1"
         assert config.meta.config_name == "minmax-rolling"
-        assert (
-            len(config.execution.stages) == 3
-        )  # normalization + feature_engineering + output
+        assert len(config.execution.stages) == 3  # normalization + feature_engineering + output
 
     def test_load_extended_spec(self):
         """Extended spec loads successfully"""
@@ -444,15 +442,11 @@ class TestConfigExecution:
         validation = runner.validate()
         plan = validation["execution_plan"]
 
-        rolling_step = next(
-            (p for p in plan if p["transform_id"] == "add_rolling_mean"), None
-        )
+        rolling_step = next((p for p in plan if p["transform_id"] == "add_rolling_mean"), None)
         assert rolling_step is not None
         assert rolling_step["params"]["window"] == 3
 
-    def test_different_normalizations_produce_different_results(
-        self, sample_initial_data
-    ):
+    def test_different_normalizations_produce_different_results(self, sample_initial_data):
         """Different normalization methods produce different results"""
         runner_minmax = ConfigRunner("configs/pipeline-config-minmax.yaml")
         runner_zscore = ConfigRunner("configs/pipeline-config-zscore-multi.yaml")
@@ -479,9 +473,7 @@ class TestSelectionModes:
         result = validate_config(config, spec)
 
         # Output stage should be auto-selected
-        output_steps = [
-            p for p in result["execution_plan"] if p["stage_id"] == "output"
-        ]
+        output_steps = [p for p in result["execution_plan"] if p["stage_id"] == "output"]
         assert len(output_steps) == 1
         assert output_steps[0]["transform_id"] == "finalize_step_b"
 
@@ -493,9 +485,7 @@ class TestSelectionModes:
         result = validate_config(config, spec)
 
         # Normalization stage should have exactly 1 selection
-        norm_steps = [
-            p for p in result["execution_plan"] if p["stage_id"] == "normalization"
-        ]
+        norm_steps = [p for p in result["execution_plan"] if p["stage_id"] == "normalization"]
         assert len(norm_steps) == 1
         assert norm_steps[0]["transform_id"] == "normalize_minmax"
 
@@ -507,11 +497,7 @@ class TestSelectionModes:
         result = validate_config(config, spec)
 
         # Feature engineering stage should have 3 selections
-        feature_steps = [
-            p
-            for p in result["execution_plan"]
-            if p["stage_id"] == "feature_engineering"
-        ]
+        feature_steps = [p for p in result["execution_plan"] if p["stage_id"] == "feature_engineering"]
         assert len(feature_steps) == 3
 
         transform_ids = {step["transform_id"] for step in feature_steps}

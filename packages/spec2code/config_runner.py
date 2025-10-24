@@ -22,9 +22,7 @@ class ConfigRunner:
         self.spec_path = self.config.meta.base_spec
         self.extended_spec = load_extended_spec(self.spec_path)
 
-    def validate(
-        self: "ConfigRunner", check_implementations: bool = True
-    ) -> dict[str, Any]:
+    def validate(self: "ConfigRunner", check_implementations: bool = True) -> dict[str, Any]:
         """Validate config against spec
 
         Args:
@@ -91,9 +89,7 @@ class ConfigRunner:
 
         return self._post_process_result(stage_id, result, stage_results)
 
-    def _import_transform_callable(
-        self: "ConfigRunner", impl: str
-    ) -> tuple[Callable[..., Any], inspect.Signature]:
+    def _import_transform_callable(self: "ConfigRunner", impl: str) -> tuple[Callable[..., Any], inspect.Signature]:
         module_path, func_name = impl.rsplit(":", 1)
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)

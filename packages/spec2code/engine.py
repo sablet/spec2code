@@ -5,17 +5,21 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import importlib
 import inspect
 import json
 import sys
 from pathlib import Path
 from typing import Any, Callable, Generic, Iterable, Literal, TypeVar
+from types import ModuleType
 
 import jsonschema
 import networkx as nx
 import yaml
+from enum import Enum
 from pydantic import BaseModel, Field, model_validator
+from pydantic.fields import FieldInfo
 
 
 # ==================== 型アノテーション用マーカー ====================
@@ -23,6 +27,8 @@ from pydantic import BaseModel, Field, model_validator
 T = TypeVar("T")
 AnnotationSource = TypeVar("AnnotationSource")
 TypeContext = Literal["transform", "type_alias", "pydantic_model", "default"]
+
+APP_MODULE_MIN_PARTS = 2
 
 
 class Check(Generic[T]):
@@ -149,9 +155,7 @@ class DataType(BaseModel):
     description: str
     check_ids: list[str] = Field(default_factory=list)
     example_ids: list[str] = Field(default_factory=list)
-    schema_def: dict[str, Any] | None = Field(
-        default=None, alias="schema"
-    )  # JSON Schema
+    schema_def: dict[str, Any] | None = Field(default=None, alias="schema")  # JSON Schema
     type_alias: TypeAliasConfig | None = None
     enum: EnumConfig | None = None
     generic: GenericConfig | None = None
@@ -176,10 +180,7 @@ class DataType(BaseModel):
             )
             raise ValueError(message)
         if len(defined) > 1:
-            message = (
-                f"DataType '{self.id}' must define exactly one type, got multiple: "
-                f"{defined}"
-            )
+            message = f"DataType '{self.id}' must define exactly one type, got multiple: " f"{defined}"
             raise ValueError(message)
         return self
 
@@ -376,6 +377,33 @@ def _normalize_module_name(name: str) -> str:
     return name.replace("-", "_")
 
 
+def _infer_app_package(spec: "Spec") -> str:
+    """Infer the app package name from implementation paths."""
+
+    def _candidate_from_impl(impl: str | None) -> str | None:
+        module_path, _, _ = (impl or "").partition(":")
+        if not module_path.startswith("apps."):
+            return None
+        parts = module_path.split(".")
+        return parts[1] if len(parts) >= APP_MODULE_MIN_PARTS else None
+
+    def _collect_candidates(impls: Iterable[str | None]) -> set[str]:
+        return {candidate for candidate in (_candidate_from_impl(impl) for impl in impls) if candidate}
+
+    candidates = _collect_candidates(transform.impl for transform in spec.transforms)
+    if not candidates:
+        candidates = _collect_candidates(check.impl for check in spec.checks)
+
+    if not candidates:
+        return spec.meta.name
+
+    if len(candidates) > 1:
+        sorted_candidates = ", ".join(sorted(candidates))
+        raise ValueError(f"Spec references multiple app packages: {sorted_candidates}")
+
+    return next(iter(candidates))
+
+
 def _resolve_datatype_reference(
     spec: "Spec", datatype_ref: str, context: TypeContext = "default"
 ) -> tuple[str, set[str]]:
@@ -404,9 +432,7 @@ def _resolve_datatype_reference(
     return resolved_type, imports
 
 
-def _import_line_for_datatype(
-    datatype: DataType, suffix: str, context: TypeContext, normalized_app: str
-) -> str | None:
+def _import_line_for_datatype(datatype: DataType, suffix: str, context: TypeContext, normalized_app: str) -> str | None:
     """Return import line for a datatype based on context."""
     if context == "transform":
         return f"from ..datatypes.{suffix} import {datatype.id}"
@@ -420,9 +446,7 @@ def _import_line_for_datatype(
     return f"from apps.{normalized_app}.datatypes.{suffix} import {datatype.id}"
 
 
-def _imports_for_datatype(
-    datatype: DataType, context: TypeContext, normalized_app: str
-) -> set[str]:
+def _imports_for_datatype(datatype: DataType, context: TypeContext, normalized_app: str) -> set[str]:
     """Determine required imports for enum/pydantic/type alias datatypes."""
     suffix_priority = [
         ("enum", "enums"),
@@ -436,30 +460,22 @@ def _imports_for_datatype(
     return set()
 
 
-def _build_generic_type(
-    spec: "Spec", config: GenericConfig, context: TypeContext
-) -> tuple[str, set[str]]:
+def _build_generic_type(spec: "Spec", config: GenericConfig, context: TypeContext) -> tuple[str, set[str]]:
     """Build a generic type string (list, dict, set, tuple)."""
 
     def _list_type() -> tuple[str, set[str]]:
-        element_type, element_imports = _build_type_string(
-            spec, config.element_type or {}, Path("."), context=context
-        )
+        element_type, element_imports = _build_type_string(spec, config.element_type or {}, Path("."), context=context)
         return f"list[{element_type}]", element_imports
 
     def _set_type() -> tuple[str, set[str]]:
-        element_type, element_imports = _build_type_string(
-            spec, config.element_type or {}, Path("."), context=context
-        )
+        element_type, element_imports = _build_type_string(spec, config.element_type or {}, Path("."), context=context)
         return f"set[{element_type}]", element_imports
 
     def _tuple_type() -> tuple[str, set[str]]:
         parts: list[str] = []
         imports: set[str] = set()
         for element in config.elements:
-            part, part_imports = _build_type_string(
-                spec, element, Path("."), context=context
-            )
+            part, part_imports = _build_type_string(spec, element, Path("."), context=context)
             parts.append(part)
             imports.update(part_imports)
         joined = ", ".join(parts) if parts else "Any"
@@ -468,12 +484,8 @@ def _build_generic_type(
     def _dict_type() -> tuple[str, set[str]]:
         key_type_config = config.key_type or {"native": "builtins:str"}
         value_type_config = config.value_type or {"native": "typing:Any"}
-        key_type, key_imports = _build_type_string(
-            spec, key_type_config, Path("."), context=context
-        )
-        value_type, value_imports = _build_type_string(
-            spec, value_type_config, Path("."), context=context
-        )
+        key_type, key_imports = _build_type_string(spec, key_type_config, Path("."), context=context)
+        value_type, value_imports = _build_type_string(spec, value_type_config, Path("."), context=context)
         imports = set(key_imports)
         imports.update(value_imports)
         return f"dict[{key_type}, {value_type}]", imports
@@ -504,9 +516,7 @@ def _type_string_from_union(
     parts: list[str] = []
     imports: set[str] = set()
     for union_item in union_items:
-        part_str, part_imports = _build_type_string(
-            spec, union_item, app_root or Path("."), context=context
-        )
+        part_str, part_imports = _build_type_string(spec, union_item, app_root or Path("."), context=context)
         parts.append(part_str)
         imports.update(part_imports)
     joined = " | ".join(parts) if parts else "dict"
@@ -517,9 +527,7 @@ def _type_string_from_native(native: str) -> tuple[str, set[str]]:
     return _resolve_native_type(native)
 
 
-def _type_string_from_ref(
-    spec: "Spec", ref: str, context: TypeContext
-) -> tuple[str, set[str]]:
+def _type_string_from_ref(spec: "Spec", ref: str, context: TypeContext) -> tuple[str, set[str]]:
     return _resolve_datatype_reference(spec, ref, context)
 
 
@@ -646,9 +654,7 @@ def _find_check(spec: Spec, check_id: str) -> CheckDef | None:
     return next((check for check in spec.checks if check.id == check_id), None)
 
 
-def _collect_example_annotations(
-    spec: Spec, datatype_ref: str | None
-) -> tuple[list[str], set[str]]:
+def _collect_example_annotations(spec: Spec, datatype_ref: str | None) -> tuple[list[str], set[str]]:
     return _collect_datatype_annotations(
         spec,
         datatype_ref,
@@ -659,9 +665,7 @@ def _collect_example_annotations(
     )
 
 
-def _collect_check_annotations(
-    spec: Spec, datatype_ref: str | None
-) -> tuple[list[str], set[str]]:
+def _collect_check_annotations(spec: Spec, datatype_ref: str | None) -> tuple[list[str], set[str]]:
     return _collect_datatype_annotations(
         spec,
         datatype_ref,
@@ -672,17 +676,11 @@ def _collect_check_annotations(
     )
 
 
-def _build_type_annotation(
-    spec: Spec, param: Parameter, app_root: Path
-) -> tuple[str, set[str]]:
+def _build_type_annotation(spec: Spec, param: Parameter, app_root: Path) -> tuple[str, set[str]]:
     """パラメータの型アノテーションを構築（Inputパラメータ用：Exampleのみ適用）"""
     type_config = _parameter_type_config(param)
-    base_type, imports = _build_type_string(
-        spec, type_config, app_root, context="transform"
-    )
-    annotations, annotation_imports = _collect_example_annotations(
-        spec, param.datatype_ref
-    )
+    base_type, imports = _build_type_string(spec, type_config, app_root, context="transform")
+    annotations, annotation_imports = _collect_example_annotations(spec, param.datatype_ref)
     imports.update(annotation_imports)
 
     if annotations:
@@ -693,17 +691,11 @@ def _build_type_annotation(
     return base_type, imports
 
 
-def _build_return_annotation(
-    spec: Spec, transform: Transform, app_root: Path
-) -> tuple[str, set[str]]:
+def _build_return_annotation(spec: Spec, transform: Transform, app_root: Path) -> tuple[str, set[str]]:
     """戻り値の型アノテーションを構築（Outputパラメータ用：Checkのみ適用）"""
     type_config = _return_type_config(transform)
-    base_type, imports = _build_type_string(
-        spec, type_config, app_root, context="transform"
-    )
-    annotations, annotation_imports = _collect_check_annotations(
-        spec, transform.return_datatype_ref
-    )
+    base_type, imports = _build_type_string(spec, type_config, app_root, context="transform")
+    annotations, annotation_imports = _collect_check_annotations(spec, transform.return_datatype_ref)
     imports.update(annotation_imports)
 
     if annotations:
@@ -738,10 +730,7 @@ def _generate_check_skeletons(spec: Spec, app_root: Path) -> None:
 '''
             )
 
-        code = (
-            "# Auto-generated skeleton for Check functions\n"
-            f"{chr(10).join(functions)}\n"
-        )
+        code = "# Auto-generated skeleton for Check functions\n" f"{chr(10).join(functions)}\n"
         file_path.write_text(code)
         print(f"  ✅ Generated: {file_path}")
 
@@ -762,9 +751,7 @@ def _render_imports(imports: set[str]) -> str:
 
     rendered_lines: list[str] = []
     if spec2code_imports:
-        rendered_lines.append(
-            "from spec2code.engine import " f"{', '.join(sorted(spec2code_imports))}"
-        )
+        rendered_lines.append("from spec2code.engine import " f"{', '.join(sorted(spec2code_imports))}")
     rendered_lines.extend(sorted(other_imports))
     return "\n".join(rendered_lines)
 
@@ -774,9 +761,7 @@ def _render_sorted_imports(imports: set[str]) -> str:
     return "\n".join(sorted(imports)) if imports else ""
 
 
-def _type_alias_target_string(
-    spec: Spec, datatype: DataType, app_root: Path
-) -> tuple[str, set[str]]:
+def _type_alias_target_string(spec: Spec, datatype: DataType, app_root: Path) -> tuple[str, set[str]]:
     """Build the target type string for a TypeAlias datatype."""
     config = datatype.type_alias
     if not config:
@@ -796,9 +781,7 @@ def _type_alias_target_string(
         parts: list[str] = []
         imports: set[str] = set()
         for element in config.elements:
-            part, part_imports = _build_type_string(
-                spec, element, app_root, context="type_alias"
-            )
+            part, part_imports = _build_type_string(spec, element, app_root, context="type_alias")
             parts.append(part)
             imports.update(part_imports)
         if not parts:
@@ -809,12 +792,8 @@ def _type_alias_target_string(
     def _dict_target() -> tuple[str, set[str]]:
         key_type_config = config.key_type or {"native": "builtins:str"}
         value_type_config = config.value_type or {"native": "typing:Any"}
-        key_type, key_imports = _build_type_string(
-            spec, key_type_config, app_root, context="type_alias"
-        )
-        value_type, value_imports = _build_type_string(
-            spec, value_type_config, app_root, context="type_alias"
-        )
+        key_type, key_imports = _build_type_string(spec, key_type_config, app_root, context="type_alias")
+        value_type, value_imports = _build_type_string(spec, value_type_config, app_root, context="type_alias")
         imports = set(key_imports)
         imports.update(value_imports)
         return f"dict[{key_type}, {value_type}]", imports
@@ -830,9 +809,7 @@ def _type_alias_target_string(
     return builder()
 
 
-def _generate_type_aliases(
-    spec: Spec, datatypes: list[DataType], app_root: Path
-) -> None:
+def _generate_type_aliases(spec: Spec, datatypes: list[DataType], app_root: Path) -> None:
     """Generate type alias definitions file."""
     file_path = app_root / "datatypes" / "type_aliases.py"
     if file_path.exists():
@@ -846,9 +823,7 @@ def _generate_type_aliases(
     for datatype in datatypes:
         alias_type, alias_imports = _type_alias_target_string(spec, datatype, app_root)
         imports.update(alias_imports)
-        description_comment = (
-            f"# {datatype.description}" if datatype.description else ""
-        )
+        description_comment = f"# {datatype.description}" if datatype.description else ""
         block_lines = []
         if description_comment:
             block_lines.append(description_comment)
@@ -902,9 +877,7 @@ def _generate_enum_file(spec: Spec, datatypes: list[DataType], app_root: Path) -
     print(f"  ✅ Generated: {file_path}")
 
 
-def _generate_pydantic_models(
-    spec: Spec, datatypes: list[DataType], app_root: Path
-) -> None:
+def _generate_pydantic_models(spec: Spec, datatypes: list[DataType], app_root: Path) -> None:
     """Generate Pydantic model definitions file."""
     file_path = app_root / "datatypes" / "models.py"
     if file_path.exists():
@@ -916,9 +889,7 @@ def _generate_pydantic_models(
     body_lines: list[str] = []
 
     for datatype in datatypes:
-        class_lines, model_imports = _collect_pydantic_model_lines(
-            spec, datatype, app_root
-        )
+        class_lines, model_imports = _collect_pydantic_model_lines(spec, datatype, app_root)
         if not class_lines:
             continue
         imports.update(model_imports)
@@ -944,9 +915,7 @@ def _generate_pydantic_models(
     print(f"  ✅ Generated: {file_path}")
 
 
-def _collect_pydantic_model_lines(
-    spec: Spec, datatype: DataType, app_root: Path
-) -> tuple[list[str], set[str]]:
+def _collect_pydantic_model_lines(spec: Spec, datatype: DataType, app_root: Path) -> tuple[list[str], set[str]]:
     """Build class definition lines for a Pydantic model datatype."""
     model_config = datatype.pydantic_model
     if not model_config:
@@ -965,9 +934,7 @@ def _collect_pydantic_model_lines(
         return lines, imports
 
     for field in fields:
-        type_str, type_imports = _build_type_string(
-            spec, field.type, app_root, context="pydantic_model"
-        )
+        type_str, type_imports = _build_type_string(spec, field.type, app_root, context="pydantic_model")
         imports.update(type_imports)
         field_line = f"    {field.name}: {type_str}"
         has_default = "default" in field.model_fields_set
@@ -1044,7 +1011,8 @@ def _ensure_package_inits(app_root: Path) -> None:
 def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
     """未実装ファイルを自動生成"""
     print("🔨 Generating skeleton code...")
-    app_root = project_root / "apps" / spec.meta.name
+    app_package = _infer_app_package(spec)
+    app_root = project_root / "apps" / app_package
     print(f"  📁 Target directory: {app_root}")
     enum_datatypes = [dt for dt in spec.datatypes if dt.enum]
     if enum_datatypes:
@@ -1068,6 +1036,7 @@ class Engine:
 
     def __init__(self: "Engine", spec: Spec):
         self.spec = spec
+        self.app_package = _infer_app_package(spec)
         self.graph = self._build_dag()
 
     def _build_dag(self: "Engine") -> nx.DiGraph:
@@ -1105,9 +1074,7 @@ class Engine:
             except jsonschema.SchemaError as e:
                 print(f"  ❌ {datatype.id}: schema invalid - {e}")
 
-    def validate_integrity(
-        self: "Engine", project_root: Path = Path(".")
-    ) -> dict[str, list[str]]:
+    def validate_integrity(self: "Engine", project_root: Path = Path(".")) -> dict[str, list[str]]:
         """仕様と実装の整合性を検証
 
         Returns:
@@ -1120,23 +1087,271 @@ class Engine:
             "transform_functions": [],
             "transform_signatures": [],
             "example_schemas": [],
+            "datatype_definitions": [],
         }
 
         packages_dir = str((project_root / "packages").resolve())
         if packages_dir not in sys.path:
             sys.path.insert(0, packages_dir)
 
-        app_root = project_root / "apps" / self.spec.meta.name
+        app_root = project_root / "apps" / self.app_package
 
+        self._validate_datatypes(app_root, errors)
         self._validate_checks(app_root, errors)
         self._validate_transforms(app_root, errors)
         self._validate_examples(errors)
         self._summarize_integrity(errors)
         return errors
 
-    def _validate_checks(
-        self: "Engine", app_root: Path, errors: dict[str, list[str]]
+    def _validate_datatypes(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
+        """Validate generated datatype definitions against spec."""
+        module_cache: dict[str, ModuleType | None] = {}
+        for datatype in self.spec.datatypes:
+            if datatype.enum:
+                self._validate_enum_datatype(datatype, module_cache, errors)
+            elif datatype.pydantic_model:
+                self._validate_pydantic_model_datatype(datatype, app_root, module_cache, errors)
+            elif datatype.type_alias:
+                self._validate_type_alias_datatype(datatype, module_cache, errors)
+
+    def _record_datatype_error(self: "Engine", errors: dict[str, list[str]], message: str) -> None:
+        errors["datatype_definitions"].append(message)
+        print(f"  ❌ {message}")
+
+    def _get_datatype_module(
+        self: "Engine",
+        suffix: str,
+        module_cache: dict[str, ModuleType | None],
+        errors: dict[str, list[str]],
+    ) -> ModuleType | None:
+        if suffix in module_cache:
+            return module_cache[suffix]
+        module_path = f"apps.{self.app_package}.datatypes.{suffix}"
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError as exc:
+            self._record_datatype_error(errors, f"Failed to import datatype module '{module_path}': {exc}")
+            module = None
+        module_cache[suffix] = module
+        return module
+
+    @staticmethod
+    def _import_native_type(native: str) -> object | None:
+        module_name, type_name = native.split(":")
+        if module_name == "builtins":
+            return getattr(builtins, type_name, None)
+        if module_name == "typing":
+            return getattr(importlib.import_module("typing"), type_name, None)
+        if module_name == "pandas":
+            import pandas as pd
+
+            return getattr(pd, type_name, None)
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            return None
+        return getattr(module, type_name, None)
+
+    @staticmethod
+    def _normalize_annotation(value: object) -> str:
+        text = value if isinstance(value, str) else str(value)
+        return text.replace("typing.", "").replace("builtins.", "")
+
+    def _validate_enum_datatype(
+        self: "Engine",
+        datatype: DataType,
+        module_cache: dict[str, ModuleType | None],
+        errors: dict[str, list[str]],
     ) -> None:
+        module = self._get_datatype_module("enums", module_cache, errors)
+        if not module:
+            return
+        enum_cls = getattr(module, datatype.id, None)
+        if enum_cls is None:
+            self._record_datatype_error(errors, f"DataType '{datatype.id}' enum class not found in enums module")
+            return
+        if not inspect.isclass(enum_cls) or not issubclass(enum_cls, Enum):
+            self._record_datatype_error(
+                errors,
+                f"DataType '{datatype.id}' expected Enum subclass, got {type(enum_cls).__name__}",
+            )
+            return
+        expected_members = [(member.name, member.value) for member in datatype.enum.members]  # type: ignore[union-attr]
+        actual_members = [(member.name, member.value) for member in enum_cls]
+        if actual_members != expected_members:
+            self._record_datatype_error(
+                errors,
+                (
+                    f"DataType '{datatype.id}' enum members mismatch:\n"
+                    f"    Expected: {expected_members}\n"
+                    f"    Actual:   {actual_members}"
+                ),
+            )
+            return
+        print(f"  ✅ DataType {datatype.id}: enum matches spec")
+
+    def _validate_pydantic_model_datatype(
+        self: "Engine",
+        datatype: DataType,
+        app_root: Path,
+        module_cache: dict[str, ModuleType | None],
+        errors: dict[str, list[str]],
+    ) -> None:
+        error_count_before = len(errors["datatype_definitions"])
+        module = self._get_datatype_module("models", module_cache, errors)
+        if not module:
+            return
+        model_cls = getattr(module, datatype.id, None)
+        if model_cls is None:
+            self._record_datatype_error(errors, f"DataType '{datatype.id}' model class not found in models module")
+            return
+        if not inspect.isclass(model_cls) or not issubclass(model_cls, BaseModel):
+            self._record_datatype_error(
+                errors,
+                f"DataType '{datatype.id}' expected BaseModel subclass, got {type(model_cls).__name__}",
+            )
+            return
+
+        expected_fields = {field.name: field for field in datatype.pydantic_model.fields}  # type: ignore[union-attr]
+        actual_fields: dict[str, FieldInfo] = getattr(model_cls, "model_fields", {})
+        self._check_field_membership(datatype, expected_fields, actual_fields, errors)
+
+        annotations: dict[str, object] = getattr(model_cls, "__annotations__", {})
+        for field_name, field_config in expected_fields.items():
+            field_info = actual_fields.get(field_name)
+            if field_info is None:
+                continue
+            self._validate_pydantic_field(
+                datatype,
+                field_name,
+                field_config,
+                field_info,
+                annotations.get(field_name),
+                app_root,
+                errors,
+            )
+
+        if len(errors["datatype_definitions"]) == error_count_before:
+            print(f"  ✅ DataType {datatype.id}: model matches spec")
+
+    def _check_field_membership(
+        self: "Engine",
+        datatype: DataType,
+        expected_fields: dict[str, PydanticFieldConfig],
+        actual_fields: dict[str, FieldInfo],
+        errors: dict[str, list[str]],
+    ) -> None:
+        missing = sorted(set(expected_fields) - set(actual_fields))
+        if missing:
+            self._record_datatype_error(errors, f"DataType '{datatype.id}' missing fields: {missing}")
+        extra = sorted(set(actual_fields) - set(expected_fields))
+        if extra:
+            self._record_datatype_error(errors, f"DataType '{datatype.id}' has extra fields not in spec: {extra}")
+
+    def _validate_pydantic_field(
+        self: "Engine",
+        datatype: DataType,
+        field_name: str,
+        field_config: PydanticFieldConfig,
+        field_info: FieldInfo,
+        annotation: object | None,
+        app_root: Path,
+        errors: dict[str, list[str]],
+    ) -> None:
+        expected_type, _ = _build_type_string(self.spec, field_config.type, app_root, context="pydantic_model")
+        if annotation is None:
+            self._record_datatype_error(
+                errors,
+                f"DataType '{datatype.id}' field '{field_name}' missing type annotation",
+            )
+        elif self._normalize_annotation(annotation) != self._normalize_annotation(expected_type):
+            self._record_datatype_error(
+                errors,
+                (
+                    f"DataType '{datatype.id}' field '{field_name}' type mismatch:\n"
+                    f"    Expected: {expected_type}\n"
+                    f"    Actual:   {annotation}"
+                ),
+            )
+
+        self._validate_pydantic_field_default(datatype, field_name, field_config, field_info, errors)
+
+    def _validate_pydantic_field_default(
+        self: "Engine",
+        datatype: DataType,
+        field_name: str,
+        field_config: PydanticFieldConfig,
+        field_info: FieldInfo,
+        errors: dict[str, list[str]],
+    ) -> None:
+        has_default = "default" in field_config.model_fields_set
+        is_optional = field_config.optional or not field_config.required
+        if has_default:
+            if field_info.is_required():
+                self._record_datatype_error(
+                    errors,
+                    (
+                        f"DataType '{datatype.id}' field '{field_name}' expected default "
+                        f"{field_config.default}, but is required"
+                    ),
+                )
+            elif field_info.default != field_config.default:
+                self._record_datatype_error(
+                    errors,
+                    (
+                        f"DataType '{datatype.id}' field '{field_name}' default mismatch:\n"
+                        f"    Expected: {field_config.default}\n"
+                        f"    Actual:   {field_info.default}"
+                    ),
+                )
+        elif is_optional:
+            if field_info.is_required():
+                self._record_datatype_error(
+                    errors,
+                    f"DataType '{datatype.id}' field '{field_name}' expected to be optional",
+                )
+            elif field_info.default is not None:
+                self._record_datatype_error(
+                    errors,
+                    (
+                        f"DataType '{datatype.id}' field '{field_name}' expected default None, "
+                        f"got {field_info.default}"
+                    ),
+                )
+        elif not field_info.is_required():
+            self._record_datatype_error(
+                errors,
+                f"DataType '{datatype.id}' field '{field_name}' should be required",
+            )
+
+    def _validate_type_alias_datatype(
+        self: "Engine",
+        datatype: DataType,
+        module_cache: dict[str, ModuleType | None],
+        errors: dict[str, list[str]],
+    ) -> None:
+        module = self._get_datatype_module("type_aliases", module_cache, errors)
+        if not module:
+            return
+        alias_value = getattr(module, datatype.id, None)
+        if alias_value is None:
+            self._record_datatype_error(
+                errors,
+                f"DataType '{datatype.id}' type alias not found in type_aliases module",
+            )
+            return
+        alias_config = datatype.type_alias
+        if alias_config and alias_config.type == "simple" and alias_config.target:
+            expected = self._import_native_type(alias_config.target)
+            if expected is not None and alias_value is not expected:
+                self._record_datatype_error(
+                    errors,
+                    f"DataType '{datatype.id}' alias expected {alias_config.target}, got {alias_value}",
+                )
+                return
+        print(f"  ✅ DataType {datatype.id}: type alias exists")
+
+    def _validate_checks(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
         """Validate existence and location of check implementations."""
         for check in self.spec.checks:
             module_path, func_name = check.impl.split(":")
@@ -1160,9 +1375,7 @@ class Engine:
                 errors["check_functions"].append(message)
                 print(f"  ❌ {message}")
 
-    def _validate_transforms(
-        self: "Engine", app_root: Path, errors: dict[str, list[str]]
-    ) -> None:
+    def _validate_transforms(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
         """Validate transform implementations and signatures."""
         for transform in self.spec.transforms:
             module_path, func_name = transform.impl.split(":")
@@ -1205,10 +1418,7 @@ class Engine:
                 if example.id not in datatype.example_ids:
                     continue
                 if not datatype.schema_def:
-                    message = (
-                        f"  ⏭️  Example {example.id}: "
-                        f"no schema to validate for {datatype.id}"
-                    )
+                    message = f"  ⏭️  Example {example.id}: " f"no schema to validate for {datatype.id}"
                     print(message)
                     continue
                 try:
@@ -1274,9 +1484,7 @@ class Engine:
 
         for transform_id in execution_order:
             # Transform定義を取得
-            transform = next(
-                (t for t in self.spec.transforms if t.id == transform_id), None
-            )
+            transform = next((t for t in self.spec.transforms if t.id == transform_id), None)
             if not transform:
                 print(f"  ❌ {transform_id}: not found in spec")
                 continue
@@ -1314,9 +1522,7 @@ def _create_parser() -> argparse.ArgumentParser:
     validate_parser = subparsers.add_parser("validate", help="仕様と実装の整合性を検証")
     validate_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
 
-    run_config_parser = subparsers.add_parser(
-        "run-config", help="Config-based DAG execution"
-    )
+    run_config_parser = subparsers.add_parser("run-config", help="Config-based DAG execution")
     run_config_parser.add_argument("config_file", help="Config file (YAML)")
 
     return parser

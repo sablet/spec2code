@@ -20,9 +20,7 @@ def transform_bc_to_d(
         pd.DataFrame,
         ExampleValue[{"rows": [{"id": 1, "factor": 1.5}, {"id": 2, "factor": 2.0}]}],
     ],
-) -> Annotated[
-    pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_d"]
-]:
+) -> Annotated[pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_d"]]:
     """Transform from B and C to D (combine and calculate result)"""
     # TODO: implement transform logic
     return {}
