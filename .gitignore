@@ -1,4 +1,4 @@
-spec2code-front/public/cards/
+frontend/public/cards/
 
 .cache
 Transformfn
@@ -64,12 +64,12 @@ output/
 .env
 .env.local
 
-# Frontend (Next.js) - handled by spec2code-front/.gitignore
+# Frontend (Next.js) - handled by frontend/.gitignore
 # Listed here for clarity in monorepo structure
-spec2code-front/node_modules/
-spec2code-front/.next/
-spec2code-front/out/
-spec2code-front/build/
-spec2code-front/.vercel/
-spec2code-front/*.tsbuildinfo
-spec2code-front/next-env.d.ts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts

@@ -197,6 +197,8 @@ export function CardLibrary() {
   const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [detailPanelTab, setDetailPanelTab] = useState<"details" | "ungrouped">("details")
+  const [referencedKeys, setReferencedKeys] = useState<Set<string>>(new Set())
+  const [unlinkedKeys, setUnlinkedKeys] = useState<Set<string>>(new Set())
   const cardLookup = useMemo(() => {
     const map = new Map<string, CardDefinition>()
     cardDefinitions.forEach((card) => map.set(`${card.source_spec}::${card.id}`, card))
@@ -212,6 +214,12 @@ export function CardLibrary() {
         setCardDefinitions(cards)
         setSpecsMetadata(data.specs || [])
         setDagStageGroups(data.dag_stage_groups || [])
+        if (Array.isArray(data.referenced_card_keys)) {
+          setReferencedKeys(new Set<string>(data.referenced_card_keys))
+        }
+        if (Array.isArray(data.unlinked_card_keys)) {
+          setUnlinkedKeys(new Set<string>(data.unlinked_card_keys))
+        }
         if (cards.length > 0) {
           setSelectedCard(cards[0])
         }
@@ -243,6 +251,16 @@ export function CardLibrary() {
         }
         setSpecsMetadata(jsonData.specs || [])
         setDagStageGroups(jsonData.dag_stage_groups || [])
+        if (Array.isArray(jsonData.referenced_card_keys)) {
+          setReferencedKeys(new Set<string>(jsonData.referenced_card_keys))
+        } else {
+          setReferencedKeys(new Set())
+        }
+        if (Array.isArray(jsonData.unlinked_card_keys)) {
+          setUnlinkedKeys(new Set<string>(jsonData.unlinked_card_keys))
+        } else {
+          setUnlinkedKeys(new Set())
+        }
       } catch (err) {
         console.error("Failed to parse JSON:", err)
       }
@@ -299,35 +317,16 @@ export function CardLibrary() {
     return matchesSpec && matchesSearch
   })
 
-  const referencedDagCardKeys = useMemo(() => {
-    const keys = new Set<string>()
-    const addKey = (card: RelatedCardSummary | null) => {
+  // Referenced/unlinked keys are provided by backend in all-cards.json
+
+  const ungroupedCards = useMemo(() => {
+    // Use backend-provided unlinked keys only (no fallback)
+    if (unlinkedKeys.size === 0) return []
+    return cardDefinitions.filter((card) => {
       const key = getCardKey(card)
-      if (key) keys.add(key)
-    }
-
-    dagStageGroups.forEach((group) => {
-      addKey(group.related_cards.stage_card)
-      addKey(group.related_cards.input_dtype_card)
-      addKey(group.related_cards.output_dtype_card)
-      group.related_cards.transform_cards.forEach(addKey)
-      group.related_cards.input_example_cards.forEach(addKey)
-      group.related_cards.output_example_cards.forEach(addKey)
-      group.related_cards.input_check_cards.forEach(addKey)
-      group.related_cards.output_check_cards.forEach(addKey)
+      return key ? unlinkedKeys.has(key) : true
     })
-
-    return keys
-  }, [dagStageGroups])
-
-  const ungroupedCards = useMemo(
-    () =>
-      cardDefinitions.filter((card) => {
-        const key = getCardKey(card)
-        return !key || !referencedDagCardKeys.has(key)
-      }),
-    [cardDefinitions, referencedDagCardKeys],
-  )
+  }, [cardDefinitions, unlinkedKeys])
 
   const filteredUngroupedCards = ungroupedCards.filter((card) => {
     const matchesSearch =

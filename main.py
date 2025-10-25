@@ -179,6 +179,8 @@ class Spec2CodeCLI:
         all_cards = []
         all_specs_metadata = []
         all_dag_stage_groups = []
+        all_referenced_keys = set()
+        all_unlinked_keys = set()
 
         for spec_path_str in specs:
             spec_path = Path(spec_path_str)
@@ -206,6 +208,11 @@ class Spec2CodeCLI:
                     }
                 )
                 all_dag_stage_groups.extend(dag_groups)
+                # Accumulate referenced/unlinked keys across specs
+                for k in cards_data.get("referenced_card_keys", []):
+                    all_referenced_keys.add(k)
+                for k in cards_data.get("unlinked_card_keys", []):
+                    all_unlinked_keys.add(k)
 
             except Exception as e:
                 print(f"  ✗ Error: {e}")
@@ -217,7 +224,9 @@ class Spec2CodeCLI:
         unified_data = {
             "specs": all_specs_metadata,
             "cards": all_cards,
-            "dag_stage_groups": all_dag_stage_groups
+            "dag_stage_groups": all_dag_stage_groups,
+            "referenced_card_keys": sorted(all_referenced_keys),
+            "unlinked_card_keys": sorted(all_unlinked_keys),
         }
 
         with open(unified_output, "w", encoding="utf-8") as f:

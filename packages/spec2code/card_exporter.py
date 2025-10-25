@@ -385,6 +385,44 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
     # Build dag_stage_groups
     dag_stage_groups = build_dag_stage_groups(spec_path, raw_data, cards)
 
+    # Detect referenced/unlinked cards (backend authoritative)
+    def _card_key(card: dict[str, Any] | None) -> str | None:
+        if not card:
+            return None
+        cid = card.get("id")
+        spec = card.get("source_spec")
+        return f"{spec}::{cid}" if cid and spec else None
+
+    referenced_keys: set[str] = set()
+
+    def _add(summary: dict[str, Any] | None) -> None:
+        key = _card_key(summary)
+        if key:
+            referenced_keys.add(key)
+
+    for group in dag_stage_groups:
+        related = group.get("related_cards", {})
+        _add(related.get("stage_card"))
+        _add(related.get("input_dtype_card"))
+        _add(related.get("output_dtype_card"))
+        for k in (
+            "transform_cards",
+            "input_example_cards",
+            "output_example_cards",
+            "input_check_cards",
+            "output_check_cards",
+        ):
+            for item in related.get(k, []) or []:
+                _add(item)
+
+    all_keys = []
+    for c in cards:
+        k = _card_key(c)
+        if k:
+            all_keys.append(k)
+
+    unlinked_keys = [k for k in all_keys if k not in referenced_keys]
+
     return {
         "metadata": {
             "spec_name": metadata.get("name", spec_path.stem),
@@ -393,6 +431,8 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
         },
         "cards": cards,
         "dag_stage_groups": dag_stage_groups,
+        "referenced_card_keys": sorted(referenced_keys),
+        "unlinked_card_keys": sorted(unlinked_keys),
     }
 
 

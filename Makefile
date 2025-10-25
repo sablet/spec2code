@@ -145,15 +145,15 @@ setup: ## 開発環境セットアップ
 
 # フロントエンド開発
 export-cards: ## YAML仕様をJSON cardに変換
-	@mkdir -p spec2code-front/public/cards
-	uv run python main.py export_cards specs/*.yaml --output=spec2code-front/public/cards
-	@echo "✓ All cards exported to spec2code-front/public/cards/"
+	@mkdir -p frontend/public/cards
+	uv run python main.py export_cards specs/*.yaml --output=frontend/public/cards
+	@echo "✓ All cards exported to frontend/public/cards/"
 
 front-run: export-cards ## フロントエンド開発サーバー起動
-	cd spec2code-front && npm run dev
+	cd frontend && npm run dev
 
 front-build: export-cards ## フロントエンドビルド
-	cd spec2code-front && npm run build
+	cd frontend && npm run build
 
 front-install: ## フロントエンド依存関係インストール
-	cd spec2code-front && npm install --legacy-peer-deps
+	cd frontend && npm install --legacy-peer-deps
