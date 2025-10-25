@@ -196,6 +196,7 @@ export function CardLibrary() {
   const [dagStageGroups, setDagStageGroups] = useState<DagStageGroup[]>([])
   const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [detailPanelTab, setDetailPanelTab] = useState<"details" | "ungrouped">("details")
   const cardLookup = useMemo(() => {
     const map = new Map<string, CardDefinition>()
     cardDefinitions.forEach((card) => map.set(`${card.source_spec}::${card.id}`, card))
@@ -367,6 +368,7 @@ export function CardLibrary() {
   const handleCardSelect = useCallback(
     (card: CardDefinition | null) => {
       if (card) {
+        setDetailPanelTab("details")
         setSelectedCard(card)
       }
     },
@@ -617,44 +619,6 @@ export function CardLibrary() {
           {shouldShowDagStageGroups ? (
             // DAG Stage Groups View
             <div className="space-y-8">
-              {filteredUngroupedCards.length > 0 && (
-                <div className="border border-dashed border-border rounded-lg p-6 bg-card/60">
-                  <div className="mb-4 space-y-1">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">未紐付けカード</Badge>
-                      <span className="text-sm text-muted-foreground">{filteredUngroupedCards.length}件</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">DAGステージに紐付いていないカードの一覧です。</p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredUngroupedCards.map((card) => (
-                      <Card
-                        key={`${card.source_spec}-${card.id}-ungrouped`}
-                        className={`p-4 cursor-pointer transition-all hover:shadow-md ${
-                          selectedCard?.id === card.id && selectedCard?.source_spec === card.source_spec
-                            ? `border-${card.color}`
-                            : ""
-                        }`}
-                        onClick={() => handleCardSelect(card)}
-                      >
-                        <div className="flex items-start gap-3 mb-3">
-                          <div className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}>
-                            <card.icon className={`w-5 h-5 text-${card.color}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
-                            <Badge variant="secondary" className="text-xs">
-                              {card.category}
-                            </Badge>
-                          </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
-                        <CardDetailLines card={card} />
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
               {filteredDagStageGroups.length === 0 ? (
                 <div className="text-sm text-muted-foreground">該当するDAGステージグループがありません。</div>
               ) : (
@@ -783,186 +747,242 @@ export function CardLibrary() {
 
         {/* Details Panel */}
         <aside className="w-96 border-l border-border bg-card p-6 overflow-y-auto flex-shrink-0">
-          {selectedCard ? (
-            <>
-              <div className="flex items-start gap-4 mb-6">
-                <div
-                  className={`w-16 h-16 rounded-lg bg-${selectedCard.color}/10 flex items-center justify-center flex-shrink-0`}
+          <div className="flex items-center justify-between mb-6">
+            <div className="inline-flex rounded-md border border-border bg-background">
+              {[
+                { id: "details", label: "詳細" },
+                { id: "ungrouped", label: "未紐付け" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setDetailPanelTab(tab.id as "details" | "ungrouped")}
+                  className={`px-4 py-2 text-sm font-medium rounded-md ${
+                    detailPanelTab === tab.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  <selectedCard.icon className={`w-8 h-8 text-${selectedCard.color}`} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-foreground mb-1">{selectedCard.name}</h2>
-                  <div className="flex gap-2">
-                    <Badge variant="secondary">{selectedCard.category}</Badge>
-                    <Badge variant="outline">{selectedCard.source_spec}</Badge>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {detailPanelTab === "ungrouped" && (
+              <Badge variant="outline" className="text-xs">
+                {filteredUngroupedCards.length}件
+              </Badge>
+            )}
+          </div>
+
+          {detailPanelTab === "details" ? (
+            selectedCard ? (
+              <>
+                <div className="flex items-start gap-4 mb-6">
+                  <div
+                    className={`w-16 h-16 rounded-lg bg-${selectedCard.color}/10 flex items-center justify-center flex-shrink-0`}
+                  >
+                    <selectedCard.icon className={`w-8 h-8 text-${selectedCard.color}`} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-foreground mb-1">{selectedCard.name}</h2>
+                    <div className="flex gap-2">
+                      <Badge variant="secondary">{selectedCard.category}</Badge>
+                      <Badge variant="outline">{selectedCard.source_spec}</Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-2">説明</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{selectedCard.description}</p>
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">説明</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{selectedCard.description}</p>
+                  </div>
+
+                  {selectedCard.category === "checks" && (
+                    <>
+                      {selectedCard.target_dtype && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">対象データ型</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.target_dtype}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.implementation && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
+                          </Card>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedCard.category === "dtype" && (
+                    <>
+                      {selectedCard.schema && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">スキーマ</h3>
+                          <Card className="p-3 bg-background">
+                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                              {JSON.stringify(selectedCard.schema, null, 2)}
+                            </pre>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.example_id && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータID</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.example_id}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.check_ids && selectedCard.check_ids.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">チェック関数</h3>
+                          <div className="space-y-2">
+                            {selectedCard.check_ids.map((check) => (
+                              <Card key={check} className="p-3 bg-background">
+                                <code className="text-xs font-mono text-foreground">{check}</code>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedCard.category === "example" && (
+                    <>
+                      {selectedCard.dtype && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">データ型</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.dtype}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.data && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータ</h3>
+                          <Card className="p-3 bg-background">
+                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                              {JSON.stringify(selectedCard.data, null, 2)}
+                            </pre>
+                          </Card>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedCard.category === "transform" && (
+                    <>
+                      {selectedCard.params && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">パラメータ</h3>
+                          <Card className="p-3 bg-background">
+                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                              {JSON.stringify(selectedCard.params, null, 2)}
+                            </pre>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.input_dtype && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">入力データ型</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.input_dtype}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.output_dtype && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">出力データ型</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.output_dtype}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.implementation && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
+                          </Card>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {(selectedCard.category === "dag" || selectedCard.category === "dag_stage") && (
+                    <>
+                      {selectedCard.stage_id && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">ステージID</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.stage_id}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.selection_mode && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">選択モード</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.selection_mode}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.candidates && selectedCard.candidates.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">候補</h3>
+                          <div className="space-y-2">
+                            {selectedCard.candidates.map((candidate) => (
+                              <Card key={candidate} className="p-3 bg-background">
+                                <code className="text-xs font-mono text-foreground">{candidate}</code>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <Button className="w-full">キャンバスに追加</Button>
                 </div>
-
-                {selectedCard.category === "checks" && (
-                  <>
-                    {selectedCard.target_dtype && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">対象データ型</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.target_dtype}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.implementation && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
-                        </Card>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {selectedCard.category === "dtype" && (
-                  <>
-                    {selectedCard.schema && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">スキーマ</h3>
-                        <Card className="p-3 bg-background">
-                          <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                            {JSON.stringify(selectedCard.schema, null, 2)}
-                          </pre>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.example_id && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータID</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.example_id}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.check_ids && selectedCard.check_ids.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">チェック関数</h3>
-                        <div className="space-y-2">
-                          {selectedCard.check_ids.map((check) => (
-                            <Card key={check} className="p-3 bg-background">
-                              <code className="text-xs font-mono text-foreground">{check}</code>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {selectedCard.category === "example" && (
-                  <>
-                    {selectedCard.dtype && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">データ型</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.dtype}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.data && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータ</h3>
-                        <Card className="p-3 bg-background">
-                          <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                            {JSON.stringify(selectedCard.data, null, 2)}
-                          </pre>
-                        </Card>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {selectedCard.category === "transform" && (
-                  <>
-                    {selectedCard.params && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">パラメータ</h3>
-                        <Card className="p-3 bg-background">
-                          <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                            {JSON.stringify(selectedCard.params, null, 2)}
-                          </pre>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.input_dtype && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">入力データ型</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.input_dtype}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.output_dtype && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">出力データ型</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.output_dtype}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.implementation && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
-                        </Card>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {(selectedCard.category === "dag" || selectedCard.category === "dag_stage") && (
-                  <>
-                    {selectedCard.stage_id && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">ステージID</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.stage_id}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.selection_mode && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">選択モード</h3>
-                        <Card className="p-3 bg-background">
-                          <code className="text-xs font-mono text-foreground">{selectedCard.selection_mode}</code>
-                        </Card>
-                      </div>
-                    )}
-                    {selectedCard.candidates && selectedCard.candidates.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground mb-2">候補</h3>
-                        <div className="space-y-2">
-                          {selectedCard.candidates.map((candidate) => (
-                            <Card key={candidate} className="p-3 bg-background">
-                              <code className="text-xs font-mono text-foreground">{candidate}</code>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <Button className="w-full">キャンバスに追加</Button>
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                カードを選択して詳細を表示
               </div>
-            </>
+            )
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              カードを選択して詳細を表示
+            <div className="space-y-3">
+              {filteredUngroupedCards.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-12">未紐付けカードはありません。</div>
+              ) : (
+                filteredUngroupedCards.map((card) => (
+                  <Card
+                    key={`${card.source_spec}-${card.id}-ungrouped-panel`}
+                    className={`p-3 cursor-pointer hover:shadow-md ${
+                      selectedCard?.id === card.id && selectedCard?.source_spec === card.source_spec
+                        ? `border-${card.color}`
+                        : ""
+                    }`}
+                    onClick={() => handleCardSelect(card)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">{card.name}</div>
+                        <div className="text-xs text-muted-foreground">{card.category}</div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {card.source_spec}
+                      </Badge>
+                    </div>
+                  </Card>
+                ))
+              )}
             </div>
           )}
         </aside>
