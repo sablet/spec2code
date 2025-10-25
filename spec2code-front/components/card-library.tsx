@@ -1,0 +1,539 @@
+"use client"
+
+import type React from "react"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, Search, Shuffle, Upload, CheckCircle, FileType, FileText, Workflow } from "lucide-react"
+import Link from "next/link"
+import yaml from "js-yaml"
+
+interface CardDefinition {
+  id: string
+  name: string
+  category: string
+  description: string
+  icon: any
+  color: string
+  // checks用
+  target_dtype?: string
+  implementation?: string
+  // dtype用
+  schema?: any
+  example_id?: string
+  check_ids?: string[]
+  // example用
+  dtype?: string
+  data?: any
+  // transform用
+  params?: Record<string, any>
+  input_dtype?: string
+  output_dtype?: string
+  // dag用
+  stage_id?: string
+  selection_mode?: string
+  candidates?: string[]
+}
+
+const defaultCards: CardDefinition[] = [
+  {
+    id: "check_example",
+    name: "check_example",
+    category: "checks",
+    description: "Example check function for data validation",
+    icon: CheckCircle,
+    color: "chart-1",
+    target_dtype: "ExampleFrame",
+    implementation: "checks/check_example.py",
+  },
+  {
+    id: "ExampleFrame",
+    name: "ExampleFrame",
+    category: "dtype",
+    description: "Example data type definition",
+    icon: FileType,
+    color: "chart-2",
+    schema: { id: "int", name: "str", value: "float" },
+    example_id: "example_data",
+    check_ids: ["check_example"],
+  },
+  {
+    id: "example_data",
+    name: "example_data",
+    category: "example",
+    description: "Sample data for ExampleFrame",
+    icon: FileText,
+    color: "chart-3",
+    dtype: "ExampleFrame",
+    data: [{ id: 1, name: "test", value: 100.0 }],
+  },
+  {
+    id: "transform_example",
+    name: "transform_example",
+    category: "transform",
+    description: "Example transformation function",
+    icon: Shuffle,
+    color: "chart-4",
+    params: { threshold: 0.5, mode: "strict" },
+    input_dtype: "ExampleFrame",
+    output_dtype: "ProcessedFrame",
+    implementation: "transforms/transform_example.py",
+  },
+  {
+    id: "stage_1",
+    name: "stage_1",
+    category: "dag",
+    description: "First stage of the pipeline",
+    icon: Workflow,
+    color: "chart-5",
+    stage_id: "stage_1",
+    selection_mode: "single",
+    candidates: ["transform_example", "transform_alternative"],
+  },
+]
+
+function parseYamlToCards(yamlContent: string): CardDefinition[] {
+  try {
+    const parsed = yaml.load(yamlContent) as any
+    const cards: CardDefinition[] = []
+
+    if (parsed.checks) {
+      Object.entries(parsed.checks).forEach(([key, value]: [string, any]) => {
+        cards.push({
+          id: key,
+          name: key,
+          category: "checks",
+          description: value.description || "Check function",
+          icon: CheckCircle,
+          color: "chart-1",
+          target_dtype: value.target_dtype,
+          implementation: value.implementation,
+        })
+      })
+    }
+
+    if (parsed.datatypes) {
+      Object.entries(parsed.datatypes).forEach(([key, value]: [string, any]) => {
+        cards.push({
+          id: key,
+          name: key,
+          category: "dtype",
+          description: value.description || "Data type definition",
+          icon: FileType,
+          color: "chart-2",
+          schema: value.schema,
+          example_id: value.example_id,
+          check_ids: value.checks || [],
+        })
+      })
+    }
+
+    if (parsed.examples) {
+      Object.entries(parsed.examples).forEach(([key, value]: [string, any]) => {
+        cards.push({
+          id: key,
+          name: key,
+          category: "example",
+          description: value.description || "Sample data",
+          icon: FileText,
+          color: "chart-3",
+          dtype: value.dtype,
+          data: value.data,
+        })
+      })
+    }
+
+    if (parsed.transforms) {
+      Object.entries(parsed.transforms).forEach(([key, value]: [string, any]) => {
+        cards.push({
+          id: key,
+          name: key,
+          category: "transform",
+          description: value.description || "Transform function",
+          icon: Shuffle,
+          color: "chart-4",
+          params: value.params,
+          input_dtype: value.inputs?.[0]?.dtype,
+          output_dtype: value.outputs?.[0]?.dtype,
+          implementation: value.implementation,
+        })
+      })
+    }
+
+    if (parsed.dag_stages) {
+      Object.entries(parsed.dag_stages).forEach(([key, value]: [string, any]) => {
+        cards.push({
+          id: key,
+          name: key,
+          category: "dag",
+          description: value.description || "DAG stage",
+          icon: Workflow,
+          color: "chart-5",
+          stage_id: key,
+          selection_mode: value.selection_mode,
+          candidates: value.candidates,
+        })
+      })
+    }
+
+    return cards
+  } catch (error) {
+    console.error("Failed to parse YAML:", error)
+    return []
+  }
+}
+
+export function CardLibrary() {
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState<string>("All")
+  const [cardDefinitions, setCardDefinitions] = useState<CardDefinition[]>(defaultCards)
+  const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(defaultCards[0])
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      const yamlCards = parseYamlToCards(content)
+      if (yamlCards.length > 0) {
+        setCardDefinitions(yamlCards)
+        setSelectedCard(yamlCards[0])
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const categories = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.category)))]
+
+  const filteredCards = cardDefinitions.filter((card) => {
+    const matchesSearch =
+      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      card.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesCategory = selectedCategory === "All" || card.category === selectedCategory
+    return matchesSearch && matchesCategory
+  })
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="border-b border-border bg-card">
+        <div className="px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                戻る
+              </Button>
+            </Link>
+            <div className="h-6 w-px bg-border" />
+            <h1 className="text-lg font-semibold text-foreground">カードライブラリ</h1>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="yaml-upload">
+              <Button variant="outline" size="sm" asChild>
+                <span className="cursor-pointer">
+                  <Upload className="w-4 h-4 mr-2" />
+                  YAMLを読み込む
+                </span>
+              </Button>
+            </label>
+            <input id="yaml-upload" type="file" accept=".yaml,.yml" onChange={handleFileUpload} className="hidden" />
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="カードを検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-64"
+              />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - Categories */}
+        <aside className="w-64 border-r border-border bg-card p-4 overflow-y-auto">
+          <h2 className="text-sm font-semibold text-foreground mb-4">カテゴリ</h2>
+
+          <div className="space-y-1">
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                  selectedCategory === category
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`}
+              >
+                {category}
+                <span className="float-right text-xs">
+                  {category === "All"
+                    ? cardDefinitions.length
+                    : cardDefinitions.filter((c) => c.category === category).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-border">
+            <h3 className="text-xs font-semibold text-muted-foreground mb-3">統計</h3>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex justify-between">
+                <span>総カード数</span>
+                <span className="text-foreground font-medium">{cardDefinitions.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>カテゴリ数</span>
+                <span className="text-foreground font-medium">{categories.length - 1}</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main - Card Grid */}
+        <main className="flex-1 p-6 overflow-y-auto">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              {selectedCategory === "All" ? "すべてのカード" : `${selectedCategory}カード`}
+            </h2>
+            <p className="text-sm text-muted-foreground">{filteredCards.length}個のカードが利用可能</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredCards.map((card) => (
+              <Card
+                key={card.id}
+                className={`p-4 cursor-pointer transition-all hover:shadow-lg ${
+                  selectedCard?.id === card.id ? `border-${card.color}` : ""
+                }`}
+                onClick={() => setSelectedCard(card)}
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <div
+                    className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}
+                  >
+                    <card.icon className={`w-5 h-5 text-${card.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
+                    <Badge variant="secondary" className="text-xs">
+                      {card.category}
+                    </Badge>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
+
+                <div className="text-xs text-muted-foreground space-y-1">
+                  {card.category === "checks" && card.target_dtype && <div>対象型: {card.target_dtype}</div>}
+                  {card.category === "dtype" && card.schema && (
+                    <div>フィールド数: {Object.keys(card.schema).length}</div>
+                  )}
+                  {card.category === "example" && card.dtype && <div>データ型: {card.dtype}</div>}
+                  {card.category === "transform" && (
+                    <div>
+                      {card.input_dtype} → {card.output_dtype}
+                    </div>
+                  )}
+                  {card.category === "dag" && card.selection_mode && <div>選択モード: {card.selection_mode}</div>}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </main>
+
+        {/* Details Panel */}
+        <aside className="w-96 border-l border-border bg-card p-6 overflow-y-auto">
+          {selectedCard ? (
+            <>
+              <div className="flex items-start gap-4 mb-6">
+                <div
+                  className={`w-16 h-16 rounded-lg bg-${selectedCard.color}/10 flex items-center justify-center flex-shrink-0`}
+                >
+                  <selectedCard.icon className={`w-8 h-8 text-${selectedCard.color}`} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-foreground mb-1">{selectedCard.name}</h2>
+                  <Badge variant="secondary">{selectedCard.category}</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-2">説明</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{selectedCard.description}</p>
+                </div>
+
+                {selectedCard.category === "checks" && (
+                  <>
+                    {selectedCard.target_dtype && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">対象データ型</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.target_dtype}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.implementation && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
+                        </Card>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedCard.category === "dtype" && (
+                  <>
+                    {selectedCard.schema && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">スキーマ</h3>
+                        <Card className="p-3 bg-background">
+                          <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                            {JSON.stringify(selectedCard.schema, null, 2)}
+                          </pre>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.example_id && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータID</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.example_id}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.check_ids && selectedCard.check_ids.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">チェック関数</h3>
+                        <div className="space-y-2">
+                          {selectedCard.check_ids.map((check) => (
+                            <Card key={check} className="p-3 bg-background">
+                              <code className="text-xs font-mono text-foreground">{check}</code>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedCard.category === "example" && (
+                  <>
+                    {selectedCard.dtype && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">データ型</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.dtype}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.data && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータ</h3>
+                        <Card className="p-3 bg-background">
+                          <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                            {JSON.stringify(selectedCard.data, null, 2)}
+                          </pre>
+                        </Card>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedCard.category === "transform" && (
+                  <>
+                    {selectedCard.params && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">パラメータ</h3>
+                        <Card className="p-3 bg-background">
+                          <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                            {JSON.stringify(selectedCard.params, null, 2)}
+                          </pre>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.input_dtype && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">入力データ型</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.input_dtype}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.output_dtype && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">出力データ型</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.output_dtype}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.implementation && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
+                        </Card>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedCard.category === "dag" && (
+                  <>
+                    {selectedCard.stage_id && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">ステージID</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.stage_id}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.selection_mode && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">選択モード</h3>
+                        <Card className="p-3 bg-background">
+                          <code className="text-xs font-mono text-foreground">{selectedCard.selection_mode}</code>
+                        </Card>
+                      </div>
+                    )}
+                    {selectedCard.candidates && selectedCard.candidates.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground mb-2">候補</h3>
+                        <div className="space-y-2">
+                          {selectedCard.candidates.map((candidate) => (
+                            <Card key={candidate} className="p-3 bg-background">
+                              <code className="text-xs font-mono text-foreground">{candidate}</code>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <Button className="w-full">キャンバスに追加</Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              カードを選択して詳細を表示
+            </div>
+          )}
+        </aside>
+      </div>
+    </div>
+  )
+}
