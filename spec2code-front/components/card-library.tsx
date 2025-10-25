@@ -2,14 +2,13 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Search, Shuffle, Upload, CheckCircle, FileType, FileText, Workflow } from "lucide-react"
 import Link from "next/link"
-import yaml from "js-yaml"
 
 interface CardDefinition {
   id: string
@@ -95,102 +94,78 @@ const defaultCards: CardDefinition[] = [
   },
 ]
 
-function parseYamlToCards(yamlContent: string): CardDefinition[] {
-  try {
-    const parsed = yaml.load(yamlContent) as any
-    const cards: CardDefinition[] = []
+function convertJsonToCards(jsonData: any): CardDefinition[] {
+  const cards: CardDefinition[] = []
 
-    if (parsed.checks) {
-      Object.entries(parsed.checks).forEach(([key, value]: [string, any]) => {
-        cards.push({
-          id: key,
-          name: key,
-          category: "checks",
-          description: value.description || "Check function",
-          icon: CheckCircle,
-          color: "chart-1",
-          target_dtype: value.target_dtype,
-          implementation: value.implementation,
-        })
-      })
-    }
-
-    if (parsed.datatypes) {
-      Object.entries(parsed.datatypes).forEach(([key, value]: [string, any]) => {
-        cards.push({
-          id: key,
-          name: key,
-          category: "dtype",
-          description: value.description || "Data type definition",
-          icon: FileType,
-          color: "chart-2",
-          schema: value.schema,
-          example_id: value.example_id,
-          check_ids: value.checks || [],
-        })
-      })
-    }
-
-    if (parsed.examples) {
-      Object.entries(parsed.examples).forEach(([key, value]: [string, any]) => {
-        cards.push({
-          id: key,
-          name: key,
-          category: "example",
-          description: value.description || "Sample data",
-          icon: FileText,
-          color: "chart-3",
-          dtype: value.dtype,
-          data: value.data,
-        })
-      })
-    }
-
-    if (parsed.transforms) {
-      Object.entries(parsed.transforms).forEach(([key, value]: [string, any]) => {
-        cards.push({
-          id: key,
-          name: key,
-          category: "transform",
-          description: value.description || "Transform function",
-          icon: Shuffle,
-          color: "chart-4",
-          params: value.params,
-          input_dtype: value.inputs?.[0]?.dtype,
-          output_dtype: value.outputs?.[0]?.dtype,
-          implementation: value.implementation,
-        })
-      })
-    }
-
-    if (parsed.dag_stages) {
-      Object.entries(parsed.dag_stages).forEach(([key, value]: [string, any]) => {
-        cards.push({
-          id: key,
-          name: key,
-          category: "dag",
-          description: value.description || "DAG stage",
-          icon: Workflow,
-          color: "chart-5",
-          stage_id: key,
-          selection_mode: value.selection_mode,
-          candidates: value.candidates,
-        })
-      })
-    }
-
-    return cards
-  } catch (error) {
-    console.error("Failed to parse YAML:", error)
-    return []
+  const iconMap: Record<string, any> = {
+    "checks": CheckCircle,
+    "dtype": FileType,
+    "example": FileText,
+    "transform": Shuffle,
+    "dag": Workflow,
+    "dag_stage": Workflow,
   }
+
+  for (const card of jsonData.cards || []) {
+    const icon = iconMap[card.category] || FileType
+    const metadata = card.metadata || {}
+
+    cards.push({
+      id: card.id,
+      name: card.name,
+      category: card.category,
+      description: card.description,
+      icon,
+      color: `chart-${(cards.length % 5) + 1}` as any,
+      // checks
+      target_dtype: metadata.target_dtype,
+      implementation: metadata.impl || metadata.implementation,
+      // dtype
+      schema: metadata.type_details,
+      check_ids: metadata.check_ids || [],
+      example_id: metadata.example_id,
+      // example
+      data: metadata.input || metadata.data,
+      // transform
+      params: metadata.parameters,
+      input_dtype: metadata.input_type,
+      output_dtype: metadata.output_type,
+      // dag
+      stage_id: card.id,
+      selection_mode: metadata.selection_mode,
+      candidates: metadata.candidates || [metadata.from, metadata.to].filter(Boolean),
+    })
+  }
+
+  return cards
 }
 
 export function CardLibrary() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
-  const [cardDefinitions, setCardDefinitions] = useState<CardDefinition[]>(defaultCards)
-  const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(defaultCards[0])
+  const [cardDefinitions, setCardDefinitions] = useState<CardDefinition[]>([])
+  const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Load default JSON on mount
+  useEffect(() => {
+    fetch("/cards/algo-trade-pipeline.json")
+      .then((res) => res.json())
+      .then((data) => {
+        const cards = convertJsonToCards(data)
+        setCardDefinitions(cards)
+        if (cards.length > 0) {
+          setSelectedCard(cards[0])
+        }
+        setIsLoading(false)
+      })
+      .catch((error) => {
+        console.error("Failed to load cards:", error)
+        setCardDefinitions(defaultCards)
+        setSelectedCard(defaultCards[0])
+        setIsLoading(false)
+      })
+  }, [])
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -199,10 +174,15 @@ export function CardLibrary() {
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result as string
-      const yamlCards = parseYamlToCards(content)
-      if (yamlCards.length > 0) {
-        setCardDefinitions(yamlCards)
-        setSelectedCard(yamlCards[0])
+      try {
+        const jsonData = JSON.parse(content)
+        const cards = convertJsonToCards(jsonData)
+        if (cards.length > 0) {
+          setCardDefinitions(cards)
+          setSelectedCard(cards[0])
+        }
+      } catch (err) {
+        console.error("Failed to parse JSON:", err)
       }
     }
     reader.readAsText(file)
@@ -217,6 +197,14 @@ export function CardLibrary() {
     const matchesCategory = selectedCategory === "All" || card.category === selectedCategory
     return matchesSearch && matchesCategory
   })
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Loading cards...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -235,15 +223,15 @@ export function CardLibrary() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label htmlFor="yaml-upload">
+            <label htmlFor="json-upload">
               <Button variant="outline" size="sm" asChild>
                 <span className="cursor-pointer">
                   <Upload className="w-4 h-4 mr-2" />
-                  YAMLを読み込む
+                  JSONを読み込む
                 </span>
               </Button>
             </label>
-            <input id="yaml-upload" type="file" accept=".yaml,.yml" onChange={handleFileUpload} className="hidden" />
+            <input id="json-upload" type="file" accept=".json" onChange={handleFileUpload} className="hidden" />
 
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

@@ -1,4 +1,4 @@
-.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree setup duplication lint typecheck complexity front-run front-build front-install
+.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree setup duplication lint typecheck complexity front-run front-build front-install export-cards
 
 # UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 # export UV_CACHE_DIR
@@ -144,10 +144,18 @@ setup: ## 開発環境セットアップ
 	uv sync
 
 # フロントエンド開発
-front-run: ## フロントエンド開発サーバー起動
+export-cards: ## YAML仕様をJSON cardに変換
+	@mkdir -p spec2code-front/public/cards
+	@for spec in specs/*.yaml; do \
+		echo "Exporting $$spec..."; \
+		uv run python export_cards.py $$spec --output spec2code-front/public/cards; \
+	done
+	@echo "✓ All cards exported to spec2code-front/public/cards/"
+
+front-run: export-cards ## フロントエンド開発サーバー起動
 	cd spec2code-front && npm run dev
 
-front-build: ## フロントエンドビルド
+front-build: export-cards ## フロントエンドビルド
 	cd spec2code-front && npm run build
 
 front-install: ## フロントエンド依存関係インストール
