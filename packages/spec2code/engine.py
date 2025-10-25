@@ -1374,6 +1374,8 @@ class Engine:
         self._validate_checks(app_root, errors)
         self._validate_transforms(app_root, errors)
         self._validate_examples(errors)
+        # 未紐付け要素の警告を表示（バリデーション失敗にはしない）
+        self._warn_unlinked_items()
         self._summarize_integrity(errors)
         return errors
 
@@ -1715,6 +1717,94 @@ class Engine:
             print("\n✅ All integrity checks passed!")
             return
         print(f"\n⚠️  Found {total_errors} integrity issue(s)")
+
+    # ==================== Unlinked item detection (warning only) ====================
+
+    def _detect_unlinked_items(self: "Engine") -> dict[str, set[str]]:
+        """Detect unlinked items similar to frontend CardLibrary 'ungrouped' view.
+
+        The detection is based on dag_stages:
+          - referenced transforms: any transform listed in stage.candidates
+            (candidates are auto-populated when missing)
+          - referenced datatypes: stage.input_type/output_type, plus input/return
+            datatype of referenced transforms
+          - referenced examples/checks: those attached to referenced datatypes
+
+        Returns a mapping of category to unlinked id set.
+        """
+        # Ensure candidates are available to mirror frontend grouping
+        _auto_collect_stage_candidates(self.spec)
+
+        all_transforms = {t.id for t in self.spec.transforms}
+        all_dtypes = {dt.id for dt in self.spec.datatypes}
+        all_examples = {ex.id for ex in self.spec.examples}
+        all_checks = {ck.id for ck in self.spec.checks}
+
+        referenced_transforms: set[str] = set()
+        referenced_dtypes: set[str] = set()
+        referenced_examples: set[str] = set()
+        referenced_checks: set[str] = set()
+
+        transform_by_id = {t.id: t for t in self.spec.transforms}
+        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
+
+        for stage in self.spec.dag_stages:
+            if stage.input_type:
+                referenced_dtypes.add(stage.input_type)
+            if stage.output_type:
+                referenced_dtypes.add(stage.output_type)
+            for tid in stage.candidates:
+                if tid:
+                    referenced_transforms.add(tid)
+
+        for tid in referenced_transforms:
+            transform = transform_by_id.get(tid)
+            if not transform:
+                continue
+            # Input datatype from first parameter (if any)
+            if transform.parameters:
+                first = transform.parameters[0]
+                if first.datatype_ref:
+                    referenced_dtypes.add(first.datatype_ref)
+            # Return datatype
+            if transform.return_datatype_ref:
+                referenced_dtypes.add(transform.return_datatype_ref)
+
+        for dtype_id in list(referenced_dtypes):
+            dtype = dtype_by_id.get(dtype_id)
+            if not dtype:
+                continue
+            for ex_id in dtype.example_ids:
+                referenced_examples.add(ex_id)
+            for ck_id in dtype.check_ids:
+                referenced_checks.add(ck_id)
+
+        return {
+            "transforms": all_transforms - referenced_transforms,
+            "datatypes": all_dtypes - referenced_dtypes,
+            "examples": all_examples - referenced_examples,
+            "checks": all_checks - referenced_checks,
+        }
+
+    def _warn_unlinked_items(self: "Engine") -> None:
+        """Print warnings for unlinked items without failing validation."""
+        unlinked = self._detect_unlinked_items()
+        any_warn = False
+        for category, ids in unlinked.items():
+            for item_id in sorted(ids):
+                any_warn = True
+                if category == "transforms":
+                    print(f"  ⚠️  Unlinked transform: '{item_id}' is not referenced by any stage candidates")
+                elif category == "datatypes":
+                    print(f"  ⚠️  Unlinked datatype: '{item_id}' is not used in stages or transforms")
+                elif category == "examples":
+                    print(f"  ⚠️  Unlinked example: '{item_id}' is not attached to any used datatype")
+                elif category == "checks":
+                    print(f"  ⚠️  Unlinked check: '{item_id}' is not attached to any used datatype")
+                else:
+                    print(f"  ⚠️  Unlinked {category[:-1]}: '{item_id}'")
+        if not any_warn:
+            print("  ✅ No unlinked items detected")
 
     def run_checks(self: "Engine") -> None:
         """Check関数を実行"""
