@@ -89,14 +89,15 @@ class ConfigRunner:
 
         return self._post_process_result(stage_id, result, stage_results)
 
-    def _import_transform_callable(self: "ConfigRunner", impl: str) -> tuple[Callable[..., Any], inspect.Signature]:
+    @staticmethod
+    def _import_transform_callable(impl: str) -> tuple[Callable[..., Any], inspect.Signature]:
         module_path, func_name = impl.rsplit(":", 1)
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)
         return func, inspect.signature(func)
 
+    @staticmethod
     def _build_function_args(
-        self: "ConfigRunner",
         signature: inspect.Signature,
         current_data: pd.DataFrame,
         params: dict[str, Any],
@@ -112,8 +113,8 @@ class ConfigRunner:
                 func_args[param_name] = params[param_name]
         return func_args
 
+    @staticmethod
     def _post_process_result(
-        self: "ConfigRunner",
         stage_id: str,
         result: pd.DataFrame,
         stage_results: dict[str, list[pd.DataFrame]],

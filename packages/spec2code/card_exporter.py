@@ -173,6 +173,50 @@ def _collect_example_and_check_cards(
     return example_cards, check_cards
 
 
+def _build_stage_group(
+    stage: dict[str, Any],
+    spec_name: str,
+    cards: list[dict[str, Any]],
+    card_map: dict[tuple[str, str, str], dict[str, Any]],
+) -> dict[str, Any]:
+    """Build a single stage group from stage data"""
+    stage_id: str = stage.get("stage_id", "")
+    input_type: str = stage.get("input_type", "")
+    output_type: str = stage.get("output_type", "")
+
+    # Find core cards
+    stage_card = card_map.get(("dag_stage", stage_id, spec_name))
+    input_dtype_card = card_map.get(("dtype", input_type, spec_name))
+    output_dtype_card = card_map.get(("dtype", output_type, spec_name))
+
+    # Find transform cards
+    transform_cards = _find_transform_cards(cards, spec_name, input_type, output_type)
+
+    # Collect examples and checks for input/output datatypes
+    input_example_cards, input_check_cards = _collect_example_and_check_cards(input_dtype_card, card_map, spec_name)
+    output_example_cards, output_check_cards = _collect_example_and_check_cards(output_dtype_card, card_map, spec_name)
+
+    return {
+        "spec_name": spec_name,
+        "stage_id": stage_id,
+        "stage_description": stage.get("description", ""),
+        "input_type": input_type,
+        "output_type": output_type,
+        "selection_mode": stage.get("selection_mode"),
+        "max_select": stage.get("max_select"),
+        "related_cards": {
+            "stage_card": stage_card,
+            "input_dtype_card": input_dtype_card,
+            "output_dtype_card": output_dtype_card,
+            "transform_cards": transform_cards,
+            "input_example_cards": input_example_cards,
+            "output_example_cards": output_example_cards,
+            "input_check_cards": input_check_cards,
+            "output_check_cards": output_check_cards,
+        },
+    }
+
+
 def build_dag_stage_groups(
     spec_path: Path, raw_data: dict[str, Any], cards: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -191,49 +235,7 @@ def build_dag_stage_groups(
     spec_name = spec_path.stem
     card_map = _build_card_map(cards)
 
-    groups = []
-    for stage in dag_stages:
-        stage_id = stage.get("stage_id")
-        input_type = stage.get("input_type")
-        output_type = stage.get("output_type")
-
-        # Find core cards
-        stage_card = card_map.get(("dag_stage", stage_id, spec_name))
-        input_dtype_card = card_map.get(("dtype", input_type, spec_name))
-        output_dtype_card = card_map.get(("dtype", output_type, spec_name))
-
-        # Find transform cards
-        transform_cards = _find_transform_cards(cards, spec_name, input_type, output_type)
-
-        # Collect examples and checks for input/output datatypes
-        input_example_cards, input_check_cards = _collect_example_and_check_cards(input_dtype_card, card_map, spec_name)
-        output_example_cards, output_check_cards = _collect_example_and_check_cards(
-            output_dtype_card, card_map, spec_name
-        )
-
-        group = {
-            "spec_name": spec_name,
-            "stage_id": stage_id,
-            "stage_description": stage.get("description", ""),
-            "input_type": input_type,
-            "output_type": output_type,
-            "selection_mode": stage.get("selection_mode"),
-            "max_select": stage.get("max_select"),
-            "related_cards": {
-                "stage_card": stage_card,
-                "input_dtype_card": input_dtype_card,
-                "output_dtype_card": output_dtype_card,
-                "transform_cards": transform_cards,
-                "input_example_cards": input_example_cards,
-                "output_example_cards": output_example_cards,
-                "input_check_cards": input_check_cards,
-                "output_check_cards": output_check_cards,
-            },
-        }
-
-        groups.append(group)
-
-    return groups
+    return [_build_stage_group(stage, spec_name, cards, card_map) for stage in dag_stages]
 
 
 def _process_checks(checks: list[dict[str, Any]], spec_name: str) -> list[dict[str, Any]]:

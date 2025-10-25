@@ -76,7 +76,7 @@ def _expected_basic_type(annotation: object) -> type | None:
     if as_str.startswith("<class '") and as_str.endswith("'>"):
         return basic_types.get(as_str[8:-2], None)
 
-    return basic_types.get(as_str, None)
+    return basic_types.get(as_str)
 
 
 def _validate_unknown_parameters(transform_id: str, signature: inspect.Signature, params: dict[str, Any]) -> list[str]:
@@ -105,9 +105,13 @@ def _validate_parameter_type(
             f"{expected_type.__name__}, got {type(param_value).__name__}"
         ]
 
-    if expected_type in (int, float) and isinstance(param_value, (int, float)):
-        if param_name in POSITIVE_PARAM_NAMES and param_value <= 0:
-            return [(f"Transform '{transform_id}': parameter '{param_name}' must be " f"positive, got {param_value}")]
+    if (
+        expected_type in {int, float}
+        and isinstance(param_value, (int, float))
+        and param_name in POSITIVE_PARAM_NAMES
+        and param_value <= 0
+    ):
+        return [(f"Transform '{transform_id}': parameter '{param_name}' must be " f"positive, got {param_value}")]
 
     return []
 

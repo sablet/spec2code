@@ -39,8 +39,9 @@ norecursedirs = ["TransformFn", ".venv", ".git", "__pycache__", "apps", "output"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "ANN", "B", "S", "C90", "PLR"]
+select = ["E", "F", "W", "ANN", "B", "S", "C90", "PLR", "RET", "SIM"]
 ignore = ["S101", "B008", "ANN204", "B017", "ANN201"]
+preview = true
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ALL"]
@@ -52,3 +53,13 @@ max-complexity = 10
 max-args = 7
 max-branches = 12
 max-statements = 50
+max-returns = 6
+max-nested-blocks = 4
+max-locals = 15
+
+[tool.pylint.main]
+disable = "all"
+enable = "too-many-lines"
+
+[tool.pylint.format]
+max-module-lines = 500

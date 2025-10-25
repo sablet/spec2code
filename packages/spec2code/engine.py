@@ -279,7 +279,7 @@ def load_spec(spec_path: str | Path) -> Spec:
     """YAML/JSON仕様を読み込み、Pydanticで検証"""
     spec_path = Path(spec_path)
     with open(spec_path) as f:
-        if spec_path.suffix in [".yaml", ".yml"]:
+        if spec_path.suffix in {".yaml", ".yml"}:
             data = yaml.safe_load(f)
         elif spec_path.suffix == ".json":
             data = json.load(f)
@@ -1394,7 +1394,8 @@ class Engine:
             elif datatype.type_alias:
                 self._validate_type_alias_datatype(datatype, module_cache, errors)
 
-    def _record_datatype_error(self: "Engine", errors: dict[str, list[str]], message: str) -> None:
+    @staticmethod
+    def _record_datatype_error(errors: dict[str, list[str]], message: str) -> None:
         errors["datatype_definitions"].append(message)
         print(f"  ❌ {message}")
 
@@ -1714,7 +1715,8 @@ class Engine:
                     errors["example_schemas"].append(details)
                     print(f"  ❌ {details}")
 
-    def _summarize_integrity(self: "Engine", errors: dict[str, list[str]]) -> None:
+    @staticmethod
+    def _summarize_integrity(errors: dict[str, list[str]]) -> None:
         """Print a short summary for integrity validation."""
         total_errors = sum(len(errs) for errs in errors.values())
         if total_errors == 0:

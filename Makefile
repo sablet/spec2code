@@ -97,6 +97,10 @@ complexity: ## 複雑度チェック
 duplication: ## 重複コードチェック
 	npx jscpd --config .jscpd.json packages/spec2code
 
+module-lines: ## モジュール行数チェック（max-module-lines=500）
+	uv run pylint packages/spec2code --rcfile=pyproject.toml
+
+# check: duplication module-lines format lint typecheck complexity ## コード品質チェック（全て）
 check: duplication format lint typecheck complexity ## コード品質チェック（全て）
 
 test:
