@@ -51,34 +51,34 @@ help: ## ヘルプを表示
 	@echo ""
 
 gen: ## スケルトンコード生成
-	uv run python spec2code_cli.py gen $(SPEC)
+	uv run python main.py gen $(SPEC)
 	@make format
 
 run: ## DAG実行・検証
-	uv run python spec2code_cli.py run $(SPEC)
+	uv run python main.py run $(SPEC)
 
 validate: ## 仕様と実装の整合性検証
-	uv run python spec2code_cli.py validate $(SPEC)
+	uv run python main.py validate $(SPEC)
 
 run-config: ## Config駆動でDAG実行
-	uv run python spec2code_cli.py run-config $(CONFIG)
+	uv run python main.py run_config $(CONFIG)
 
 run-config-all: ## 全てのconfigファイルでDAG実行
 	@for config in configs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$config"; \
-		uv run python spec2code_cli.py run-config $$config || true; \
+		uv run python main.py run_config $$config || true; \
 	done
 	echo ""
 
 validate-config: ## Config整合性検証
-	uv run python spec2code_cli.py validate-config $(CONFIG)
+	uv run python main.py validate_config $(CONFIG)
 
 validate-config-all: ## 全てのconfigファイルで整合性検証
 	@for config in configs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$config"; \
-		uv run python spec2code_cli.py validate-config $$config || true; \
+		uv run python main.py validate_config $$config || true; \
 	done
 	echo ""
 
@@ -113,7 +113,7 @@ gen-all: ## 全てのspecファイルからスケルトン生成
 	@for spec in specs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$spec"; \
-		uv run python spec2code_cli.py gen $$spec; \
+		uv run python main.py gen $$spec; \
 	done
 	uv run ruff format apps/ 2>/dev/null || true
 
@@ -122,7 +122,7 @@ run-all: ## 全てのspecファイルでDAG実行
 	@for spec in specs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$spec"; \
-		uv run python spec2code_cli.py run $$spec; \
+		uv run python main.py run $$spec; \
 	done
 	echo ""
 
@@ -131,7 +131,7 @@ validate-all: ## 全てのspecファイルで整合性検証
 	@for spec in specs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$spec"; \
-		uv run python spec2code_cli.py validate $$spec; \
+		uv run python main.py validate $$spec; \
 	done
 	echo ""
 
@@ -146,10 +146,7 @@ setup: ## 開発環境セットアップ
 # フロントエンド開発
 export-cards: ## YAML仕様をJSON cardに変換
 	@mkdir -p spec2code-front/public/cards
-	@for spec in specs/*.yaml; do \
-		echo "Exporting $$spec..."; \
-		uv run python export_cards.py $$spec --output spec2code-front/public/cards; \
-	done
+	uv run python main.py export_cards specs/*.yaml --output=spec2code-front/public/cards
 	@echo "✓ All cards exported to spec2code-front/public/cards/"
 
 front-run: export-cards ## フロントエンド開発サーバー起動

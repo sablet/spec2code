@@ -26,21 +26,15 @@ def normalize_type_info(dtype_data: dict[str, Any]) -> dict[str, Any]:
         type_details = {
             "base_type": enum_config.get("base_type", "str"),
             "members": [
-                {
-                    "name": m.get("name"),
-                    "value": m.get("value"),
-                    "description": m.get("description", "")
-                }
+                {"name": m.get("name"), "value": m.get("value"), "description": m.get("description", "")}
                 for m in enum_config.get("members", [])
-            ]
+            ],
         }
 
     elif "pydantic_model" in dtype_data:
         type_category = "pydantic_model"
         model_config = dtype_data["pydantic_model"]
-        type_details = {
-            "fields": normalize_pydantic_fields(model_config.get("fields", []))
-        }
+        type_details = {"fields": normalize_pydantic_fields(model_config.get("fields", []))}
 
     elif "type_alias" in dtype_data:
         type_category = "type_alias"
@@ -48,7 +42,7 @@ def normalize_type_info(dtype_data: dict[str, Any]) -> dict[str, Any]:
         type_details = {
             "alias_type": alias_config.get("type"),
             "target": alias_config.get("target"),
-            "elements": alias_config.get("elements", [])
+            "elements": alias_config.get("elements", []),
         }
 
     elif "generic" in dtype_data:
@@ -58,17 +52,14 @@ def normalize_type_info(dtype_data: dict[str, Any]) -> dict[str, Any]:
             "container": generic_config.get("container"),
             "element_type": generic_config.get("element_type"),
             "key_type": generic_config.get("key_type"),
-            "value_type": generic_config.get("value_type")
+            "value_type": generic_config.get("value_type"),
         }
 
     elif "schema" in dtype_data:
         type_category = "schema"
         type_details = {"schema": dtype_data["schema"]}
 
-    return {
-        "type_category": type_category,
-        "type_details": type_details
-    }
+    return {"type_category": type_category, "type_details": type_details}
 
 
 def normalize_pydantic_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -91,13 +82,15 @@ def normalize_pydantic_fields(fields: list[dict[str, Any]]) -> list[dict[str, An
             elem_str = elem.get("native") or elem.get("datatype_ref") or "Any"
             type_str = f"{container}[{elem_str}]"
 
-        normalized.append({
-            "name": field.get("name"),
-            "type": type_str,
-            "optional": field.get("optional", False),
-            "default": field.get("default"),
-            "description": field.get("description", "")
-        })
+        normalized.append(
+            {
+                "name": field.get("name"),
+                "type": type_str,
+                "optional": field.get("optional", False),
+                "default": field.get("default"),
+                "description": field.get("description", ""),
+            }
+        )
 
     return normalized
 
@@ -118,21 +111,20 @@ def normalize_transform_params(params: list[dict[str, Any]]) -> dict[str, Any]:
         elif "literal" in param:
             param_type = f"Literal[{', '.join(param['literal'])}]"
 
-        param_details.append({
-            "name": param.get("name"),
-            "type": param_type,
-            "optional": param.get("optional", False),
-            "default": param.get("default")
-        })
+        param_details.append(
+            {
+                "name": param.get("name"),
+                "type": param_type,
+                "optional": param.get("optional", False),
+                "default": param.get("default"),
+            }
+        )
 
         # First param is typically input type
         if input_type is None and "datatype_ref" in param:
             input_type = param["datatype_ref"]
 
-    return {
-        "input_type": input_type,
-        "param_details": param_details
-    }
+    return {"input_type": input_type, "param_details": param_details}
 
 
 def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
@@ -164,16 +156,15 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
     checks = raw_data.get("checks", [])
     if isinstance(checks, list):
         for check in checks:
-            cards.append({
-                "id": check.get("id"),
-                "category": "checks",
-                "name": check.get("id"),
-                "description": check.get("description", ""),
-                "metadata": {
-                    "impl": check.get("impl"),
-                    "file_path": check.get("file_path")
+            cards.append(
+                {
+                    "id": check.get("id"),
+                    "category": "checks",
+                    "name": check.get("id"),
+                    "description": check.get("description", ""),
+                    "metadata": {"impl": check.get("impl"), "file_path": check.get("file_path")},
                 }
-            })
+            )
 
     # Process datatypes
     datatypes = raw_data.get("datatypes", [])
@@ -181,33 +172,34 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
         for dtype in datatypes:
             type_info = normalize_type_info(dtype)
 
-            cards.append({
-                "id": dtype.get("id"),
-                "category": "dtype",
-                "name": dtype.get("id"),
-                "description": f"[{type_info['type_category']}] {dtype.get('description', '')}",
-                "metadata": {
-                    "type_category": type_info["type_category"],
-                    "type_details": type_info["type_details"],
-                    "check_ids": dtype.get("check_ids", []),
-                    "example_ids": dtype.get("example_ids", [])
+            cards.append(
+                {
+                    "id": dtype.get("id"),
+                    "category": "dtype",
+                    "name": dtype.get("id"),
+                    "description": f"[{type_info['type_category']}] {dtype.get('description', '')}",
+                    "metadata": {
+                        "type_category": type_info["type_category"],
+                        "type_details": type_info["type_details"],
+                        "check_ids": dtype.get("check_ids", []),
+                        "example_ids": dtype.get("example_ids", []),
+                    },
                 }
-            })
+            )
 
     # Process examples
     examples = raw_data.get("examples", [])
     if isinstance(examples, list):
         for example in examples:
-            cards.append({
-                "id": example.get("id"),
-                "category": "example",
-                "name": example.get("id"),
-                "description": example.get("description", ""),
-                "metadata": {
-                    "input": example.get("input"),
-                    "expected": example.get("expected")
+            cards.append(
+                {
+                    "id": example.get("id"),
+                    "category": "example",
+                    "name": example.get("id"),
+                    "description": example.get("description", ""),
+                    "metadata": {"input": example.get("input"), "expected": example.get("expected")},
                 }
-            })
+            )
 
     # Process transforms
     transforms = raw_data.get("transforms", [])
@@ -218,19 +210,21 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
 
             output_type = transform.get("return_datatype_ref") or transform.get("return_native")
 
-            cards.append({
-                "id": transform.get("id"),
-                "category": "transform",
-                "name": transform.get("id"),
-                "description": transform.get("description", ""),
-                "metadata": {
-                    "impl": transform.get("impl"),
-                    "file_path": transform.get("file_path"),
-                    "input_type": param_info["input_type"],
-                    "output_type": output_type,
-                    "parameters": param_info["param_details"]
+            cards.append(
+                {
+                    "id": transform.get("id"),
+                    "category": "transform",
+                    "name": transform.get("id"),
+                    "description": transform.get("description", ""),
+                    "metadata": {
+                        "impl": transform.get("impl"),
+                        "file_path": transform.get("file_path"),
+                        "input_type": param_info["input_type"],
+                        "output_type": output_type,
+                        "parameters": param_info["param_details"],
+                    },
                 }
-            })
+            )
 
     # Process DAG edges
     dag = raw_data.get("dag", [])
@@ -239,34 +233,35 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
             from_node = edge.get("from", "start")
             to_node = edge.get("to", "end")
 
-            cards.append({
-                "id": f"dag_edge_{idx}_{from_node}_to_{to_node}",
-                "category": "dag",
-                "name": f"{from_node} → {to_node}",
-                "description": f"DAG edge from {from_node} to {to_node}",
-                "metadata": {
-                    "from": from_node,
-                    "to": to_node
+            cards.append(
+                {
+                    "id": f"dag_edge_{idx}_{from_node}_to_{to_node}",
+                    "category": "dag",
+                    "name": f"{from_node} → {to_node}",
+                    "description": f"DAG edge from {from_node} to {to_node}",
+                    "metadata": {"from": from_node, "to": to_node},
                 }
-            })
+            )
 
     # Process DAG stages
     dag_stages = raw_data.get("dag_stages", [])
     if isinstance(dag_stages, list):
         for stage in dag_stages:
-            cards.append({
-                "id": stage.get("stage_id"),
-                "category": "dag_stage",
-                "name": stage.get("stage_id"),
-                "description": stage.get("description", ""),
-                "metadata": {
-                    "selection_mode": stage.get("selection_mode"),
-                    "input_type": stage.get("input_type"),
-                    "output_type": stage.get("output_type"),
-                    "max_select": stage.get("max_select"),
-                    "candidates": [c.get("transform_id") for c in stage.get("candidates", [])]
+            cards.append(
+                {
+                    "id": stage.get("stage_id"),
+                    "category": "dag_stage",
+                    "name": stage.get("stage_id"),
+                    "description": stage.get("description", ""),
+                    "metadata": {
+                        "selection_mode": stage.get("selection_mode"),
+                        "input_type": stage.get("input_type"),
+                        "output_type": stage.get("output_type"),
+                        "max_select": stage.get("max_select"),
+                        "candidates": [c.get("transform_id") for c in stage.get("candidates", [])],
+                    },
                 }
-            })
+            )
 
     metadata = raw_data.get("meta", {})
 
@@ -274,9 +269,9 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
         "metadata": {
             "spec_name": metadata.get("name", spec_path.stem),
             "version": raw_data.get("version", "1"),
-            "description": metadata.get("description", "")
+            "description": metadata.get("description", ""),
         },
-        "cards": cards
+        "cards": cards,
     }
 
 
@@ -314,6 +309,7 @@ def main():
         except Exception as e:
             print(f"  ✗ Error: {e}")
             import traceback
+
             traceback.print_exc()
 
 
