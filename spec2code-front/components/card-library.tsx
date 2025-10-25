@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -192,6 +192,11 @@ export function CardLibrary() {
   const [dagStageGroups, setDagStageGroups] = useState<DagStageGroup[]>([])
   const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const cardLookup = useMemo(() => {
+    const map = new Map<string, CardDefinition>()
+    cardDefinitions.forEach((card) => map.set(`${card.source_spec}::${card.id}`, card))
+    return map
+  }, [cardDefinitions])
 
   // Load unified JSON on mount
   useEffect(() => {
@@ -304,18 +309,133 @@ export function CardLibrary() {
   const headingSubtitle = shouldShowDagStageGroups
     ? `${filteredDagStageGroups.length}個のDAGステージグループ`
     : `${filteredCards.length}個のカードが利用可能`
+  const getCardFromSummary = useCallback(
+    (summary: RelatedCardSummary | null): CardDefinition | null => {
+      if (!summary) return null
+      return cardLookup.get(`${summary.source_spec}::${summary.id}`) || null
+    },
+    [cardLookup],
+  )
 
-  const handleRelatedCardClick = (cardData: { id?: string; source_spec?: string } | null) => {
-    if (!cardData?.id || !cardData?.source_spec) return
-    const matchedCard = cardDefinitions.find(
-      (card) => card.id === cardData.id && card.source_spec === cardData.source_spec,
+  const handleCardSelect = useCallback(
+    (card: CardDefinition | null) => {
+      if (card) {
+        setSelectedCard(card)
+      }
+    },
+    [setSelectedCard],
+  )
+
+  const CardDetailLines = ({ card }: { card: CardDefinition }) => (
+    <div className="text-xs text-muted-foreground space-y-1">
+      <div className="mb-2">
+        <Badge variant="outline" className="text-xs">
+          {card.source_spec}
+        </Badge>
+      </div>
+      {card.category === "checks" && card.target_dtype && <div>対象型: {card.target_dtype}</div>}
+      {card.category === "dtype" && card.schema && <div>フィールド数: {Object.keys(card.schema).length}</div>}
+      {card.category === "example" && card.dtype && <div>データ型: {card.dtype}</div>}
+      {card.category === "transform" && (
+        <div>
+          {card.input_dtype} → {card.output_dtype}
+        </div>
+      )}
+      {(card.category === "dag" || card.category === "dag_stage") && card.selection_mode && (
+        <div>選択モード: {card.selection_mode}</div>
+      )}
+    </div>
+  )
+
+  const renderDagCard = (
+    card: CardDefinition | null,
+    {
+      label,
+      labelColor = "text-muted-foreground",
+      disableAfterFirst = false,
+      index = 0,
+      forceDisabled = false,
+    }: {
+      label?: string
+      labelColor?: string
+      disableAfterFirst?: boolean
+      index?: number
+      forceDisabled?: boolean
+    } = {},
+  ) => {
+    if (!card) return null
+    const isDisabled = forceDisabled || (disableAfterFirst && index > 0)
+    const isSelected = selectedCard?.id === card.id && selectedCard?.source_spec === card.source_spec
+
+    return (
+      <Card
+        key={`${card.source_spec}-${card.id}-${label || "card"}-${index}`}
+        className={`p-4 cursor-pointer transition-all hover:shadow-md ${
+          isSelected ? `border-${card.color}` : ""
+        } ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
+        onClick={() => {
+          if (!isDisabled) {
+            handleCardSelect(card)
+          }
+        }}
+        aria-disabled={isDisabled}
+      >
+        {label && <div className={`text-xs font-semibold ${labelColor} mb-2`}>{label}</div>}
+        <div className="flex items-start gap-3 mb-3">
+          <div className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}>
+            <card.icon className={`w-5 h-5 text-${card.color}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
+            <Badge variant="secondary" className="text-xs">
+              {card.category}
+            </Badge>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
+        <CardDetailLines card={card} />
+      </Card>
     )
-    if (matchedCard) {
-      setSelectedCard(matchedCard)
-      return
-    }
-    const fallback = convertJsonToCards({ cards: [cardData] })
-    if (fallback[0]) setSelectedCard(fallback[0])
+  }
+
+  const mapSummariesToCards = (
+    summaries: RelatedCardSummary[] | undefined,
+    {
+      label,
+      labelColor,
+      disableAfterFirst = false,
+    }: { label: string; labelColor: string; disableAfterFirst?: boolean },
+    seenCards?: Set<string>,
+  ) =>
+    (summaries || [])
+      .map((summary, index) => {
+        const card = getCardFromSummary(summary)
+        let isDuplicate = false
+        if (card && seenCards) {
+          const key = `${card.source_spec}::${card.id}`
+          isDuplicate = seenCards.has(key)
+          if (!isDuplicate) {
+            seenCards.add(key)
+          }
+        }
+        return renderDagCard(card, {
+          label,
+          labelColor,
+          disableAfterFirst,
+          index,
+          forceDisabled: isDuplicate,
+        })
+      })
+      .filter((element): element is React.ReactElement => Boolean(element))
+
+  const renderSummaryCard = (
+    summary: RelatedCardSummary | null,
+    options: { label: string; labelColor: string },
+    seenCards: Set<string>,
+  ) => {
+    const cards = mapSummariesToCards(summary ? [summary] : [], options, seenCards)
+    return cards[0] || null
   }
 
   if (isLoading) {
@@ -327,9 +447,9 @@ export function CardLibrary() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card flex-shrink-0">
         <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/">
@@ -368,7 +488,7 @@ export function CardLibrary() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Categories & Specs */}
-        <aside className="w-64 border-r border-border bg-card p-4 overflow-y-auto">
+        <aside className="w-64 border-r border-border bg-card p-4 overflow-y-auto flex-shrink-0">
           <h2 className="text-sm font-semibold text-foreground mb-4">Spec</h2>
 
           <div className="space-y-1 mb-6">
@@ -441,7 +561,7 @@ export function CardLibrary() {
         </aside>
 
         {/* Main - Card Grid or DAG Stage Groups */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 min-w-0 p-6 overflow-y-auto">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-foreground mb-2">{headingTitle}</h2>
             <p className="text-sm text-muted-foreground">{headingSubtitle}</p>
@@ -453,118 +573,91 @@ export function CardLibrary() {
               {filteredDagStageGroups.length === 0 ? (
                 <div className="text-sm text-muted-foreground">該当するDAGステージグループがありません。</div>
               ) : (
-                filteredDagStageGroups.map((group) => (
-                  <div key={`${group.spec_name}-${group.stage_id}`} className="border border-border rounded-lg p-6 bg-card">
-                    <div className="mb-4 space-y-1">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Badge variant="default">{group.spec_name}</Badge>
-                        <h3 className="text-lg font-bold text-foreground">{group.stage_id}</h3>
-                        <Badge variant="outline">{group.selection_mode || "N/A"}</Badge>
-                        {typeof group.max_select === "number" && (
-                          <span className="text-xs text-muted-foreground">最大選択数: {group.max_select}</span>
-                        )}
+                (() => {
+                  const globalSeenCards = new Set<string>()
+                  return filteredDagStageGroups.map((group) => {
+                    const stageCard = renderSummaryCard(
+                      group.related_cards.stage_card,
+                      {
+                        label: "Stage",
+                        labelColor: "text-blue-600",
+                      },
+                      globalSeenCards,
+                    )
+                    const inputTypeCard = renderSummaryCard(
+                      group.related_cards.input_dtype_card,
+                      {
+                        label: "Input Type",
+                        labelColor: "text-emerald-600",
+                      },
+                      globalSeenCards,
+                    )
+                    const outputTypeCard = renderSummaryCard(
+                      group.related_cards.output_dtype_card,
+                      {
+                        label: "Output Type",
+                        labelColor: "text-indigo-600",
+                      },
+                      globalSeenCards,
+                    )
+
+                    const transformCards = mapSummariesToCards(
+                      group.related_cards.transform_cards,
+                      {
+                        label: "Transform",
+                        labelColor: "text-purple-600",
+                        disableAfterFirst: true,
+                      },
+                      globalSeenCards,
+                    )
+                  const inputExampleCards = mapSummariesToCards(
+                    group.related_cards.input_example_cards,
+                    {
+                      label: "Input Example",
+                      labelColor: "text-orange-600",
+                      disableAfterFirst: true,
+                    },
+                    globalSeenCards,
+                  )
+                  const outputCheckCards = mapSummariesToCards(
+                    group.related_cards.output_check_cards,
+                    {
+                      label: "Output Check",
+                      labelColor: "text-pink-600",
+                      disableAfterFirst: true,
+                    },
+                    globalSeenCards,
+                  )
+
+                    return (
+                      <div key={`${group.spec_name}-${group.stage_id}`} className="border border-border rounded-lg p-6 bg-card">
+                      <div className="mb-4 space-y-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Badge variant="default">{group.spec_name}</Badge>
+                          <h3 className="text-lg font-bold text-foreground">{group.stage_id}</h3>
+                          <Badge variant="outline">{group.selection_mode || "N/A"}</Badge>
+                          {typeof group.max_select === "number" && (
+                            <span className="text-xs text-muted-foreground">最大選択数: {group.max_select}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{group.stage_description}</p>
+                        <div className="text-xs text-muted-foreground">
+                          {group.input_type} → {group.output_type}
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">{group.stage_description}</p>
-                      <div className="text-xs text-muted-foreground">
-                        {group.input_type} → {group.output_type}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {stageCard}
+                        {inputTypeCard}
+                        {outputTypeCard}
+                        {transformCards}
+                        {inputExampleCards}
+                        {outputCheckCards}
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {group.related_cards.stage_card && (
-                        <Card
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(group.related_cards.stage_card)}
-                        >
-                          <div className="text-xs font-semibold text-blue-600 mb-2">Stage</div>
-                          <div className="text-sm font-medium">{group.related_cards.stage_card.name}</div>
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {group.related_cards.stage_card.description}
-                          </p>
-                        </Card>
-                      )}
-
-                      {group.related_cards.input_dtype_card && (
-                        <Card
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(group.related_cards.input_dtype_card)}
-                        >
-                          <div className="text-xs font-semibold text-emerald-600 mb-2">Input Type</div>
-                          <div className="text-sm font-medium">{group.related_cards.input_dtype_card.name}</div>
-                        </Card>
-                      )}
-
-                      {group.related_cards.output_dtype_card && (
-                        <Card
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(group.related_cards.output_dtype_card)}
-                        >
-                          <div className="text-xs font-semibold text-indigo-600 mb-2">Output Type</div>
-                          <div className="text-sm font-medium">{group.related_cards.output_dtype_card.name}</div>
-                        </Card>
-                      )}
-
-                      {group.related_cards.transform_cards.map((card) => (
-                        <Card
-                          key={card.id}
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(card)}
-                        >
-                          <div className="text-xs font-semibold text-purple-600 mb-2">Transform</div>
-                          <div className="text-sm font-medium">{card.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {card.metadata?.input_type} → {card.metadata?.output_type}
-                          </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{card.description}</p>
-                        </Card>
-                      ))}
-
-                      {group.related_cards.input_example_cards.map((card) => (
-                        <Card
-                          key={card.id}
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(card)}
-                        >
-                          <div className="text-xs font-semibold text-orange-600 mb-2">Input Example</div>
-                          <div className="text-sm font-medium">{card.name}</div>
-                        </Card>
-                      ))}
-
-                      {group.related_cards.output_example_cards.map((card) => (
-                        <Card
-                          key={card.id}
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(card)}
-                        >
-                          <div className="text-xs font-semibold text-teal-600 mb-2">Output Example</div>
-                          <div className="text-sm font-medium">{card.name}</div>
-                        </Card>
-                      ))}
-
-                      {group.related_cards.input_check_cards.map((card) => (
-                        <Card
-                          key={card.id}
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(card)}
-                        >
-                          <div className="text-xs font-semibold text-red-600 mb-2">Input Check</div>
-                          <div className="text-sm font-medium">{card.name}</div>
-                        </Card>
-                      ))}
-
-                      {group.related_cards.output_check_cards.map((card) => (
-                        <Card
-                          key={card.id}
-                          className="p-3 bg-background cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleRelatedCardClick(card)}
-                        >
-                          <div className="text-xs font-semibold text-pink-600 mb-2">Output Check</div>
-                          <div className="text-sm font-medium">{card.name}</div>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                ))
+                      </div>
+                    )
+                  })
+                })()
               )}
             </div>
           ) : (
@@ -578,7 +671,7 @@ export function CardLibrary() {
                       ? `border-${card.color}`
                       : ""
                   }`}
-                  onClick={() => setSelectedCard(card)}
+                  onClick={() => handleCardSelect(card)}
                 >
                   <div className="flex items-start gap-3 mb-3">
                     <div
@@ -596,26 +689,7 @@ export function CardLibrary() {
 
                   <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
 
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <div className="mb-2">
-                      <Badge variant="outline" className="text-xs">
-                        {card.source_spec}
-                      </Badge>
-                    </div>
-                    {card.category === "checks" && card.target_dtype && <div>対象型: {card.target_dtype}</div>}
-                    {card.category === "dtype" && card.schema && (
-                      <div>フィールド数: {Object.keys(card.schema).length}</div>
-                    )}
-                    {card.category === "example" && card.dtype && <div>データ型: {card.dtype}</div>}
-                    {card.category === "transform" && (
-                      <div>
-                        {card.input_dtype} → {card.output_dtype}
-                      </div>
-                    )}
-                    {(card.category === "dag" || card.category === "dag_stage") && card.selection_mode && (
-                      <div>選択モード: {card.selection_mode}</div>
-                    )}
-                  </div>
+                  <CardDetailLines card={card} />
                 </Card>
               ))}
             </div>
@@ -623,7 +697,7 @@ export function CardLibrary() {
         </main>
 
         {/* Details Panel */}
-        <aside className="w-96 border-l border-border bg-card p-6 overflow-y-auto">
+        <aside className="w-96 border-l border-border bg-card p-6 overflow-y-auto flex-shrink-0">
           {selectedCard ? (
             <>
               <div className="flex items-start gap-4 mb-6">
