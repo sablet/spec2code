@@ -160,7 +160,7 @@ class Spec2CodeCLI:
             sys.exit(1)
 
     def export_cards(self, *specs: str, output: str) -> None:
-        """YAML仕様をJSONカードにエクスポート
+        """YAML仕様をJSONカードにエクスポート（統合JSONのみ）
 
         Args:
             *specs: YAML spec files
@@ -176,6 +176,9 @@ class Spec2CodeCLI:
         output_dir = Path(output)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        all_cards = []
+        all_specs_metadata = []
+
         for spec_path_str in specs:
             spec_path = Path(spec_path_str)
 
@@ -187,17 +190,30 @@ class Spec2CodeCLI:
 
             try:
                 cards_data = export_spec_to_cards(spec_path)
+                print(f"  → Processed {len(cards_data['cards'])} cards from {spec_path.name}")
 
-                output_path = output_dir / f"{spec_path.stem}.json"
-                with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(cards_data, f, indent=2, ensure_ascii=False)
-
-                print(f"  → Exported {len(cards_data['cards'])} cards to {output_path}")
+                # Collect for unified JSON
+                all_cards.extend(cards_data["cards"])
+                all_specs_metadata.append(
+                    {
+                        "source_file": spec_path.name,
+                        **cards_data["metadata"],
+                    }
+                )
 
             except Exception as e:
                 print(f"  ✗ Error: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # Export unified JSON only
+        unified_output = output_dir / "all-cards.json"
+        unified_data = {"specs": all_specs_metadata, "cards": all_cards}
+
+        with open(unified_output, "w", encoding="utf-8") as f:
+            json.dump(unified_data, f, indent=2, ensure_ascii=False)
+
+        print(f"\n✅ Unified JSON: {len(all_cards)} cards from {len(all_specs_metadata)} specs → {unified_output}")
 
 
 def main() -> None:

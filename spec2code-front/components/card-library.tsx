@@ -15,6 +15,7 @@ interface CardDefinition {
   name: string
   category: string
   description: string
+  source_spec: string
   icon: any
   color: string
   // checks用
@@ -37,12 +38,20 @@ interface CardDefinition {
   candidates?: string[]
 }
 
+interface SpecMetadata {
+  source_file: string
+  spec_name: string
+  version: string
+  description: string
+}
+
 const defaultCards: CardDefinition[] = [
   {
     id: "check_example",
     name: "check_example",
     category: "checks",
     description: "Example check function for data validation",
+    source_spec: "default",
     icon: CheckCircle,
     color: "chart-1",
     target_dtype: "ExampleFrame",
@@ -53,6 +62,7 @@ const defaultCards: CardDefinition[] = [
     name: "ExampleFrame",
     category: "dtype",
     description: "Example data type definition",
+    source_spec: "default",
     icon: FileType,
     color: "chart-2",
     schema: { id: "int", name: "str", value: "float" },
@@ -64,6 +74,7 @@ const defaultCards: CardDefinition[] = [
     name: "example_data",
     category: "example",
     description: "Sample data for ExampleFrame",
+    source_spec: "default",
     icon: FileText,
     color: "chart-3",
     dtype: "ExampleFrame",
@@ -74,6 +85,7 @@ const defaultCards: CardDefinition[] = [
     name: "transform_example",
     category: "transform",
     description: "Example transformation function",
+    source_spec: "default",
     icon: Shuffle,
     color: "chart-4",
     params: { threshold: 0.5, mode: "strict" },
@@ -86,6 +98,7 @@ const defaultCards: CardDefinition[] = [
     name: "stage_1",
     category: "dag",
     description: "First stage of the pipeline",
+    source_spec: "default",
     icon: Workflow,
     color: "chart-5",
     stage_id: "stage_1",
@@ -115,6 +128,7 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
       name: card.name,
       category: card.category,
       description: card.description,
+      source_spec: card.source_spec || "unknown",
       icon,
       color: `chart-${(cards.length % 5) + 1}` as any,
       // checks
@@ -143,17 +157,20 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
 export function CardLibrary() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
+  const [selectedSpec, setSelectedSpec] = useState<string>("All")
   const [cardDefinitions, setCardDefinitions] = useState<CardDefinition[]>([])
+  const [specsMetadata, setSpecsMetadata] = useState<SpecMetadata[]>([])
   const [selectedCard, setSelectedCard] = useState<CardDefinition | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load default JSON on mount
+  // Load unified JSON on mount
   useEffect(() => {
-    fetch("/cards/algo-trade-pipeline.json")
+    fetch("/cards/all-cards.json")
       .then((res) => res.json())
       .then((data) => {
         const cards = convertJsonToCards(data)
         setCardDefinitions(cards)
+        setSpecsMetadata(data.specs || [])
         if (cards.length > 0) {
           setSelectedCard(cards[0])
         }
@@ -189,13 +206,15 @@ export function CardLibrary() {
   }
 
   const categories = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.category)))]
+  const specs = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.source_spec)))]
 
   const filteredCards = cardDefinitions.filter((card) => {
     const matchesSearch =
       card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       card.description.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesCategory = selectedCategory === "All" || card.category === selectedCategory
-    return matchesSearch && matchesCategory
+    const matchesSpec = selectedSpec === "All" || card.source_spec === selectedSpec
+    return matchesSearch && matchesCategory && matchesSpec
   })
 
   if (isLoading) {
@@ -247,29 +266,54 @@ export function CardLibrary() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Categories */}
+        {/* Sidebar - Categories & Specs */}
         <aside className="w-64 border-r border-border bg-card p-4 overflow-y-auto">
-          <h2 className="text-sm font-semibold text-foreground mb-4">カテゴリ</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Spec</h2>
 
-          <div className="space-y-1">
-            {categories.map((category) => (
+          <div className="space-y-1 mb-6">
+            {specs.map((spec) => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
+                key={spec}
+                onClick={() => setSelectedSpec(spec)}
                 className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                  selectedCategory === category
+                  selectedSpec === spec
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 }`}
               >
-                {category}
+                <div className="truncate">{spec}</div>
                 <span className="float-right text-xs">
-                  {category === "All"
+                  {spec === "All"
                     ? cardDefinitions.length
-                    : cardDefinitions.filter((c) => c.category === category).length}
+                    : cardDefinitions.filter((c) => c.source_spec === spec).length}
                 </span>
               </button>
             ))}
+          </div>
+
+          <div className="pt-6 border-t border-border">
+            <h2 className="text-sm font-semibold text-foreground mb-4">カテゴリ</h2>
+
+            <div className="space-y-1">
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                    selectedCategory === category
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                >
+                  {category}
+                  <span className="float-right text-xs">
+                    {category === "All"
+                      ? cardDefinitions.length
+                      : cardDefinitions.filter((c) => c.category === category).length}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6 pt-6 border-t border-border">
@@ -278,6 +322,10 @@ export function CardLibrary() {
               <div className="flex justify-between">
                 <span>総カード数</span>
                 <span className="text-foreground font-medium">{cardDefinitions.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Spec数</span>
+                <span className="text-foreground font-medium">{specs.length - 1}</span>
               </div>
               <div className="flex justify-between">
                 <span>カテゴリ数</span>
@@ -291,7 +339,13 @@ export function CardLibrary() {
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-foreground mb-2">
-              {selectedCategory === "All" ? "すべてのカード" : `${selectedCategory}カード`}
+              {selectedSpec !== "All" && selectedCategory !== "All"
+                ? `${selectedSpec} - ${selectedCategory}カード`
+                : selectedSpec !== "All"
+                  ? `${selectedSpec}`
+                  : selectedCategory !== "All"
+                    ? `${selectedCategory}カード`
+                    : "すべてのカード"}
             </h2>
             <p className="text-sm text-muted-foreground">{filteredCards.length}個のカードが利用可能</p>
           </div>
@@ -299,9 +353,11 @@ export function CardLibrary() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCards.map((card) => (
               <Card
-                key={card.id}
+                key={`${card.source_spec}-${card.id}`}
                 className={`p-4 cursor-pointer transition-all hover:shadow-lg ${
-                  selectedCard?.id === card.id ? `border-${card.color}` : ""
+                  selectedCard?.id === card.id && selectedCard?.source_spec === card.source_spec
+                    ? `border-${card.color}`
+                    : ""
                 }`}
                 onClick={() => setSelectedCard(card)}
               >
@@ -322,6 +378,11 @@ export function CardLibrary() {
                 <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
 
                 <div className="text-xs text-muted-foreground space-y-1">
+                  <div className="mb-2">
+                    <Badge variant="outline" className="text-xs">
+                      {card.source_spec}
+                    </Badge>
+                  </div>
                   {card.category === "checks" && card.target_dtype && <div>対象型: {card.target_dtype}</div>}
                   {card.category === "dtype" && card.schema && (
                     <div>フィールド数: {Object.keys(card.schema).length}</div>
@@ -351,7 +412,10 @@ export function CardLibrary() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-foreground mb-1">{selectedCard.name}</h2>
-                  <Badge variant="secondary">{selectedCard.category}</Badge>
+                  <div className="flex gap-2">
+                    <Badge variant="secondary">{selectedCard.category}</Badge>
+                    <Badge variant="outline">{selectedCard.source_spec}</Badge>
+                  </div>
                 </div>
               </div>
 

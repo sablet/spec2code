@@ -162,6 +162,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
                     "category": "checks",
                     "name": check.get("id"),
                     "description": check.get("description", ""),
+                    "source_spec": spec_path.stem,
                     "metadata": {"impl": check.get("impl"), "file_path": check.get("file_path")},
                 }
             )
@@ -178,6 +179,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
                     "category": "dtype",
                     "name": dtype.get("id"),
                     "description": f"[{type_info['type_category']}] {dtype.get('description', '')}",
+                    "source_spec": spec_path.stem,
                     "metadata": {
                         "type_category": type_info["type_category"],
                         "type_details": type_info["type_details"],
@@ -197,6 +199,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
                     "category": "example",
                     "name": example.get("id"),
                     "description": example.get("description", ""),
+                    "source_spec": spec_path.stem,
                     "metadata": {"input": example.get("input"), "expected": example.get("expected")},
                 }
             )
@@ -216,6 +219,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
                     "category": "transform",
                     "name": transform.get("id"),
                     "description": transform.get("description", ""),
+                    "source_spec": spec_path.stem,
                     "metadata": {
                         "impl": transform.get("impl"),
                         "file_path": transform.get("file_path"),
@@ -239,6 +243,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
                     "category": "dag",
                     "name": f"{from_node} → {to_node}",
                     "description": f"DAG edge from {from_node} to {to_node}",
+                    "source_spec": spec_path.stem,
                     "metadata": {"from": from_node, "to": to_node},
                 }
             )
@@ -253,6 +258,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
                     "category": "dag_stage",
                     "name": stage.get("stage_id"),
                     "description": stage.get("description", ""),
+                    "source_spec": spec_path.stem,
                     "metadata": {
                         "selection_mode": stage.get("selection_mode"),
                         "input_type": stage.get("input_type"),
