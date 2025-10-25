@@ -1,4 +1,4 @@
-.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree setup duplication lint typecheck complexity dev-front build-front install-front
+.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree setup duplication lint typecheck complexity front-run front-build front-install
 
 # UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 # export UV_CACHE_DIR
@@ -39,9 +39,9 @@ help: ## ヘルプを表示
 	@echo "  make validate-all                     全specで整合性検証"
 	@echo ""
 	@echo "フロントエンド開発:"
-	@echo "  make dev-front                        フロントエンド開発サーバー起動"
-	@echo "  make build-front                      フロントエンドビルド"
-	@echo "  make install-front                    フロントエンド依存関係インストール"
+	@echo "  make front-run                        フロントエンド開発サーバー起動"
+	@echo "  make front-build                      フロントエンドビルド"
+	@echo "  make front-install                    フロントエンド依存関係インストール"
 	@echo ""
 	@echo "例:"
 	@echo "  make gen                              デフォルト仕様でスケルトン生成"
@@ -144,11 +144,11 @@ setup: ## 開発環境セットアップ
 	uv sync
 
 # フロントエンド開発
-dev-front: ## フロントエンド開発サーバー起動
+front-run: ## フロントエンド開発サーバー起動
 	cd spec2code-front && npm run dev
 
-build-front: ## フロントエンドビルド
+front-build: ## フロントエンドビルド
 	cd spec2code-front && npm run build
 
-install-front: ## フロントエンド依存関係インストール
-	cd spec2code-front && npm install
+front-install: ## フロントエンド依存関係インストール
+	cd spec2code-front && npm install --legacy-peer-deps
