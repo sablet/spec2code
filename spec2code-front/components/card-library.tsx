@@ -163,6 +163,10 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
   return cards
 }
 
+function getCardKey(card: { id?: string; source_spec?: string } | null) {
+  return card?.id && card?.source_spec ? `${card.source_spec}::${card.id}` : null
+}
+
 interface DagStageGroup {
   spec_name: string
   stage_id: string
@@ -294,6 +298,44 @@ export function CardLibrary() {
     return matchesSpec && matchesSearch
   })
 
+  const referencedDagCardKeys = useMemo(() => {
+    const keys = new Set<string>()
+    const addKey = (card: RelatedCardSummary | null) => {
+      const key = getCardKey(card)
+      if (key) keys.add(key)
+    }
+
+    dagStageGroups.forEach((group) => {
+      addKey(group.related_cards.stage_card)
+      addKey(group.related_cards.input_dtype_card)
+      addKey(group.related_cards.output_dtype_card)
+      group.related_cards.transform_cards.forEach(addKey)
+      group.related_cards.input_example_cards.forEach(addKey)
+      group.related_cards.output_example_cards.forEach(addKey)
+      group.related_cards.input_check_cards.forEach(addKey)
+      group.related_cards.output_check_cards.forEach(addKey)
+    })
+
+    return keys
+  }, [dagStageGroups])
+
+  const ungroupedCards = useMemo(
+    () =>
+      cardDefinitions.filter((card) => {
+        const key = getCardKey(card)
+        return !key || !referencedDagCardKeys.has(key)
+      }),
+    [cardDefinitions, referencedDagCardKeys],
+  )
+
+  const filteredUngroupedCards = ungroupedCards.filter((card) => {
+    const matchesSearch =
+      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      card.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesSpec = selectedSpec === "All" || card.source_spec === selectedSpec
+    return matchesSearch && matchesSpec
+  })
+
   const shouldShowDagStageGroups = selectedCategory === "All" && dagStageGroups.length > 0
   const headingTitle = shouldShowDagStageGroups
     ? selectedSpec === "All"
@@ -306,13 +348,18 @@ export function CardLibrary() {
             : selectedCategory !== "All"
                 ? `${selectedCategory}カード`
                 : "すべてのカード"
+  const ungroupedSubtitle =
+    shouldShowDagStageGroups && filteredUngroupedCards.length > 0
+      ? ` ／ 未紐付けカード: ${filteredUngroupedCards.length}件`
+      : ""
   const headingSubtitle = shouldShowDagStageGroups
-    ? `${filteredDagStageGroups.length}個のDAGステージグループ`
+    ? `${filteredDagStageGroups.length}個のDAGステージグループ${ungroupedSubtitle}`
     : `${filteredCards.length}個のカードが利用可能`
   const getCardFromSummary = useCallback(
     (summary: RelatedCardSummary | null): CardDefinition | null => {
       if (!summary) return null
-      return cardLookup.get(`${summary.source_spec}::${summary.id}`) || null
+      const key = getCardKey(summary)
+      return key ? cardLookup.get(key) || null : null
     },
     [cardLookup],
   )
@@ -570,6 +617,44 @@ export function CardLibrary() {
           {shouldShowDagStageGroups ? (
             // DAG Stage Groups View
             <div className="space-y-8">
+              {filteredUngroupedCards.length > 0 && (
+                <div className="border border-dashed border-border rounded-lg p-6 bg-card/60">
+                  <div className="mb-4 space-y-1">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">未紐付けカード</Badge>
+                      <span className="text-sm text-muted-foreground">{filteredUngroupedCards.length}件</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">DAGステージに紐付いていないカードの一覧です。</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredUngroupedCards.map((card) => (
+                      <Card
+                        key={`${card.source_spec}-${card.id}-ungrouped`}
+                        className={`p-4 cursor-pointer transition-all hover:shadow-md ${
+                          selectedCard?.id === card.id && selectedCard?.source_spec === card.source_spec
+                            ? `border-${card.color}`
+                            : ""
+                        }`}
+                        onClick={() => handleCardSelect(card)}
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}>
+                            <card.icon className={`w-5 h-5 text-${card.color}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
+                            <Badge variant="secondary" className="text-xs">
+                              {card.category}
+                            </Badge>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
+                        <CardDetailLines card={card} />
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
               {filteredDagStageGroups.length === 0 ? (
                 <div className="text-sm text-muted-foreground">該当するDAGステージグループがありません。</div>
               ) : (
