@@ -208,6 +208,25 @@ export function CardLibrary() {
   const categories = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.category)))]
   const specs = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.source_spec)))]
 
+  // For category counts: apply spec and search filters only (not category filter)
+  const cardsFilteredBySpecAndSearch = cardDefinitions.filter((card) => {
+    const matchesSearch =
+      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      card.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesSpec = selectedSpec === "All" || card.source_spec === selectedSpec
+    return matchesSearch && matchesSpec
+  })
+
+  // For spec counts: apply category and search filters only (not spec filter)
+  const cardsFilteredByCategoryAndSearch = cardDefinitions.filter((card) => {
+    const matchesSearch =
+      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      card.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesCategory = selectedCategory === "All" || card.category === selectedCategory
+    return matchesSearch && matchesCategory
+  })
+
+  // Final filtered cards: apply all filters
   const filteredCards = cardDefinitions.filter((card) => {
     const matchesSearch =
       card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -284,8 +303,8 @@ export function CardLibrary() {
                 <div className="truncate">{spec}</div>
                 <span className="float-right text-xs">
                   {spec === "All"
-                    ? cardDefinitions.length
-                    : cardDefinitions.filter((c) => c.source_spec === spec).length}
+                    ? cardsFilteredByCategoryAndSearch.length
+                    : cardsFilteredByCategoryAndSearch.filter((c) => c.source_spec === spec).length}
                 </span>
               </button>
             ))}
@@ -308,8 +327,8 @@ export function CardLibrary() {
                   {category}
                   <span className="float-right text-xs">
                     {category === "All"
-                      ? cardDefinitions.length
-                      : cardDefinitions.filter((c) => c.category === category).length}
+                      ? cardsFilteredBySpecAndSearch.length
+                      : cardsFilteredBySpecAndSearch.filter((c) => c.category === category).length}
                   </span>
                 </button>
               ))}
@@ -321,15 +340,19 @@ export function CardLibrary() {
             <div className="space-y-2 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>総カード数</span>
-                <span className="text-foreground font-medium">{cardDefinitions.length}</span>
+                <span className="text-foreground font-medium">{filteredCards.length}</span>
               </div>
               <div className="flex justify-between">
                 <span>Spec数</span>
-                <span className="text-foreground font-medium">{specs.length - 1}</span>
+                <span className="text-foreground font-medium">
+                  {new Set(filteredCards.map((c) => c.source_spec)).size}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>カテゴリ数</span>
-                <span className="text-foreground font-medium">{categories.length - 1}</span>
+                <span className="text-foreground font-medium">
+                  {new Set(filteredCards.map((c) => c.category)).size}
+                </span>
               </div>
             </div>
           </div>
