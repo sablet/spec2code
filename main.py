@@ -178,6 +178,7 @@ class Spec2CodeCLI:
 
         all_cards = []
         all_specs_metadata = []
+        all_dag_stage_groups = []
 
         for spec_path_str in specs:
             spec_path = Path(spec_path_str)
@@ -192,6 +193,10 @@ class Spec2CodeCLI:
                 cards_data = export_spec_to_cards(spec_path)
                 print(f"  → Processed {len(cards_data['cards'])} cards from {spec_path.name}")
 
+                dag_groups = cards_data.get("dag_stage_groups", [])
+                if dag_groups:
+                    print(f"  → Found {len(dag_groups)} DAG stage groups")
+
                 # Collect for unified JSON
                 all_cards.extend(cards_data["cards"])
                 all_specs_metadata.append(
@@ -200,6 +205,7 @@ class Spec2CodeCLI:
                         **cards_data["metadata"],
                     }
                 )
+                all_dag_stage_groups.extend(dag_groups)
 
             except Exception as e:
                 print(f"  ✗ Error: {e}")
@@ -208,12 +214,16 @@ class Spec2CodeCLI:
 
         # Export unified JSON only
         unified_output = output_dir / "all-cards.json"
-        unified_data = {"specs": all_specs_metadata, "cards": all_cards}
+        unified_data = {
+            "specs": all_specs_metadata,
+            "cards": all_cards,
+            "dag_stage_groups": all_dag_stage_groups
+        }
 
         with open(unified_output, "w", encoding="utf-8") as f:
             json.dump(unified_data, f, indent=2, ensure_ascii=False)
 
-        print(f"\n✅ Unified JSON: {len(all_cards)} cards from {len(all_specs_metadata)} specs → {unified_output}")
+        print(f"\n✅ Unified JSON: {len(all_cards)} cards, {len(all_dag_stage_groups)} DAG stage groups from {len(all_specs_metadata)} specs → {unified_output}")
 
 
 def main() -> None:

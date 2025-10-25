@@ -127,6 +127,116 @@ def normalize_transform_params(params: list[dict[str, Any]]) -> dict[str, Any]:
     return {"input_type": input_type, "param_details": param_details}
 
 
+def build_dag_stage_groups(spec_path: Path, raw_data: dict[str, Any], cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Build dag_stage_groups: each group contains related cards for a stage
+
+    Returns:
+        List of groups, each containing:
+        - stage metadata (spec_name, stage_id, input/output types, etc.)
+        - related_cards: stage, input_dtype, output_dtype, transforms, examples, checks
+    """
+    dag_stages = raw_data.get("dag_stages", [])
+    if not isinstance(dag_stages, list) or len(dag_stages) == 0:
+        return []
+
+    groups = []
+    spec_name = spec_path.stem
+
+    # Create card lookup by id and category
+    card_map = {}
+    for card in cards:
+        key = (card["category"], card["id"], card["source_spec"])
+        card_map[key] = card
+
+    # Create dtype lookup for check_ids and example_ids
+    dtype_map = {}
+    for card in cards:
+        if card["category"] == "dtype":
+            dtype_map[card["id"]] = card
+
+    for stage in dag_stages:
+        stage_id = stage.get("stage_id")
+        input_type = stage.get("input_type")
+        output_type = stage.get("output_type")
+        selection_mode = stage.get("selection_mode")
+        max_select = stage.get("max_select")
+        description = stage.get("description", "")
+
+        # Find related cards
+        stage_card = card_map.get(("dag_stage", stage_id, spec_name))
+        input_dtype_card = card_map.get(("dtype", input_type, spec_name))
+        output_dtype_card = card_map.get(("dtype", output_type, spec_name))
+
+        # Find transforms with matching input/output types
+        transform_cards = []
+        for card in cards:
+            if card["category"] == "transform" and card["source_spec"] == spec_name:
+                meta = card.get("metadata", {})
+                if meta.get("input_type") == input_type and meta.get("output_type") == output_type:
+                    transform_cards.append(card)
+
+        # Find examples for input/output dtypes
+        input_example_cards = []
+        output_example_cards = []
+
+        if input_dtype_card:
+            input_example_ids = input_dtype_card.get("metadata", {}).get("example_ids", [])
+            for ex_id in input_example_ids:
+                ex_card = card_map.get(("example", ex_id, spec_name))
+                if ex_card:
+                    input_example_cards.append(ex_card)
+
+        if output_dtype_card:
+            output_example_ids = output_dtype_card.get("metadata", {}).get("example_ids", [])
+            for ex_id in output_example_ids:
+                ex_card = card_map.get(("example", ex_id, spec_name))
+                if ex_card:
+                    output_example_cards.append(ex_card)
+
+        # Find checks for input/output dtypes
+        input_check_cards = []
+        output_check_cards = []
+
+        if input_dtype_card:
+            input_check_ids = input_dtype_card.get("metadata", {}).get("check_ids", [])
+            for chk_id in input_check_ids:
+                chk_card = card_map.get(("checks", chk_id, spec_name))
+                if chk_card:
+                    input_check_cards.append(chk_card)
+
+        if output_dtype_card:
+            output_check_ids = output_dtype_card.get("metadata", {}).get("check_ids", [])
+            for chk_id in output_check_ids:
+                chk_card = card_map.get(("checks", chk_id, spec_name))
+                if chk_card:
+                    output_check_cards.append(chk_card)
+
+        group = {
+            "spec_name": spec_name,
+            "stage_id": stage_id,
+            "stage_description": description,
+            "input_type": input_type,
+            "output_type": output_type,
+            "selection_mode": selection_mode,
+            "max_select": max_select,
+            "related_cards": {
+                "stage_card": stage_card,
+                "input_dtype_card": input_dtype_card,
+                "output_dtype_card": output_dtype_card,
+                "transform_cards": transform_cards,
+                "input_example_cards": input_example_cards,
+                "output_example_cards": output_example_cards,
+                "input_check_cards": input_check_cards,
+                "output_check_cards": output_check_cards,
+            }
+        }
+
+        groups.append(group)
+
+    return groups
+
+
 def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
     """
     Export YAML spec to normalized card JSON
@@ -134,7 +244,8 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
     Returns:
         {
             "metadata": {"spec_name": "...", "version": "..."},
-            "cards": [...]
+            "cards": [...],
+            "dag_stage_groups": [...]
         }
     """
 
@@ -271,6 +382,9 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
 
     metadata = raw_data.get("meta", {})
 
+    # Build dag_stage_groups
+    dag_stage_groups = build_dag_stage_groups(spec_path, raw_data, cards)
+
     return {
         "metadata": {
             "spec_name": metadata.get("name", spec_path.stem),
@@ -278,6 +392,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
             "description": metadata.get("description", ""),
         },
         "cards": cards,
+        "dag_stage_groups": dag_stage_groups,
     }
 
 
