@@ -375,18 +375,8 @@ def _infer_default_value_for_param(param: Parameter) -> Any:  # noqa: ANN401
     return None
 
 
-def _build_default_stage_config(spec: Spec, stage: DAGStage) -> dict[str, Any] | None:
-    """Build default config for a single DAG stage."""
-    if stage.selection_mode == "single":
-        return None
-
-    if not stage.default_transform_id:
-        return None
-
-    transform = next((t for t in spec.transforms if t.id == stage.default_transform_id), None)
-    if not transform:
-        return None
-
+def _collect_transform_params(transform: Transform) -> dict[str, Any]:
+    """Collect default or inferred parameters for a transform (excluding first param)."""
     params: dict[str, Any] = {}
     for idx, param in enumerate(transform.parameters):
         if idx == 0:
@@ -402,7 +392,21 @@ def _build_default_stage_config(spec: Spec, stage: DAGStage) -> dict[str, Any] |
             if inferred_value is not None:
                 params[param.name] = inferred_value
 
-    selection = {"transform_id": transform.id}
+    return params
+
+
+def _build_default_stage_config(spec: Spec, stage: DAGStage) -> dict[str, Any] | None:
+    """Build default config for a single DAG stage."""
+    if stage.selection_mode == "single" or not stage.default_transform_id:
+        return None
+
+    transform = next((t for t in spec.transforms if t.id == stage.default_transform_id), None)
+    if not transform:
+        return None
+
+    params = _collect_transform_params(transform)
+
+    selection: dict[str, Any] = {"transform_id": transform.id}
     if params:
         selection["params"] = params
 
@@ -1720,6 +1724,55 @@ class Engine:
 
     # ==================== Unlinked item detection (warning only) ====================
 
+    def _collect_stage_references(self: "Engine") -> tuple[set[str], set[str]]:
+        """Collect transforms and datatypes directly referenced by stages"""
+        referenced_transforms: set[str] = set()
+        referenced_dtypes: set[str] = set()
+
+        for stage in self.spec.dag_stages:
+            if stage.input_type:
+                referenced_dtypes.add(stage.input_type)
+            if stage.output_type:
+                referenced_dtypes.add(stage.output_type)
+            for tid in stage.candidates:
+                if tid:
+                    referenced_transforms.add(tid)
+
+        return referenced_transforms, referenced_dtypes
+
+    def _collect_transform_datatypes(self: "Engine", transform_ids: set[str]) -> set[str]:
+        """Collect datatypes referenced by transforms (input/return types)"""
+        transform_by_id = {t.id: t for t in self.spec.transforms}
+        referenced_dtypes: set[str] = set()
+
+        for tid in transform_ids:
+            transform = transform_by_id.get(tid)
+            if not transform:
+                continue
+            # Input datatype from first parameter (if any)
+            if transform.parameters and transform.parameters[0].datatype_ref:
+                referenced_dtypes.add(transform.parameters[0].datatype_ref)
+            # Return datatype
+            if transform.return_datatype_ref:
+                referenced_dtypes.add(transform.return_datatype_ref)
+
+        return referenced_dtypes
+
+    def _collect_datatype_references(self: "Engine", dtype_ids: set[str]) -> tuple[set[str], set[str]]:
+        """Collect examples and checks attached to datatypes"""
+        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
+        referenced_examples: set[str] = set()
+        referenced_checks: set[str] = set()
+
+        for dtype_id in dtype_ids:
+            dtype = dtype_by_id.get(dtype_id)
+            if not dtype:
+                continue
+            referenced_examples.update(dtype.example_ids)
+            referenced_checks.update(dtype.check_ids)
+
+        return referenced_examples, referenced_checks
+
     def _detect_unlinked_items(self: "Engine") -> dict[str, set[str]]:
         """Detect unlinked items similar to frontend CardLibrary 'ungrouped' view.
 
@@ -1735,49 +1788,16 @@ class Engine:
         # Ensure candidates are available to mirror frontend grouping
         _auto_collect_stage_candidates(self.spec)
 
+        # Collect all items
         all_transforms = {t.id for t in self.spec.transforms}
         all_dtypes = {dt.id for dt in self.spec.datatypes}
         all_examples = {ex.id for ex in self.spec.examples}
         all_checks = {ck.id for ck in self.spec.checks}
 
-        referenced_transforms: set[str] = set()
-        referenced_dtypes: set[str] = set()
-        referenced_examples: set[str] = set()
-        referenced_checks: set[str] = set()
-
-        transform_by_id = {t.id: t for t in self.spec.transforms}
-        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
-
-        for stage in self.spec.dag_stages:
-            if stage.input_type:
-                referenced_dtypes.add(stage.input_type)
-            if stage.output_type:
-                referenced_dtypes.add(stage.output_type)
-            for tid in stage.candidates:
-                if tid:
-                    referenced_transforms.add(tid)
-
-        for tid in referenced_transforms:
-            transform = transform_by_id.get(tid)
-            if not transform:
-                continue
-            # Input datatype from first parameter (if any)
-            if transform.parameters:
-                first = transform.parameters[0]
-                if first.datatype_ref:
-                    referenced_dtypes.add(first.datatype_ref)
-            # Return datatype
-            if transform.return_datatype_ref:
-                referenced_dtypes.add(transform.return_datatype_ref)
-
-        for dtype_id in list(referenced_dtypes):
-            dtype = dtype_by_id.get(dtype_id)
-            if not dtype:
-                continue
-            for ex_id in dtype.example_ids:
-                referenced_examples.add(ex_id)
-            for ck_id in dtype.check_ids:
-                referenced_checks.add(ck_id)
+        # Collect referenced items
+        referenced_transforms, referenced_dtypes = self._collect_stage_references()
+        referenced_dtypes.update(self._collect_transform_datatypes(referenced_transforms))
+        referenced_examples, referenced_checks = self._collect_datatype_references(referenced_dtypes)
 
         return {
             "transforms": all_transforms - referenced_transforms,
