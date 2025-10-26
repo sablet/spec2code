@@ -13,7 +13,6 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import fire
 
@@ -116,6 +115,7 @@ class Spec2CodeCLI:
         except Exception as exc:
             print(f"❌ Config execution failed: {exc}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
 
@@ -156,6 +156,7 @@ class Spec2CodeCLI:
         except Exception as exc:
             print(f"❌ Config validation error: {exc}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
 
@@ -217,6 +218,7 @@ class Spec2CodeCLI:
             except Exception as e:
                 print(f"  ✗ Error: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         # Export unified JSON only
@@ -232,7 +234,11 @@ class Spec2CodeCLI:
         with open(unified_output, "w", encoding="utf-8") as f:
             json.dump(unified_data, f, indent=2, ensure_ascii=False)
 
-        print(f"\n✅ Unified JSON: {len(all_cards)} cards, {len(all_dag_stage_groups)} DAG stage groups from {len(all_specs_metadata)} specs → {unified_output}")
+        print(
+            f"\n✅ Unified JSON: {len(all_cards)} cards, "
+            f"{len(all_dag_stage_groups)} DAG stage groups from "
+            f"{len(all_specs_metadata)} specs → {unified_output}"
+        )
 
 
 def main() -> None:

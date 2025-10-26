@@ -8,7 +8,9 @@ SPEC ?= specs/spec.yaml
 # デフォルトのconfig
 CONFIG ?= configs/pipeline-config-minmax.yaml
 # チェック対象ディレクトリ
-CHECK_DIRS ?= packages apps
+CHECK_DIRS ?= packages apps main.py
+# Lint/Type/Complexity/Dead-codeチェック対象
+LINT_DIRS ?= packages/spec2code main.py
 
 help: ## ヘルプを表示
 	@echo "Spec2Code - スケルトンコード生成・検証システム"
@@ -93,25 +95,25 @@ format: ## コードフォーマット
 	uv run ruff format $(CHECK_DIRS)
 
 lint: ## Lintチェック
-	uv run ruff check --fix --unsafe-fixes packages/spec2code
+	uv run ruff check --fix --unsafe-fixes $(LINT_DIRS)
 
 typecheck: ## 型チェック
-	uv run mypy packages/spec2code
+	uv run mypy $(LINT_DIRS)
 
 complexity: ## 複雑度チェック
-	uv run xenon -b B -m B -a A packages/spec2code
+	uv run xenon -b B -m B -a A $(LINT_DIRS)
 
 duplication: ## 重複コードチェック
-	npx jscpd --config .jscpd.json packages/spec2code
+	npx jscpd --config .jscpd.json $(LINT_DIRS)
 
 dead-code: ## 未使用コード検出
-	uv run vulture packages/spec2code --min-confidence 80
+	uv run vulture $(LINT_DIRS) --min-confidence 80
 
 deps: ## 依存関係チェック
 	uv run deptry .
 
 module-lines: ## モジュール行数チェック（max-module-lines=500）
-	uv run pylint packages/spec2code --rcfile=pyproject.toml
+	uv run pylint $(LINT_DIRS) --rcfile=pyproject.toml
 
 # check: duplication module-lines format lint typecheck complexity ## コード品質チェック（全て）
 check: duplication dead-code deps format lint typecheck complexity ## コード品質チェック（全て）
