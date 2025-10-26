@@ -24,6 +24,7 @@ dev = [
     "types-jsonschema>=4.25.1.20251009",
     "types-networkx>=3.5.0.20251001",
     "types-pyyaml>=6.0.12.20250915",
+    "vulture>=2.14",
     "xenon>=0.9.3",
 ]
 

@@ -39,7 +39,7 @@ class Check(Generic[T]):
         Annotated[Out, Check["module.path.check_function"]]
     """
 
-    def __class_getitem__(cls: type["Check"], item: str) -> type:
+    def __class_getitem__(_cls: type["Check"], item: str) -> type:
         """文字列でチェック関数を参照"""
         return type(f"Check[{item}]", (), {"__check_ref__": item})
 
@@ -51,7 +51,7 @@ class ExampleValue(Generic[T]):
         Annotated[In, ExampleValue[{"text": "hello world"}]]
     """
 
-    def __class_getitem__(cls: type["ExampleValue"], item: dict[str, Any]) -> type:
+    def __class_getitem__(_cls: type["ExampleValue"], item: dict[str, Any]) -> type:
         """辞書で例示値を参照"""
         return type(f"ExampleValue[{item}]", (), {"__example_value__": item})
 
