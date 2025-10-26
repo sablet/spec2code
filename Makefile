@@ -31,6 +31,7 @@ help: ## ヘルプを表示
 	@echo "  make complexity                       複雑度チェック"
 	@echo "  make duplication                      重複コードチェック"
 	@echo "  make dead-code                        未使用コード検出"
+	@echo "  make deps                             依存関係チェック"
 	@echo "  make check                            品質チェック（全て）"
 	@echo "  make test                             テスト実行"
 	@echo ""
@@ -106,11 +107,14 @@ duplication: ## 重複コードチェック
 dead-code: ## 未使用コード検出
 	uv run vulture packages/spec2code --min-confidence 80
 
+deps: ## 依存関係チェック
+	uv run deptry .
+
 module-lines: ## モジュール行数チェック（max-module-lines=500）
 	uv run pylint packages/spec2code --rcfile=pyproject.toml
 
 # check: duplication module-lines format lint typecheck complexity ## コード品質チェック（全て）
-check: duplication dead-code format lint typecheck complexity ## コード品質チェック（全て）
+check: duplication dead-code deps format lint typecheck complexity ## コード品質チェック（全て）
 
 test:
 	uv run python -m pytest -v

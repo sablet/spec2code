@@ -4,20 +4,18 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.120.0",
     "fire>=0.7.1",
     "jsonschema>=4.25.1",
     "networkx>=3.5",
+    "pandas>=2.3.3",
     "pydantic>=2.12.3",
-    "python-multipart>=0.0.20",
     "pyyaml>=6.0.3",
-    "uvicorn>=0.38.0",
 ]
 
 [dependency-groups]
 dev = [
+    "deptry>=0.23.1",
     "mypy>=1.18.2",
-    "pandas>=2.3.3",
     "pandas-stubs>=2.3.2.250926",
     "pytest>=8.4.2",
     "ruff>=0.9.0",
@@ -65,3 +63,10 @@ enable = "too-many-lines"
 
 [tool.pylint.format]
 max-module-lines = 500
+
+[tool.deptry]
+extend_exclude = ["apps", "output", "frontend", "packages/tests"]
+ignore_notebooks = true
+
+[tool.deptry.per_rule_ignores]
+DEP001 = ["spec2code"]  # Local package import (project itself)
