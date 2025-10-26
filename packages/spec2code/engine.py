@@ -181,7 +181,7 @@ class DataType(BaseModel):
             )
             raise ValueError(message)
         if len(defined) > 1:
-            message = f"DataType '{self.id}' must define exactly one type, got multiple: " f"{defined}"
+            message = f"DataType '{self.id}' must define exactly one type, got multiple: {defined}"
             raise ValueError(message)
         return self
 
@@ -851,7 +851,7 @@ def _generate_check_skeletons(spec: Spec, app_root: Path) -> None:
 '''
             )
 
-        code = "# Auto-generated skeleton for Check functions\n" f"{chr(10).join(functions)}\n"
+        code = f"# Auto-generated skeleton for Check functions\n{chr(10).join(functions)}\n"
         file_path.write_text(code)
         print(f"  ✅ Generated: {file_path}")
 
@@ -872,7 +872,7 @@ def _render_imports(imports: set[str]) -> str:
 
     rendered_lines: list[str] = []
     if spec2code_imports:
-        rendered_lines.append("from spec2code.engine import " f"{', '.join(sorted(spec2code_imports))}")
+        rendered_lines.append(f"from spec2code.engine import {', '.join(sorted(spec2code_imports))}")
     rendered_lines.extend(sorted(other_imports))
     return "\n".join(rendered_lines)
 
@@ -1594,10 +1594,7 @@ class Engine:
             elif field_info.default is not None:
                 self._record_datatype_error(
                     errors,
-                    (
-                        f"DataType '{datatype.id}' field '{field_name}' expected default None, "
-                        f"got {field_info.default}"
-                    ),
+                    (f"DataType '{datatype.id}' field '{field_name}' expected default None, got {field_info.default}"),
                 )
         elif not field_info.is_required():
             self._record_datatype_error(
@@ -1699,7 +1696,7 @@ class Engine:
                 if example.id not in datatype.example_ids:
                     continue
                 if not datatype.schema_def:
-                    message = f"  ⏭️  Example {example.id}: " f"no schema to validate for {datatype.id}"
+                    message = f"  ⏭️  Example {example.id}: no schema to validate for {datatype.id}"
                     print(message)
                     continue
                 try:

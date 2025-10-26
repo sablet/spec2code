@@ -74,7 +74,7 @@ def _expected_basic_type(annotation: object) -> type | None:
 
     as_str = str(annotation)
     if as_str.startswith("<class '") and as_str.endswith("'>"):
-        return basic_types.get(as_str[8:-2], None)
+        return basic_types.get(as_str[8:-2])
 
     return basic_types.get(as_str)
 
@@ -111,7 +111,7 @@ def _validate_parameter_type(
         and param_name in POSITIVE_PARAM_NAMES
         and param_value <= 0
     ):
-        return [(f"Transform '{transform_id}': parameter '{param_name}' must be " f"positive, got {param_value}")]
+        return [(f"Transform '{transform_id}': parameter '{param_name}' must be positive, got {param_value}")]
 
     return []
 
@@ -178,7 +178,7 @@ def _validate_selection_counts(stage: DAGStage, num_selected: int) -> list[str]:
     if mode == "single":
         if num_selected > 0:
             message = (
-                f"Stage '{stage_id}' is single mode with {num_selected} selection(s)." " Remove this stage from config."
+                f"Stage '{stage_id}' is single mode with {num_selected} selection(s). Remove this stage from config."
             )
             errors.append(message)
         return errors
@@ -190,9 +190,9 @@ def _validate_selection_counts(stage: DAGStage, num_selected: int) -> list[str]:
 
     if mode == "multiple":
         if num_selected < 1:
-            errors.append(f"Stage '{stage_id}' requires at least one selection, " f"got {num_selected}")
+            errors.append(f"Stage '{stage_id}' requires at least one selection, got {num_selected}")
         if stage.max_select is not None and num_selected > stage.max_select:
-            errors.append(f"Stage '{stage_id}' allows at most {stage.max_select} selections, " f"got {num_selected}")
+            errors.append(f"Stage '{stage_id}' allows at most {stage.max_select} selections, got {num_selected}")
         return errors
 
     errors.append(f"Stage '{stage_id}' has unsupported selection_mode '{mode}'")
@@ -212,9 +212,7 @@ def _build_plan_entry(
     candidate_ids = {candidate.transform_id for candidate in stage.candidates}
 
     if transform_id not in candidate_ids:
-        errors.append(
-            f"Stage '{stage_id}': transform '{transform_id}' " f"is not in candidates: {sorted(candidate_ids)}"
-        )
+        errors.append(f"Stage '{stage_id}': transform '{transform_id}' is not in candidates: {sorted(candidate_ids)}")
         return errors, None
 
     transform_def = transform_by_id.get(transform_id)
@@ -281,7 +279,7 @@ def _auto_select_single_stages(
 
         if len(stage.candidates) != 1:
             errors.append(
-                f"Stage '{stage.stage_id}' is single mode but has " f"{len(stage.candidates)} candidates (expected 1)"
+                f"Stage '{stage.stage_id}' is single mode but has {len(stage.candidates)} candidates (expected 1)"
             )
             continue
 

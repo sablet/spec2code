@@ -1,4 +1,4 @@
-.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree setup duplication lint typecheck complexity front-run front-build front-install export-cards
+.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards
 
 # UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 # export UV_CACHE_DIR
@@ -33,6 +33,12 @@ help: ## ヘルプを表示
 	@echo "  make check                            品質チェック（全て）"
 	@echo "  make test                             テスト実行"
 	@echo ""
+	@echo "セットアップコマンド:"
+	@echo "  make bootstrap                        システムツールインストール（初回のみ）"
+	@echo "  make install                          プロジェクト依存関係インストール"
+	@echo "  make install-python                   Python依存関係のみ"
+	@echo "  make install-frontend                 フロントエンド依存関係のみ"
+	@echo ""
 	@echo "一括実行コマンド:"
 	@echo "  make gen-all                          全specでスケルトン生成"
 	@echo "  make run-all                          全specでDAG実行"
@@ -41,7 +47,6 @@ help: ## ヘルプを表示
 	@echo "フロントエンド開発:"
 	@echo "  make front-run                        フロントエンド開発サーバー起動"
 	@echo "  make front-build                      フロントエンドビルド"
-	@echo "  make front-install                    フロントエンド依存関係インストール"
 	@echo ""
 	@echo "例:"
 	@echo "  make gen                              デフォルト仕様でスケルトン生成"
@@ -144,8 +149,15 @@ tree: ## プロジェクト構造を表示
 	@tree -L 3 -I '.venv|__pycache__|.git|.ruff_cache|output' || ls -la
 
 # 開発環境セットアップ
-setup: ## 開発環境セットアップ
-	uv sync
+bootstrap: ## システムツールインストール（初回のみ）
+	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+	nvm install 24
+	npm install -g @anthropic-ai/claude-code
+	npm -g install jscpd
+	curl -LsSf https://astral.sh/uv/install.sh | sh
+
+install-python: ## Python依存関係インストール
+	uv sync --all-groups
 
 # フロントエンド開発
 export-cards: ## YAML仕様をJSON cardに変換
@@ -159,5 +171,7 @@ front-run: export-cards ## フロントエンド開発サーバー起動
 front-build: export-cards ## フロントエンドビルド
 	cd frontend && npm run build
 
-front-install: ## フロントエンド依存関係インストール
+install-frontend: ## フロントエンド依存関係インストール
 	cd frontend && npm install --legacy-peer-deps
+
+install: install-python install-frontend ## プロジェクト依存関係インストール（全て）
