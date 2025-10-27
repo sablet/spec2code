@@ -1,4 +1,4 @@
-.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards
+.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards callgraph
 
 # UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 # export UV_CACHE_DIR
@@ -8,7 +8,7 @@ SPEC ?= specs/spec.yaml
 # デフォルトのconfig
 CONFIG ?= configs/pipeline-config-minmax.yaml
 # チェック対象ディレクトリ
-CHECK_DIRS ?= packages apps main.py
+CHECK_DIRS ?= packages apps main.py tools
 # Lint/Type/Complexity/Dead-codeチェック対象
 LINT_DIRS ?= packages/spec2code main.py
 
@@ -33,6 +33,7 @@ help: ## ヘルプを表示
 	@echo "  make complexity                       複雑度チェック"
 	@echo "  make duplication                      重複コードチェック"
 	@echo "  make dead-code                        未使用コード検出"
+	@echo "  make callgraph [CALLGRAPH_ARGS=...]   静的コールグラフ解析"
 	@echo "  make deps                             依存関係チェック"
 	@echo "  make check                            品質チェック（全て）"
 	@echo "  make test                             テスト実行"
@@ -109,14 +110,17 @@ duplication: ## 重複コードチェック
 dead-code: ## 未使用コード検出
 	uv run vulture $(LINT_DIRS) --min-confidence 80
 
+CALLGRAPH_ARGS ?=
+callgraph: ## 静的コールグラフ解析
+	uv run python tools/static_callgraph.py $(CALLGRAPH_ARGS)
+
 deps: ## 依存関係チェック
 	uv run deptry .
 
 module-lines: ## モジュール行数チェック（max-module-lines=500）
 	uv run pylint $(LINT_DIRS) --rcfile=pyproject.toml
 
-# check: duplication module-lines format lint typecheck complexity ## コード品質チェック（全て）
-check: duplication dead-code deps format lint typecheck complexity ## コード品質チェック（全て）
+check: duplication dead-code callgraph deps format lint typecheck complexity ## module-linesは現在通らないので別
 
 test:
 	uv run python -m pytest -v

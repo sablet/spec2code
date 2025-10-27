@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import argparse
 import ast
 import builtins
 import importlib
@@ -1946,9 +1945,7 @@ class Engine:
             output_type = stage.output_type
 
             # Collect transform IDs (handle both str and DAGStageCandidate)
-            transform_ids = [
-                c.transform_id if hasattr(c, "transform_id") else c for c in stage.candidates
-            ]
+            transform_ids = [c.transform_id if hasattr(c, "transform_id") else c for c in stage.candidates]
 
             # Collect all related datatypes
             all_dtype_ids: set[str] = set()
@@ -2050,160 +2047,3 @@ class Engine:
                 print(f"  ❌ {transform_id}: {e}")
             except Exception as e:
                 print(f"  ❌ {transform_id}: execution error - {e}")
-
-
-# ==================== CLI ====================
-
-
-def _create_parser() -> argparse.ArgumentParser:
-    """Build command-line parser."""
-    parser = argparse.ArgumentParser(description="Spec-to-Code Engine")
-    subparsers = parser.add_subparsers(dest="command", help="サブコマンド")
-
-    gen_parser = subparsers.add_parser("gen", help="スケルトンコード生成")
-    gen_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
-
-    run_parser = subparsers.add_parser("run", help="DAG実行・検証")
-    run_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
-
-    validate_parser = subparsers.add_parser("validate", help="仕様と実装の整合性を検証")
-    validate_parser.add_argument("spec_file", help="仕様ファイル (YAML/JSON)")
-
-    run_config_parser = subparsers.add_parser("run-config", help="Config-based DAG execution")
-    run_config_parser.add_argument("config_file", help="Config file (YAML)")
-
-    validate_config_parser = subparsers.add_parser("validate-config", help="Config整合性検証")
-    validate_config_parser.add_argument("config_file", help="Config file (YAML)")
-
-    return parser
-
-
-def _handle_run_config(config_file: str) -> None:
-    """Execute config-driven pipeline run."""
-    from packages.spec2code.config_runner import ConfigRunner
-
-    import pandas as pd
-
-    try:
-        runner = ConfigRunner(config_file)
-        initial_data = pd.DataFrame(
-            {
-                "timestamp": [
-                    "2024-01-01",
-                    "2024-01-02",
-                    "2024-01-03",
-                    "2024-01-04",
-                    "2024-01-05",
-                ],
-                "value": [100, 150, 120, 180, 140],
-            }
-        )
-        print("\n📊 Initial data:")
-        print(initial_data)
-        print()
-
-        result = runner.run(initial_data)
-        print("\n📊 Final result:")
-        print(result)
-    except Exception as exc:  # noqa: BLE001 - surface full error details
-        print(f"❌ Config execution failed: {exc}")
-        import traceback
-
-        traceback.print_exc()
-        sys.exit(1)
-
-
-def _handle_validate_config(config_file: str) -> None:
-    """Validate config file against spec."""
-    from packages.spec2code.config_runner import ConfigRunner
-    from packages.spec2code.config_validator import ConfigValidationError
-
-    try:
-        print("🔍 Loading config...")
-        runner = ConfigRunner(config_file)
-        print(f"✅ Config loaded: {runner.config.meta.config_name}")
-        print(f"📄 Base spec: {runner.config.meta.base_spec}")
-        print()
-
-        print("🔍 Validating config against spec...")
-        validation_result = runner.validate(check_implementations=True)
-        print("✅ Config validation passed!")
-        print()
-
-        execution_plan = validation_result["execution_plan"]
-        print(f"📋 Execution plan: {len(execution_plan)} transform(s)")
-        for idx, step in enumerate(execution_plan, start=1):
-            print(f"  {idx}. Stage: {step['stage_id']}")
-            print(f"     Transform: {step['transform_id']}")
-            if step["params"]:
-                print(f"     Params: {step['params']}")
-        print()
-        print("✅ Config validation completed successfully")
-
-    except ConfigValidationError as exc:
-        print(f"❌ Config validation failed:\n{exc}")
-        sys.exit(1)
-    except Exception as exc:  # noqa: BLE001 - surface full error details
-        print(f"❌ Config validation error: {exc}")
-        import traceback
-
-        traceback.print_exc()
-        sys.exit(1)
-
-
-def _run_engine_command(command: str, spec: Spec) -> None:
-    """Run engine command from parsed arguments."""
-    if command == "gen":
-        generate_skeleton(spec)
-        print("✅ Skeleton generation completed")
-        return
-
-    engine = Engine(spec)
-    if command == "run":
-        engine.validate_schemas()
-        engine.run_checks()
-        engine.run_dag()
-        results = engine.run_examples()
-        print(f"📊 Example report: {results}")
-        print("✅ Execution completed")
-        return
-
-    if command == "validate":
-        errors = engine.validate_integrity()
-        total_errors = sum(len(errs) for errs in errors.values())
-        if total_errors > 0:
-            sys.exit(1)
-        return
-
-    raise ValueError(f"Unknown command: {command}")
-
-
-def main() -> None:
-    """CLIエントリーポイント"""
-    parser = _create_parser()
-    args = parser.parse_args()
-
-    if not args.command:
-        parser.print_help()
-        return
-
-    if args.command == "run-config":
-        _handle_run_config(args.config_file)
-        return
-
-    if args.command == "validate-config":
-        _handle_validate_config(args.config_file)
-        return
-
-    try:
-        spec = load_spec(args.spec_file)
-        print(f"✅ Loaded spec: {spec.meta.name} (v{spec.version})")
-    except Exception as exc:  # noqa: BLE001 - command-line surface
-        print(f"❌ Failed to load spec: {exc}")
-        sys.exit(1)
-
-    _run_engine_command(args.command, spec)
-
-
-if __name__ == "__main__":
-    main()
