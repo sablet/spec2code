@@ -1,0 +1,12 @@
+{
+  "threshold": 0,
+  "languages": ["javascript", "typescript"],
+  "reporters": ["console"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/public/**"
+  ],
+  "path": ["app", "components", "lib"],
+  "minTokens": 50
+}

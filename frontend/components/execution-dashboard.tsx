@@ -3,19 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { PageHeader } from "@/components/ui/page-header"
 import { Badge } from "@/components/ui/badge"
-import {
-  ArrowLeft,
-  Play,
-  Pause,
-  RotateCcw,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  ChevronRight,
-} from "lucide-react"
-import Link from "next/link"
+import { Play, Pause, RotateCcw, Clock, CheckCircle2, XCircle, AlertCircle, ChevronRight } from "lucide-react"
 
 interface ExecutionLog {
   timestamp: string
@@ -109,21 +99,10 @@ export function ExecutionDashboard() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-            </Link>
-            <div className="h-6 w-px bg-border" />
-            <h1 className="text-lg font-semibold text-foreground">Execution Dashboard</h1>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="Execution Dashboard"
+        rightContent={
+          <>
             <Button variant="outline" size="sm">
               <Pause className="w-4 h-4 mr-2" />
               Pause
@@ -136,9 +115,9 @@ export function ExecutionDashboard() {
               <Play className="w-4 h-4 mr-2" />
               Run New
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Execution History */}

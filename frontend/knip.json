@@ -1,0 +1,23 @@
+{
+  "entry": [
+    "app/**/*.{ts,tsx,css}"
+  ],
+  "project": [
+    "app/**/*.{ts,tsx,css}",
+    "components/**/*.{ts,tsx}",
+    "lib/**/*.{ts,tsx}"
+  ],
+  "ignore": [
+    "**/*.config.{js,mjs,ts}",
+    "eslint-local-rules/**",
+    "eslint-rules/**",
+    ".eslintrc-local.cjs",
+    ".jscpd.json"
+  ],
+  "ignoreDependencies": [
+    "jscpd",
+    "tailwindcss",
+    "tw-animate-css"
+  ],
+  "ignoreBinaries": []
+}

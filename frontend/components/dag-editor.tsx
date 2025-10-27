@@ -3,20 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import {
-  Play,
-  Save,
-  Undo,
-  Redo,
-  ZoomIn,
-  ZoomOut,
-  Database,
-  Filter,
-  GitMerge,
-  FileOutput,
-  ArrowLeft,
-} from "lucide-react"
-import Link from "next/link"
+import { PageHeader } from "@/components/ui/page-header"
+import { Play, Save, Undo, Redo, ZoomIn, ZoomOut, Database, Filter, GitMerge, FileOutput } from "lucide-react"
 
 interface FunctionCard {
   id: string
@@ -84,22 +72,11 @@ export function DAGEditor() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-            </Link>
-            <div className="h-6 w-px bg-border" />
-            <h1 className="text-lg font-semibold text-foreground">DAG Editor</h1>
-            <span className="text-sm text-muted-foreground">data-pipeline-v1</span>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="DAG Editor"
+        subtitle="data-pipeline-v1"
+        rightContent={
+          <>
             <Button variant="ghost" size="sm">
               <Undo className="w-4 h-4" />
             </Button>
@@ -123,9 +100,9 @@ export function DAGEditor() {
               <Play className="w-4 h-4 mr-2" />
               Run
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Card Palette */}

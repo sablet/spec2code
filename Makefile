@@ -189,3 +189,13 @@ install-frontend: ## フロントエンド依存関係インストール
 	cd frontend && npm install --legacy-peer-deps
 
 install: install-python install-frontend ## プロジェクト依存関係インストール（全て）
+
+front-check: ## フロントエンドの静的チェック（knip / lint / jscpd）
+	cd frontend && ( \
+		rc=0; \
+		npx --no-install knip || rc=$$?; \
+		npm run lint || rc=$$?; \
+		npx --no-install jscpd --config .jscpd.json || rc=$$?; \
+		exit $$rc; \
+	)
+	
