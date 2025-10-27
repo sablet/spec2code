@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from .config_model import ExtendedSpec
+from .engine import Engine, load_spec
 
 
 def normalize_type_info(dtype_data: dict[str, Any]) -> dict[str, Any]:
@@ -131,97 +132,14 @@ def _build_card_map(cards: list[dict[str, Any]]) -> dict[tuple[str, str, str], d
     return {(card["category"], card["id"], card["source_spec"]): card for card in cards}
 
 
-def _find_cards_by_ids(
-    card_map: dict[tuple[str, str, str], dict[str, Any]], category: str, ids: list[str], spec_name: str
-) -> list[dict[str, Any]]:
-    """Find cards by category and list of ids"""
-    result = []
-    for card_id in ids:
-        card = card_map.get((category, card_id, spec_name))
-        if card:
-            result.append(card)
-    return result
-
-
-def _find_transform_cards(
-    cards: list[dict[str, Any]], spec_name: str, input_type: str, output_type: str
-) -> list[dict[str, Any]]:
-    """Find transform cards matching input/output types"""
-    result = []
-    for card in cards:
-        if card["category"] == "transform" and card["source_spec"] == spec_name:
-            meta = card.get("metadata", {})
-            if meta.get("input_type") == input_type and meta.get("output_type") == output_type:
-                result.append(card)
-    return result
-
-
-def _collect_example_and_check_cards(
-    dtype_card: dict[str, Any] | None, card_map: dict[tuple[str, str, str], dict[str, Any]], spec_name: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Collect example and check cards for a datatype card"""
-    example_cards = []
-    check_cards = []
-
-    if dtype_card:
-        example_ids = dtype_card.get("metadata", {}).get("example_ids", [])
-        example_cards = _find_cards_by_ids(card_map, "example", example_ids, spec_name)
-
-        check_ids = dtype_card.get("metadata", {}).get("check_ids", [])
-        check_cards = _find_cards_by_ids(card_map, "checks", check_ids, spec_name)
-
-    return example_cards, check_cards
-
-
-def _build_stage_group(
-    stage: dict[str, Any],
-    spec_name: str,
-    cards: list[dict[str, Any]],
-    card_map: dict[tuple[str, str, str], dict[str, Any]],
-) -> dict[str, Any]:
-    """Build a single stage group from stage data"""
-    stage_id: str = stage.get("stage_id", "")
-    input_type: str = stage.get("input_type", "")
-    output_type: str = stage.get("output_type", "")
-
-    # Find core cards
-    stage_card = card_map.get(("dag_stage", stage_id, spec_name))
-    input_dtype_card = card_map.get(("dtype", input_type, spec_name))
-    output_dtype_card = card_map.get(("dtype", output_type, spec_name))
-
-    # Find transform cards
-    transform_cards = _find_transform_cards(cards, spec_name, input_type, output_type)
-
-    # Collect examples and checks for input/output datatypes
-    input_example_cards, input_check_cards = _collect_example_and_check_cards(input_dtype_card, card_map, spec_name)
-    output_example_cards, output_check_cards = _collect_example_and_check_cards(output_dtype_card, card_map, spec_name)
-
-    return {
-        "spec_name": spec_name,
-        "stage_id": stage_id,
-        "stage_description": stage.get("description", ""),
-        "input_type": input_type,
-        "output_type": output_type,
-        "selection_mode": stage.get("selection_mode"),
-        "max_select": stage.get("max_select"),
-        "related_cards": {
-            "stage_card": stage_card,
-            "input_dtype_card": input_dtype_card,
-            "output_dtype_card": output_dtype_card,
-            "transform_cards": transform_cards,
-            "input_example_cards": input_example_cards,
-            "output_example_cards": output_example_cards,
-            "input_check_cards": input_check_cards,
-            "output_check_cards": output_check_cards,
-        },
-    }
-
-
 def build_dag_stage_groups(
     spec_path: Path, raw_data: dict[str, Any], cards: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """
     Build dag_stage_groups: each group contains related cards for a stage
+
+    This is now a thin wrapper around Engine.build_stage_groups().
+    The Engine is the single source of truth for stage-card relationships.
 
     Returns:
         List of groups, each containing:
@@ -235,7 +153,69 @@ def build_dag_stage_groups(
     spec_name = spec_path.stem
     card_map = _build_card_map(cards)
 
-    return [_build_stage_group(stage, spec_name, cards, card_map) for stage in dag_stages]
+    # Use Engine as the single source of truth
+    try:
+        spec = load_spec(str(spec_path))
+        from packages.spec2code.engine import Engine
+
+        engine = Engine(spec)
+        stage_groups_from_engine = engine.build_stage_groups()
+
+        # Convert Engine's ID-based groups to card-based groups
+        result = []
+        for group in stage_groups_from_engine:
+            related_ids = group["related_card_ids"]
+
+            # Build card lookup helpers
+            def get_card(category: str, card_id: str | None) -> dict[str, Any] | None:
+                if not card_id:
+                    return None
+                return card_map.get((category, card_id, spec_name))
+
+            def get_cards(category: str, card_ids: list[str]) -> list[dict[str, Any]]:
+                return [card for cid in card_ids if (card := get_card(category, cid)) is not None]
+
+            # Split datatypes into input/output categories for frontend display
+            input_dtype_ids = {related_ids["input_dtype_id"]} if related_ids["input_dtype_id"] else set()
+            output_dtype_ids = {related_ids["output_dtype_id"]} if related_ids["output_dtype_id"] else set()
+            all_dtype_ids = set(related_ids["datatype_ids"])
+
+            # Remaining datatypes are parameters/auxiliary types
+            param_dtype_ids = all_dtype_ids - input_dtype_ids - output_dtype_ids
+
+            result.append(
+                {
+                    "spec_name": spec_name,
+                    "stage_id": group["stage_id"],
+                    "stage_description": group["description"],
+                    "input_type": group["input_type"],
+                    "output_type": group["output_type"],
+                    "selection_mode": group["selection_mode"],
+                    "max_select": group["max_select"],
+                    "related_cards": {
+                        "stage_card": get_card("dag_stage", related_ids["stage_id"]),
+                        "input_dtype_card": get_card("dtype", related_ids["input_dtype_id"]),
+                        "output_dtype_card": get_card("dtype", related_ids["output_dtype_id"]),
+                        "transform_cards": get_cards("transform", related_ids["transform_ids"]),
+                        "param_dtype_cards": get_cards("dtype", sorted(param_dtype_ids)),
+                        # For simplicity, put all examples/checks in output category
+                        # (frontend can adjust display logic if needed)
+                        "input_example_cards": [],
+                        "output_example_cards": get_cards("example", related_ids["example_ids"]),
+                        "input_check_cards": [],
+                        "output_check_cards": get_cards("checks", related_ids["check_ids"]),
+                    },
+                }
+            )
+
+        return result
+
+    except Exception as e:
+        print(f"Warning: Failed to build stage groups via Engine: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return []
 
 
 def _process_checks(checks: list[dict[str, Any]], spec_name: str) -> list[dict[str, Any]]:
@@ -379,46 +359,41 @@ def _card_key(card: dict[str, Any] | None) -> str | None:
     return f"{spec}::{cid}" if cid and spec else None
 
 
-def _collect_referenced_keys_from_group(related_cards: dict[str, Any]) -> set[str]:
-    """Collect all referenced card keys from a stage group's related_cards"""
-    referenced: set[str] = set()
+def _detect_referenced_and_unlinked(spec_path: Path, cards: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Detect referenced and unlinked card keys using Engine's logic"""
+    try:
+        # Load spec and create Engine instance to use its unlinked detection logic
+        spec = load_spec(str(spec_path))
+        engine = Engine(spec)
+        unlinked_items = engine._detect_unlinked_items()
 
-    # Single card references
-    for single_key in ("stage_card", "input_dtype_card", "output_dtype_card"):
-        key = _card_key(related_cards.get(single_key))
-        if key:
-            referenced.add(key)
+        spec_name = spec_path.stem
 
-    # List card references
-    for list_key in (
-        "transform_cards",
-        "input_example_cards",
-        "output_example_cards",
-        "input_check_cards",
-        "output_check_cards",
-    ):
-        for item in related_cards.get(list_key, []) or []:
-            key = _card_key(item)
-            if key:
-                referenced.add(key)
+        # Convert unlinked items to card keys
+        unlinked_keys: set[str] = set()
+        for category_map in [
+            ("transforms", "transform"),
+            ("datatypes", "dtype"),
+            ("examples", "example"),
+            ("checks", "checks"),
+        ]:
+            engine_category, card_category = category_map
+            for item_id in unlinked_items.get(engine_category, set()):
+                unlinked_keys.add(f"{spec_name}::{item_id}")
 
-    return referenced
+        # All keys from cards
+        all_keys: set[str] = {k for c in cards if (k := _card_key(c)) is not None}
 
+        # Referenced keys are all keys minus unlinked keys
+        referenced_keys = all_keys - unlinked_keys
 
-def _detect_referenced_and_unlinked(
-    dag_stage_groups: list[dict[str, Any]], cards: list[dict[str, Any]]
-) -> tuple[list[str], list[str]]:
-    """Detect referenced and unlinked card keys"""
-    referenced_keys: set[str] = set()
+        return sorted(referenced_keys), sorted(unlinked_keys)
 
-    for group in dag_stage_groups:
-        related = group.get("related_cards", {})
-        referenced_keys.update(_collect_referenced_keys_from_group(related))
-
-    all_keys: list[str] = [k for c in cards if (k := _card_key(c)) is not None]
-    unlinked_keys: list[str] = [k for k in all_keys if k not in referenced_keys]
-
-    return sorted(referenced_keys), sorted(unlinked_keys)
+    except Exception as e:
+        print(f"Warning: Failed to detect unlinked items using Engine: {e}")
+        # Fallback to empty sets
+        all_keys_list: list[str] = [k for c in cards if (k := _card_key(c)) is not None]
+        return all_keys_list, []
 
 
 def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
@@ -455,7 +430,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
 
     # Build groups and detect references
     dag_stage_groups = build_dag_stage_groups(spec_path, raw_data, cards)
-    referenced_keys, unlinked_keys = _detect_referenced_and_unlinked(dag_stage_groups, cards)
+    referenced_keys, unlinked_keys = _detect_referenced_and_unlinked(spec_path, cards)
 
     metadata = raw_data.get("meta", {})
 

@@ -337,6 +337,31 @@ export function CardLibrary() {
   })
 
   const shouldShowDagStageGroups = selectedCategory === "All" && dagStageGroups.length > 0
+
+  // Calculate unique cards displayed in DAG stage groups
+  const uniqueCardsInGroups = useMemo(() => {
+    if (!shouldShowDagStageGroups) return 0
+    const uniqueIds = new Set<string>()
+    filteredDagStageGroups.forEach((group) => {
+      const related = group.related_cards
+      // Collect all card IDs from related_cards
+      if (related.stage_card) uniqueIds.add(`${related.stage_card.source_spec}::${related.stage_card.id}`)
+      if (related.input_dtype_card) uniqueIds.add(`${related.input_dtype_card.source_spec}::${related.input_dtype_card.id}`)
+      if (related.output_dtype_card) uniqueIds.add(`${related.output_dtype_card.source_spec}::${related.output_dtype_card.id}`)
+      ;[
+        ...(related.transform_cards || []),
+        ...(related.param_dtype_cards || []),
+        ...(related.input_example_cards || []),
+        ...(related.output_example_cards || []),
+        ...(related.input_check_cards || []),
+        ...(related.output_check_cards || []),
+      ].forEach((card) => {
+        if (card) uniqueIds.add(`${card.source_spec}::${card.id}`)
+      })
+    })
+    return uniqueIds.size
+  }, [shouldShowDagStageGroups, filteredDagStageGroups])
+
   const headingTitle = shouldShowDagStageGroups
     ? selectedSpec === "All"
         ? "すべてのDAGステージ"
@@ -353,7 +378,7 @@ export function CardLibrary() {
       ? ` ／ 未紐付けカード: ${filteredUngroupedCards.length}件`
       : ""
   const headingSubtitle = shouldShowDagStageGroups
-    ? `${filteredDagStageGroups.length}個のDAGステージグループ${ungroupedSubtitle}`
+    ? `${filteredDagStageGroups.length}個のDAGステージグループ （${uniqueCardsInGroups}枚のカード）${ungroupedSubtitle}`
     : `${filteredCards.length}個のカードが利用可能`
   const getCardFromSummary = useCallback(
     (summary: RelatedCardSummary | null): CardDefinition | null => {
@@ -676,6 +701,15 @@ export function CardLibrary() {
                     },
                     globalSeenCards,
                   )
+                  const paramDtypeCards = mapSummariesToCards(
+                    group.related_cards.param_dtype_cards,
+                    {
+                      label: "Parameter Type",
+                      labelColor: "text-teal-600",
+                      disableAfterFirst: true,
+                    },
+                    globalSeenCards,
+                  )
 
                     return (
                       <div key={`${group.spec_name}-${group.stage_id}`} className="border border-border rounded-lg p-6 bg-card">
@@ -699,6 +733,7 @@ export function CardLibrary() {
                         {inputTypeCard}
                         {outputTypeCard}
                         {transformCards}
+                        {paramDtypeCards}
                         {inputExampleCards}
                         {outputCheckCards}
                       </div>

@@ -1917,6 +1917,78 @@ class Engine:
         if not any_warn:
             print("  ✅ No unlinked items detected")
 
+    def build_stage_groups(self: "Engine") -> list[dict[str, Any]]:
+        """Build DAG stage groups with related card IDs.
+
+        This is the single source of truth for stage-card relationships.
+        card_exporter should call this method and simply convert the result to JSON.
+
+        Returns:
+            List of stage groups, each containing:
+            - stage metadata (stage_id, input_type, output_type, etc.)
+            - related_card_ids: dict with keys:
+                - stage_id: str (the stage itself)
+                - input_dtype_id: str | None
+                - output_dtype_id: str | None
+                - transform_ids: list[str]
+                - datatype_ids: list[str] (all related datatypes including nested)
+                - example_ids: list[str]
+                - check_ids: list[str]
+        """
+        # Ensure candidates are populated
+        _auto_collect_stage_candidates(self.spec)
+
+        stage_groups = []
+
+        for stage in self.spec.dag_stages:
+            stage_id = stage.stage_id
+            input_type = stage.input_type
+            output_type = stage.output_type
+
+            # Collect transform IDs (handle both str and DAGStageCandidate)
+            transform_ids = [
+                c.transform_id if hasattr(c, "transform_id") else c for c in stage.candidates
+            ]
+
+            # Collect all related datatypes
+            all_dtype_ids: set[str] = set()
+
+            # Add input/output types
+            if input_type:
+                all_dtype_ids.add(input_type)
+                all_dtype_ids.update(self._collect_nested_datatype_refs(input_type))
+            if output_type:
+                all_dtype_ids.add(output_type)
+                all_dtype_ids.update(self._collect_nested_datatype_refs(output_type))
+
+            # Add datatypes from transform parameters
+            all_dtype_ids.update(self._collect_transform_datatypes(set(transform_ids)))
+
+            # Collect examples and checks from all related datatypes
+            example_ids, check_ids = self._collect_datatype_references(all_dtype_ids)
+
+            stage_groups.append(
+                {
+                    "stage_id": stage_id,
+                    "description": stage.description,
+                    "input_type": input_type,
+                    "output_type": output_type,
+                    "selection_mode": stage.selection_mode,
+                    "max_select": stage.max_select,
+                    "related_card_ids": {
+                        "stage_id": stage_id,
+                        "input_dtype_id": input_type,
+                        "output_dtype_id": output_type,
+                        "transform_ids": transform_ids,
+                        "datatype_ids": sorted(all_dtype_ids),
+                        "example_ids": sorted(example_ids),
+                        "check_ids": sorted(check_ids),
+                    },
+                }
+            )
+
+        return stage_groups
+
     def run_checks(self: "Engine") -> None:
         """Check関数を実行"""
         print("🔍 Running checks...")
