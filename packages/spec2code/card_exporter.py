@@ -4,7 +4,6 @@ Export YAML spec to normalized JSON for frontend card library
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -445,4 +444,3 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
         "referenced_card_keys": referenced_keys,
         "unlinked_card_keys": unlinked_keys,
     }
-

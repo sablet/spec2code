@@ -540,8 +540,7 @@ def main() -> None:
         "--ignore",
         action="append",
         default=[],
-        help="Symbol(s) to ignore when reporting unreachable definitions. "
-        "May be specified multiple times.",
+        help="Symbol(s) to ignore when reporting unreachable definitions. May be specified multiple times.",
     )
     parser.add_argument(
         "--no-default-ignore",
@@ -568,9 +567,7 @@ def main() -> None:
     unreachable_defs = [
         defn
         for defn in builder.definitions.values()
-        if defn.kind in args.include_kinds
-        and defn.symbol not in reachable
-        and defn.symbol not in ignored_symbols
+        if defn.kind in args.include_kinds and defn.symbol not in reachable and defn.symbol not in ignored_symbols
     ]
     unreachable_defs.sort(key=lambda d: (str(d.filepath), d.lineno, d.symbol))
 

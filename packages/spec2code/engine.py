@@ -1742,7 +1742,12 @@ class Engine:
 
         return referenced_transforms, referenced_dtypes
 
-    def _collect_nested_datatype_refs(self: "Engine", dtype_id: str, visited: set[str] | None = None) -> set[str]:
+    def _collect_nested_datatype_refs(
+        self: "Engine",
+        dtype_id: str,
+        visited: set[str] | None = None,
+        dtype_by_id: dict[str, "DataType"] | None = None,
+    ) -> set[str]:
         """Recursively collect all datatype references within a datatype definition.
 
         This includes:
@@ -1758,70 +1763,104 @@ class Engine:
             return set()
         visited.add(dtype_id)
 
-        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
+        if dtype_by_id is None:
+            dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
+
         dtype = dtype_by_id.get(dtype_id)
         if not dtype:
             return set()
 
         nested_refs: set[str] = set()
-
-        # Check type_alias tuple elements
-        if dtype.type_alias and dtype.type_alias.elements:
-            for element in dtype.type_alias.elements:
-                if isinstance(element, dict) and "datatype_ref" in element:
-                    ref = element["datatype_ref"]
-                    nested_refs.add(ref)
-                    # Recursively collect from this referenced type
-                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-
-        # Check generic configurations
-        if dtype.generic:
-            # element_type for list/set/tuple
-            if dtype.generic.element_type and isinstance(dtype.generic.element_type, dict):
-                if "datatype_ref" in dtype.generic.element_type:
-                    ref = dtype.generic.element_type["datatype_ref"]
-                    nested_refs.add(ref)
-                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-
-            # key_type and value_type for dict
-            if dtype.generic.key_type and isinstance(dtype.generic.key_type, dict):
-                if "datatype_ref" in dtype.generic.key_type:
-                    ref = dtype.generic.key_type["datatype_ref"]
-                    nested_refs.add(ref)
-                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-
-            if dtype.generic.value_type and isinstance(dtype.generic.value_type, dict):
-                if "datatype_ref" in dtype.generic.value_type:
-                    ref = dtype.generic.value_type["datatype_ref"]
-                    nested_refs.add(ref)
-                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-
-            # tuple elements
-            if dtype.generic.elements:
-                for element in dtype.generic.elements:
-                    if isinstance(element, dict) and "datatype_ref" in element:
-                        ref = element["datatype_ref"]
-                        nested_refs.add(ref)
-                        nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-
-        # Check pydantic_model field types
-        if dtype.pydantic_model and dtype.pydantic_model.fields:
-            for field in dtype.pydantic_model.fields:
-                if isinstance(field.type, dict) and "datatype_ref" in field.type:
-                    ref = field.type["datatype_ref"]
-                    nested_refs.add(ref)
-                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-                # Also check generic types in fields
-                elif isinstance(field.type, dict) and "generic" in field.type:
-                    generic_config = field.type["generic"]
-                    if isinstance(generic_config, dict):
-                        if "element_type" in generic_config and isinstance(generic_config["element_type"], dict):
-                            if "datatype_ref" in generic_config["element_type"]:
-                                ref = generic_config["element_type"]["datatype_ref"]
-                                nested_refs.add(ref)
-                                nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
-
+        nested_refs.update(self._collect_refs_from_type_alias(dtype, visited, dtype_by_id))
+        nested_refs.update(self._collect_refs_from_generic(dtype, visited, dtype_by_id))
+        nested_refs.update(self._collect_refs_from_pydantic_model(dtype, visited, dtype_by_id))
         return nested_refs
+
+    def _collect_refs_from_type_alias(
+        self: "Engine",
+        dtype: "DataType",
+        visited: set[str],
+        dtype_by_id: dict[str, "DataType"],
+    ) -> set[str]:
+        if not dtype.type_alias or not dtype.type_alias.elements:
+            return set()
+        nested_refs: set[str] = set()
+        for element in dtype.type_alias.elements:
+            nested_refs.update(self._collect_refs_from_node(element, visited, dtype_by_id))
+        return nested_refs
+
+    def _collect_refs_from_generic(
+        self: "Engine",
+        dtype: "DataType",
+        visited: set[str],
+        dtype_by_id: dict[str, "DataType"],
+    ) -> set[str]:
+        generic = dtype.generic
+        if not generic:
+            return set()
+        nested_refs: set[str] = set()
+        for node in (generic.element_type, generic.key_type, generic.value_type):
+            nested_refs.update(self._collect_refs_from_node(node, visited, dtype_by_id))
+        for element in generic.elements:
+            nested_refs.update(self._collect_refs_from_node(element, visited, dtype_by_id))
+        return nested_refs
+
+    def _collect_refs_from_pydantic_model(
+        self: "Engine",
+        dtype: "DataType",
+        visited: set[str],
+        dtype_by_id: dict[str, "DataType"],
+    ) -> set[str]:
+        model = dtype.pydantic_model
+        if not model or not model.fields:
+            return set()
+        nested_refs: set[str] = set()
+        for field in model.fields:
+            nested_refs.update(self._collect_refs_from_node(field.type, visited, dtype_by_id))
+        return nested_refs
+
+    def _collect_refs_from_node(
+        self: "Engine",
+        node: object,
+        visited: set[str],
+        dtype_by_id: dict[str, "DataType"],
+    ) -> set[str]:
+        if node is None:
+            return set()
+        nested_refs: set[str] = set()
+        ref = self._extract_datatype_ref(node)
+        if ref:
+            nested_refs.add(ref)
+            nested_refs.update(self._collect_nested_datatype_refs(ref, visited, dtype_by_id))
+            return nested_refs
+        if isinstance(node, dict):
+            generic_section = node.get("generic")
+            if isinstance(generic_section, dict):
+                nested_refs.update(self._collect_refs_from_generic_dict(generic_section, visited, dtype_by_id))
+        return nested_refs
+
+    def _collect_refs_from_generic_dict(
+        self: "Engine",
+        generic_config: dict[str, object],
+        visited: set[str],
+        dtype_by_id: dict[str, "DataType"],
+    ) -> set[str]:
+        nested_refs: set[str] = set()
+        for key in ("element_type", "key_type", "value_type"):
+            nested_refs.update(self._collect_refs_from_node(generic_config.get(key), visited, dtype_by_id))
+        elements = generic_config.get("elements", [])
+        if isinstance(elements, list):
+            for element in elements:
+                nested_refs.update(self._collect_refs_from_node(element, visited, dtype_by_id))
+        return nested_refs
+
+    @staticmethod
+    def _extract_datatype_ref(candidate: object) -> str | None:
+        if isinstance(candidate, dict):
+            ref = candidate.get("datatype_ref")
+            if isinstance(ref, str):
+                return ref
+        return None
 
     def _collect_transform_datatypes(self: "Engine", transform_ids: set[str]) -> set[str]:
         """Collect datatypes referenced by transforms (input/return types and nested references)"""
