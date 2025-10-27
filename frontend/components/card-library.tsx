@@ -425,19 +425,17 @@ export function CardLibrary() {
     {
       label,
       labelColor = "text-muted-foreground",
-      disableAfterFirst = false,
       index = 0,
       forceDisabled = false,
     }: {
       label?: string
       labelColor?: string
-      disableAfterFirst?: boolean
       index?: number
       forceDisabled?: boolean
     } = {},
   ) => {
     if (!card) return null
-    const isDisabled = forceDisabled || (disableAfterFirst && index > 0)
+    const isDisabled = forceDisabled
     const isSelected = selectedCard?.id === card.id && selectedCard?.source_spec === card.source_spec
 
     return (
@@ -474,11 +472,7 @@ export function CardLibrary() {
 
   const mapSummariesToCards = (
     summaries: RelatedCardSummary[] | undefined,
-    {
-      label,
-      labelColor,
-      disableAfterFirst = false,
-    }: { label: string; labelColor: string; disableAfterFirst?: boolean },
+    { label, labelColor }: { label: string; labelColor: string },
     seenCards?: Set<string>,
   ) =>
     (summaries || [])
@@ -495,7 +489,6 @@ export function CardLibrary() {
         return renderDagCard(card, {
           label,
           labelColor,
-          disableAfterFirst,
           index,
           forceDisabled: isDuplicate,
         })
@@ -679,37 +672,33 @@ export function CardLibrary() {
                       {
                         label: "Transform",
                         labelColor: "text-purple-600",
-                        disableAfterFirst: true,
                       },
                       globalSeenCards,
                     )
-                  const inputExampleCards = mapSummariesToCards(
-                    group.related_cards.input_example_cards,
-                    {
-                      label: "Input Example",
-                      labelColor: "text-orange-600",
-                      disableAfterFirst: true,
-                    },
-                    globalSeenCards,
-                  )
-                  const outputCheckCards = mapSummariesToCards(
-                    group.related_cards.output_check_cards,
-                    {
-                      label: "Output Check",
-                      labelColor: "text-pink-600",
-                      disableAfterFirst: true,
-                    },
-                    globalSeenCards,
-                  )
-                  const paramDtypeCards = mapSummariesToCards(
-                    group.related_cards.param_dtype_cards,
-                    {
-                      label: "Parameter Type",
-                      labelColor: "text-teal-600",
-                      disableAfterFirst: true,
-                    },
-                    globalSeenCards,
-                  )
+                    const inputExampleCards = mapSummariesToCards(
+                      group.related_cards.input_example_cards,
+                      {
+                        label: "Input Example",
+                        labelColor: "text-orange-600",
+                      },
+                      globalSeenCards,
+                    )
+                    const outputCheckCards = mapSummariesToCards(
+                      group.related_cards.output_check_cards,
+                      {
+                        label: "Output Check",
+                        labelColor: "text-pink-600",
+                      },
+                      globalSeenCards,
+                    )
+                    const paramDtypeCards = mapSummariesToCards(
+                      group.related_cards.param_dtype_cards,
+                      {
+                        label: "Parameter Type",
+                        labelColor: "text-teal-600",
+                      },
+                      globalSeenCards,
+                    )
 
                     return (
                       <div key={`${group.spec_name}-${group.stage_id}`} className="border border-border rounded-lg p-6 bg-card">
