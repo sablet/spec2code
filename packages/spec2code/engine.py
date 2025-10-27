@@ -1724,23 +1724,108 @@ class Engine:
     # ==================== Unlinked item detection (warning only) ====================
 
     def _collect_stage_references(self: "Engine") -> tuple[set[str], set[str]]:
-        """Collect transforms and datatypes directly referenced by stages"""
+        """Collect transforms and datatypes directly referenced by stages (including nested refs)"""
         referenced_transforms: set[str] = set()
         referenced_dtypes: set[str] = set()
 
         for stage in self.spec.dag_stages:
             if stage.input_type:
                 referenced_dtypes.add(stage.input_type)
+                # Also collect nested datatype references
+                referenced_dtypes.update(self._collect_nested_datatype_refs(stage.input_type))
             if stage.output_type:
                 referenced_dtypes.add(stage.output_type)
+                # Also collect nested datatype references
+                referenced_dtypes.update(self._collect_nested_datatype_refs(stage.output_type))
             for tid in stage.candidates:
                 if tid:
                     referenced_transforms.add(tid)
 
         return referenced_transforms, referenced_dtypes
 
+    def _collect_nested_datatype_refs(self: "Engine", dtype_id: str, visited: set[str] | None = None) -> set[str]:
+        """Recursively collect all datatype references within a datatype definition.
+
+        This includes:
+        - datatype_ref in type_alias tuple elements
+        - datatype_ref in generic element_type/key_type/value_type
+        - datatype_ref in pydantic_model field types
+        """
+        if visited is None:
+            visited = set()
+
+        # Avoid infinite recursion
+        if dtype_id in visited:
+            return set()
+        visited.add(dtype_id)
+
+        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
+        dtype = dtype_by_id.get(dtype_id)
+        if not dtype:
+            return set()
+
+        nested_refs: set[str] = set()
+
+        # Check type_alias tuple elements
+        if dtype.type_alias and dtype.type_alias.elements:
+            for element in dtype.type_alias.elements:
+                if isinstance(element, dict) and "datatype_ref" in element:
+                    ref = element["datatype_ref"]
+                    nested_refs.add(ref)
+                    # Recursively collect from this referenced type
+                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+
+        # Check generic configurations
+        if dtype.generic:
+            # element_type for list/set/tuple
+            if dtype.generic.element_type and isinstance(dtype.generic.element_type, dict):
+                if "datatype_ref" in dtype.generic.element_type:
+                    ref = dtype.generic.element_type["datatype_ref"]
+                    nested_refs.add(ref)
+                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+
+            # key_type and value_type for dict
+            if dtype.generic.key_type and isinstance(dtype.generic.key_type, dict):
+                if "datatype_ref" in dtype.generic.key_type:
+                    ref = dtype.generic.key_type["datatype_ref"]
+                    nested_refs.add(ref)
+                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+
+            if dtype.generic.value_type and isinstance(dtype.generic.value_type, dict):
+                if "datatype_ref" in dtype.generic.value_type:
+                    ref = dtype.generic.value_type["datatype_ref"]
+                    nested_refs.add(ref)
+                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+
+            # tuple elements
+            if dtype.generic.elements:
+                for element in dtype.generic.elements:
+                    if isinstance(element, dict) and "datatype_ref" in element:
+                        ref = element["datatype_ref"]
+                        nested_refs.add(ref)
+                        nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+
+        # Check pydantic_model field types
+        if dtype.pydantic_model and dtype.pydantic_model.fields:
+            for field in dtype.pydantic_model.fields:
+                if isinstance(field.type, dict) and "datatype_ref" in field.type:
+                    ref = field.type["datatype_ref"]
+                    nested_refs.add(ref)
+                    nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+                # Also check generic types in fields
+                elif isinstance(field.type, dict) and "generic" in field.type:
+                    generic_config = field.type["generic"]
+                    if isinstance(generic_config, dict):
+                        if "element_type" in generic_config and isinstance(generic_config["element_type"], dict):
+                            if "datatype_ref" in generic_config["element_type"]:
+                                ref = generic_config["element_type"]["datatype_ref"]
+                                nested_refs.add(ref)
+                                nested_refs.update(self._collect_nested_datatype_refs(ref, visited))
+
+        return nested_refs
+
     def _collect_transform_datatypes(self: "Engine", transform_ids: set[str]) -> set[str]:
-        """Collect datatypes referenced by transforms (input/return types)"""
+        """Collect datatypes referenced by transforms (input/return types and nested references)"""
         transform_by_id = {t.id: t for t in self.spec.transforms}
         referenced_dtypes: set[str] = set()
 
@@ -1748,12 +1833,19 @@ class Engine:
             transform = transform_by_id.get(tid)
             if not transform:
                 continue
-            # Input datatype from first parameter (if any)
-            if transform.parameters and transform.parameters[0].datatype_ref:
-                referenced_dtypes.add(transform.parameters[0].datatype_ref)
+
+            # Collect datatype_ref from ALL parameters (not just first one)
+            for param in transform.parameters:
+                if param.datatype_ref:
+                    referenced_dtypes.add(param.datatype_ref)
+                    # Also collect nested references from this datatype
+                    referenced_dtypes.update(self._collect_nested_datatype_refs(param.datatype_ref))
+
             # Return datatype
             if transform.return_datatype_ref:
                 referenced_dtypes.add(transform.return_datatype_ref)
+                # Also collect nested references from return type
+                referenced_dtypes.update(self._collect_nested_datatype_refs(transform.return_datatype_ref))
 
         return referenced_dtypes
 

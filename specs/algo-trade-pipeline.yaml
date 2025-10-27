@@ -269,8 +269,8 @@ datatypes:
     type_alias:
       type: tuple
       elements:
-        - native: "pandas:DataFrame"
-        - native: "pandas:DataFrame"
+        - datatype_ref: FeatureFrame
+        - datatype_ref: TargetFrame
 
   # ===== Phase 3: Model Training & Prediction =====
   - id: CVMethod
@@ -611,7 +611,7 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        native: "pandas:DataFrame"
+        datatype_ref: MultiAssetOHLCVFrame
       - name: freq
         native: "builtins:str"
         default: "1h"
@@ -623,11 +623,11 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        native: "pandas:DataFrame"
+        datatype_ref: OHLCVFrame
       - name: period
         native: "builtins:int"
         default: 14
-    return_native: "pandas:DataFrame"
+    return_datatype_ref: OHLCVFrame
 
   - id: calculate_adx
     description: "Calculate ADX indicator and add adx_{period} column"
@@ -635,11 +635,11 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        native: "pandas:DataFrame"
+        datatype_ref: OHLCVFrame
       - name: period
         native: "builtins:int"
         default: 14
-    return_native: "pandas:DataFrame"
+    return_datatype_ref: OHLCVFrame
 
   - id: calculate_recent_return
     description: "Calculate recent return and add recent_return_{lookback} column"
@@ -647,11 +647,11 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        native: "pandas:DataFrame"
+        datatype_ref: OHLCVFrame
       - name: lookback
         native: "builtins:int"
         default: 5
-    return_native: "pandas:DataFrame"
+    return_datatype_ref: OHLCVFrame
 
   - id: calculate_volatility
     description: "Calculate volatility and add volatility_{window} column"
@@ -659,11 +659,11 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        native: "pandas:DataFrame"
+        datatype_ref: OHLCVFrame
       - name: window
         native: "builtins:int"
         default: 20
-    return_native: "pandas:DataFrame"
+    return_datatype_ref: OHLCVFrame
 
   - id: calculate_future_return
     description: "Calculate future return as target variable (add target column)"
@@ -671,7 +671,7 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        native: "pandas:DataFrame"
+        datatype_ref: OHLCVFrame
       - name: forward
         native: "builtins:int"
         default: 5
@@ -681,7 +681,7 @@ transforms:
           - "DIRECTION"
           - "LOG_RETURN"
         default: "RETURN"
-    return_native: "pandas:DataFrame"
+    return_datatype_ref: OHLCVFrame
 
   # ===== Phase 3: Model Training & Prediction =====
   - id: train_lightgbm_cv
