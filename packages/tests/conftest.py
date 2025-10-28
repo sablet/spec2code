@@ -62,6 +62,12 @@ def sample_spec_yaml():
                 "description": "Hello例",
                 "input": {"text": "hello"},
                 "expected": {"length": 5},
+            },
+            {
+                "id": "example_result",
+                "description": "処理結果例",
+                "input": {"length": 5, "processed": True},
+                "expected": {"length": 5},
             }
         ],
         "datatypes": [
@@ -80,7 +86,7 @@ def sample_spec_yaml():
                 "id": "TextResult",
                 "description": "テキスト処理結果",
                 "check_ids": ["check_result_positive"],
-                "example_ids": [],
+                "example_ids": ["example_result"],
                 "schema": {
                     "type": "object",
                     "properties": {

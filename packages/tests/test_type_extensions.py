@@ -21,12 +21,28 @@ def _write_spec(temp_project_dir: Path, spec_data: dict) -> Path:
 def test_type_alias_generation(temp_project_dir, sample_spec_yaml):
     """TypeAlias definitions are generated and imported."""
     spec_data = copy.deepcopy(sample_spec_yaml)
-    spec_data["checks"] = []
-    spec_data["examples"] = []
+    spec_data["checks"] = [
+        {
+            "id": "check_dataframe",
+            "description": "Dummy check for dataframe",
+            "impl": "test-pipeline.checks.dummy:check_dataframe",
+            "file_path": "checks/dummy.py",
+        }
+    ]
+    spec_data["examples"] = [
+        {
+            "id": "example_dataframe",
+            "description": "Dummy example",
+            "input": {},
+            "expected": {},
+        }
+    ]
     spec_data["datatypes"] = [
         {
             "id": "FeatureFrame",
             "description": "Feature DataFrame alias",
+            "check_ids": ["check_dataframe"],
+            "example_ids": ["example_dataframe"],
             "type_alias": {
                 "type": "simple",
                 "target": "pandas:DataFrame",
@@ -35,6 +51,8 @@ def test_type_alias_generation(temp_project_dir, sample_spec_yaml):
         {
             "id": "AlignedFeatureTarget",
             "description": "Aligned tuple",
+            "check_ids": ["check_dataframe"],
+            "example_ids": ["example_dataframe"],
             "type_alias": {
                 "type": "tuple",
                 "elements": [
@@ -72,19 +90,35 @@ def test_type_alias_generation(temp_project_dir, sample_spec_yaml):
     transform_code = transform_file.read_text()
     assert "from ..datatypes.type_aliases import AlignedFeatureTarget" in transform_code
     assert "from ..datatypes.type_aliases import FeatureFrame" in transform_code
-    assert "aligned: AlignedFeatureTarget" in transform_code
-    assert "-> FeatureFrame" in transform_code
+    assert "aligned: Annotated[AlignedFeatureTarget" in transform_code
+    assert "-> Annotated[FeatureFrame" in transform_code
 
 
 def test_enum_generation(temp_project_dir, sample_spec_yaml):
     """Enum definitions are generated and importable."""
     spec_data = copy.deepcopy(sample_spec_yaml)
-    spec_data["checks"] = []
-    spec_data["examples"] = []
+    spec_data["checks"] = [
+        {
+            "id": "check_signal",
+            "description": "Dummy check for signal",
+            "impl": "test-pipeline.checks.dummy:check_signal",
+            "file_path": "checks/dummy.py",
+        }
+    ]
+    spec_data["examples"] = [
+        {
+            "id": "example_signal",
+            "description": "Dummy example for signal",
+            "input": {},
+            "expected": {},
+        }
+    ]
     spec_data["datatypes"] = [
         {
             "id": "PositionSignal",
             "description": "Trading position signal",
+            "check_ids": ["check_signal"],
+            "example_ids": ["example_signal"],
             "enum": {
                 "base_type": "int",
                 "members": [

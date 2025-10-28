@@ -186,6 +186,9 @@ class DataType(BaseModel):
         if len(defined) > 1:
             message = f"DataType '{self.id}' can define only one primary type, got multiple: {defined}"
             raise ValueError(message)
+
+        # check_ids と example_ids の検証は警告レベルに緩和
+        # 詳細な検証は validate_integrity() で実施
         return self
 
 
@@ -1371,6 +1374,7 @@ class Engine:
             "transform_signatures": [],
             "example_schemas": [],
             "datatype_definitions": [],
+            "datatype_completeness": [],
         }
 
         packages_dir = str((project_root / "packages").resolve())
@@ -1379,6 +1383,8 @@ class Engine:
 
         app_root = project_root / "apps" / self.app_package
 
+        # DataType完全性チェック（check/example必須要件）
+        self._validate_datatype_completeness(errors)
         self._validate_datatypes(app_root, errors)
         self._validate_checks(app_root, errors)
         self._validate_transforms(app_root, errors)
@@ -1387,6 +1393,39 @@ class Engine:
         self._warn_unlinked_items()
         self._summarize_integrity(errors)
         return errors
+
+    def _validate_datatype_completeness(self: "Engine", errors: dict[str, list[str]]) -> None:
+        """DataTypeのcheck/example完全性を検証"""
+        print("\n📋 DataType Completeness Check:")
+        print("=" * 80)
+
+        has_issues = False
+        for datatype in self.spec.datatypes:
+            has_checks = bool(datatype.check_ids)
+            has_examples = bool(datatype.example_ids)
+
+            if has_checks and has_examples:
+                print(f"  ✅ {datatype.id:30s} | Checks: ✓ ({len(datatype.check_ids)}) | Examples: ✓ ({len(datatype.example_ids)})")
+            else:
+                has_issues = True
+                check_status = f"✓ ({len(datatype.check_ids)})" if has_checks else "✗ (0)"
+                example_status = f"✓ ({len(datatype.example_ids)})" if has_examples else "✗ (0)"
+                print(f"  ⚠️  {datatype.id:30s} | Checks: {check_status:8s} | Examples: {example_status:8s}")
+
+                issues = []
+                if not has_checks:
+                    issues.append("missing checks")
+                if not has_examples:
+                    issues.append("missing examples")
+
+                error_msg = f"DataType '{datatype.id}' is incomplete: {', '.join(issues)}"
+                errors["datatype_completeness"].append(error_msg)
+
+        if not has_issues:
+            print("\n  ✅ All datatypes have checks and examples!")
+        else:
+            print("\n  ⚠️  Some datatypes are missing checks or examples")
+        print("=" * 80)
 
     def _validate_datatypes(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
         """Validate generated datatype definitions against spec."""
