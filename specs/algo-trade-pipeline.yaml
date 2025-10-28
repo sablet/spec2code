@@ -671,7 +671,7 @@ transforms:
     file_path: "transforms/features.py"
     parameters:
       - name: df
-        datatype_ref: OHLCVFrame
+        datatype_ref: FeatureFrame
       - name: forward
         native: "builtins:int"
         default: 5
@@ -682,6 +682,17 @@ transforms:
           - "LOG_RETURN"
         default: "RETURN"
     return_datatype_ref: TargetFrame
+
+  - id: clean_and_align_feature_target
+    description: "Clean and align feature and target frames to ensure matching indexes"
+    impl: "apps.algo-trade-pipeline.transforms.features:clean_and_align_feature_target"
+    file_path: "transforms/features.py"
+    parameters:
+      - name: target
+        datatype_ref: TargetFrame
+      - name: features
+        datatype_ref: FeatureFrame
+    return_datatype_ref: AlignedFeatureTarget
 
   # ===== Phase 3: Model Training & Prediction =====
   - id: train_lightgbm_cv
@@ -821,12 +832,16 @@ dag_stages:
   - stage_id: "target_generation"
     description: "Generate target variable (future return)"
     selection_mode: "single"
-    input_type: OHLCVFrame
+    input_type: FeatureFrame
     output_type: TargetFrame
 
+  - stage_id: "feature_target_alignment"
+    description: "Clean and align feature/target frames for model training"
+    selection_mode: "single"
+    input_type: TargetFrame
+    output_type: AlignedFeatureTarget
+
   # Phase 3: Model Training & Prediction
-  # NOTE: Between Phase 2 and 3, helper functions (select_features, extract_target, clean_and_align)
-  # are manually called to produce AlignedFeatureTarget (tuple type)
   - stage_id: "model_training"
     description: "Train LightGBM with cross-validation"
     selection_mode: "single"

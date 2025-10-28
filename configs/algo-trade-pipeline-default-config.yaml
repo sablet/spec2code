@@ -4,4 +4,9 @@ meta:
   description: Default configuration for algo-trade-pipeline
   base_spec: specs/algo-trade-pipeline.yaml
 execution:
-  stages: []
+  stages:
+  - stage_id: indicator_calculation
+    selected:
+    - transform_id: calculate_rsi
+      params:
+        period: 14
