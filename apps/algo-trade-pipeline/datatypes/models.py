@@ -4,6 +4,7 @@ from .enums import CVMethod
 from .enums import PositionSignal
 from pydantic import BaseModel
 from typing import Any
+import datetime
 import pandas as pd
 
 
@@ -24,6 +25,18 @@ class MarketDataSnapshotMeta(BaseModel):
     snapshot_id: str
     timestamp: str
     symbols: list[str]
+
+
+class OHLCVRow(BaseModel):
+    """Single OHLCV row data structure for validation"""
+
+    model_config = {"arbitrary_types_allowed": True}
+    timestamp: datetime.datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int = None
 
 
 class SimpleCVConfig(BaseModel):

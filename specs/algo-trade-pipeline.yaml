@@ -234,16 +234,71 @@ datatypes:
                 native: "builtins:str"
           description: "List of included symbols"
 
-  # ===== Phase 2: Feature Engineering =====
-  - id: OHLCVFrame
-    description: "Standard OHLCV DataFrame (open, high, low, close, volume)"
-    check_ids:
-      - check_ohlcv
+  # OHLCVRow: 単一行データの構造定義（exampleバリデーション用）
+  - id: OHLCVRow
+    description: "Single OHLCV row data structure for validation"
     example_ids:
       - ex_ohlcv_row
+    pydantic_model:
+      fields:
+        - name: timestamp
+          type:
+            native: "datetime:datetime"
+          description: "Timestamp (index)"
+        - name: open
+          type:
+            native: "builtins:float"
+          description: "Open price"
+        - name: high
+          type:
+            native: "builtins:float"
+          description: "High price"
+        - name: low
+          type:
+            native: "builtins:float"
+          description: "Low price"
+        - name: close
+          type:
+            native: "builtins:float"
+          description: "Close price"
+        - name: volume
+          type:
+            native: "builtins:int"
+          optional: true
+          description: "Volume"
+
+  # ===== Phase 2: Feature Engineering =====
+  - id: OHLCVFrame
+    description: "OHLCV DataFrame where each row conforms to OHLCVRow structure"
+    check_ids:
+      - check_ohlcv
     type_alias:
       type: simple
       target: "pandas:DataFrame"
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          timestamp:
+            type: string
+            format: date-time
+          open:
+            type: number
+          high:
+            type: number
+          low:
+            type: number
+          close:
+            type: number
+          volume:
+            type: integer
+        required:
+          - timestamp
+          - open
+          - high
+          - low
+          - close
 
   - id: FeatureFrame
     description: "Feature DataFrame (flattened from MultiIndex)"

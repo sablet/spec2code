@@ -7,7 +7,7 @@ import pandas as pd
 # Multi-asset OHLCV DataFrame with MultiIndex structure (symbol, column)
 MultiAssetOHLCVFrame: TypeAlias = pd.DataFrame
 
-# Standard OHLCV DataFrame (open, high, low, close, volume)
+# OHLCV DataFrame where each row conforms to OHLCVRow structure
 OHLCVFrame: TypeAlias = pd.DataFrame
 
 # Feature DataFrame (flattened from MultiIndex)
@@ -17,4 +17,4 @@ FeatureFrame: TypeAlias = pd.DataFrame
 TargetFrame: TypeAlias = pd.DataFrame
 
 # Aligned feature and target DataFrames (cleaned, index-matched)
-AlignedFeatureTarget: TypeAlias = tuple[pd.DataFrame, pd.DataFrame]
+AlignedFeatureTarget: TypeAlias = tuple[FeatureFrame, TargetFrame]

@@ -164,8 +164,8 @@ class DataType(BaseModel):
 
     @model_validator(mode="after")
     def _validate_type_definition(self: "DataType") -> "DataType":
+        # schema_defはexampleバリデーション用として他の型定義と併用可能
         type_fields = {
-            "schema_def": self.schema_def,
             "type_alias": self.type_alias,
             "enum": self.enum,
             "generic": self.generic,
@@ -173,14 +173,18 @@ class DataType(BaseModel):
             "pydantic_model": self.pydantic_model,
         }
         defined = [name for name, value in type_fields.items() if value]
-        if not defined:
+
+        # schema_defのみの場合も許可（既存の動作）
+        if not defined and not self.schema_def:
             message = (
-                f"DataType '{self.id}' must define exactly one type "
+                f"DataType '{self.id}' must define at least one type "
                 "(schema/type_alias/enum/generic/pandas_multiindex/pydantic_model)"
             )
             raise ValueError(message)
+
+        # 主要な型定義は1つまで（schema_defは併用可能）
         if len(defined) > 1:
-            message = f"DataType '{self.id}' must define exactly one type, got multiple: {defined}"
+            message = f"DataType '{self.id}' can define only one primary type, got multiple: {defined}"
             raise ValueError(message)
         return self
 
@@ -1047,6 +1051,8 @@ def _collect_pydantic_model_lines(spec: Spec, datatype: DataType, app_root: Path
     description = datatype.description or ""
     if description:
         lines.append(f'    """{description}"""')
+    lines.append("")
+    lines.append('    model_config = {"arbitrary_types_allowed": True}')
 
     fields = model_config.fields
     if not fields:
@@ -1376,7 +1382,7 @@ class Engine:
         self._validate_datatypes(app_root, errors)
         self._validate_checks(app_root, errors)
         self._validate_transforms(app_root, errors)
-        self._validate_examples(errors)
+        self._validate_examples(app_root, errors)
         # 未紐付け要素の警告を表示（バリデーション失敗にはしない）
         self._warn_unlinked_items()
         self._summarize_integrity(errors)
@@ -1688,28 +1694,61 @@ class Engine:
                 errors["transform_functions"].append(message)
                 print(f"  ❌ {message}")
 
-    def _validate_examples(self: "Engine", errors: dict[str, list[str]]) -> None:
+    def _validate_examples(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
         """Validate that example payloads satisfy their referenced schemas."""
+        module_cache: dict[str, ModuleType | None] = {}
         for example in self.spec.examples:
             for datatype in self.spec.datatypes:
                 if example.id not in datatype.example_ids:
                     continue
-                if not datatype.schema_def:
-                    message = f"  ⏭️  Example {example.id}: no schema to validate for {datatype.id}"
-                    print(message)
-                    continue
-                try:
-                    jsonschema.validate(example.input, datatype.schema_def)
-                    print(f"  ✅ Example {example.id}: schema valid for {datatype.id}")
-                except jsonschema.ValidationError as exc:
-                    details = "\n".join(
-                        [
-                            f"Example {example.id} invalid for DataType {datatype.id}:",
-                            f"    {exc.message}",
-                        ]
-                    )
-                    errors["example_schemas"].append(details)
-                    print(f"  ❌ {details}")
+
+                # JSON Schema validation
+                if datatype.schema_def:
+                    Engine._validate_example_with_schema(example, datatype, errors)
+                # Pydantic model validation
+                elif datatype.pydantic_model:
+                    self._validate_example_with_pydantic(example, datatype, module_cache, errors)
+                # No validation available
+                else:
+                    print(f"  ⏭️  Example {example.id}: no schema to validate for {datatype.id}")
+
+    @staticmethod
+    def _validate_example_with_schema(example: Example, datatype: DataType, errors: dict[str, list[str]]) -> None:
+        """Validate example using JSON Schema."""
+        if not datatype.schema_def:
+            return
+        try:
+            jsonschema.validate(example.input, datatype.schema_def)
+            print(f"  ✅ Example {example.id}: schema valid for {datatype.id}")
+        except jsonschema.ValidationError as exc:
+            details = f"Example {example.id} invalid for DataType {datatype.id}: {exc.message}"
+            errors["example_schemas"].append(details)
+            print(f"  ❌ {details}")
+
+    def _validate_example_with_pydantic(
+        self: "Engine",
+        example: Example,
+        datatype: DataType,
+        module_cache: dict[str, ModuleType | None],
+        errors: dict[str, list[str]],
+    ) -> None:
+        """Validate example using Pydantic model."""
+        module = self._get_datatype_module("models", module_cache, errors)
+        if not module:
+            return
+        model_cls = getattr(module, datatype.id, None)
+        if not model_cls:
+            message = f"Example {example.id}: model class {datatype.id} not found"
+            errors["example_schemas"].append(message)
+            print(f"  ❌ {message}")
+            return
+        try:
+            model_cls(**example.input)
+            print(f"  ✅ Example {example.id}: pydantic validation passed for {datatype.id}")
+        except Exception as exc:
+            details = f"Example {example.id} invalid for DataType {datatype.id}: {exc}"
+            errors["example_schemas"].append(details)
+            print(f"  ❌ {details}")
 
     @staticmethod
     def _summarize_integrity(errors: dict[str, list[str]]) -> None:
