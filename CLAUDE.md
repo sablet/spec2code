@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Language
+
+**日本語で回答してください。** すべての説明、コメント、エラーメッセージ、提案は日本語で行うこと。
+
 ## Project Overview
 
 **spec2code** is a specification-driven code generation and validation system that enables developers to define code structure as declarative YAML and automatically generate type-safe Python skeleton code. The system validates that implementations remain consistent with specifications and manages data flow as Directed Acyclic Graphs (DAGs).

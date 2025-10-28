@@ -1,5 +1,13 @@
 frontend/public/cards/
 
+.coverage
+algo_trade_v3
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+QWEN.md
+
+
 .cache
 Transformfn
 

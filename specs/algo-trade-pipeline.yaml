@@ -627,7 +627,7 @@ transforms:
       - name: period
         native: "builtins:int"
         default: 14
-    return_datatype_ref: OHLCVFrame
+    return_datatype_ref: FeatureFrame
 
   - id: calculate_adx
     description: "Calculate ADX indicator and add adx_{period} column"
@@ -639,7 +639,7 @@ transforms:
       - name: period
         native: "builtins:int"
         default: 14
-    return_datatype_ref: OHLCVFrame
+    return_datatype_ref: FeatureFrame
 
   - id: calculate_recent_return
     description: "Calculate recent return and add recent_return_{lookback} column"
@@ -651,7 +651,7 @@ transforms:
       - name: lookback
         native: "builtins:int"
         default: 5
-    return_datatype_ref: OHLCVFrame
+    return_datatype_ref: FeatureFrame
 
   - id: calculate_volatility
     description: "Calculate volatility and add volatility_{window} column"
@@ -663,7 +663,7 @@ transforms:
       - name: window
         native: "builtins:int"
         default: 20
-    return_datatype_ref: OHLCVFrame
+    return_datatype_ref: FeatureFrame
 
   - id: calculate_future_return
     description: "Calculate future return as target variable (add target column)"
@@ -681,7 +681,7 @@ transforms:
           - "DIRECTION"
           - "LOG_RETURN"
         default: "RETURN"
-    return_datatype_ref: OHLCVFrame
+    return_datatype_ref: TargetFrame
 
   # ===== Phase 3: Model Training & Prediction =====
   - id: train_lightgbm_cv
@@ -815,14 +815,14 @@ dag_stages:
     selection_mode: "multiple"
     max_select: null  # unlimited - can use all indicators
     input_type: OHLCVFrame
-    output_type: OHLCVFrame  # Type_alias for DataFrame
+    output_type: FeatureFrame  # Feature engineering outputs
     # Candidates auto-collected: calculate_rsi, calculate_adx, calculate_recent_return, calculate_volatility
 
   - stage_id: "target_generation"
     description: "Generate target variable (future return)"
     selection_mode: "single"
     input_type: OHLCVFrame
-    output_type: OHLCVFrame
+    output_type: TargetFrame
 
   # Phase 3: Model Training & Prediction
   # NOTE: Between Phase 2 and 3, helper functions (select_features, extract_target, clean_and_align)
