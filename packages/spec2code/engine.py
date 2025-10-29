@@ -191,11 +191,7 @@ class DataType(BaseModel):
             message = f"DataType '{self.id}' can define only one primary type, got multiple: {defined}"
             raise ValueError(message)
 
-        # check_ids と example_ids の検証は警告レベルに緩和
-        # 詳細な検証は validate_integrity() で実施
-        if not self.example_refs and not self.generator_refs:
-            message = f"DataType '{self.id}' must define at least one of example_refs or generator_refs"
-            raise ValueError(message)
+        # example/generatorの有無は validate_integrity() で詳細チェック
         return self
 
     @property
@@ -2019,8 +2015,7 @@ class Engine:
 
         if annotation is None:
             message = (
-                f"Transform '{transform_id}' {context} missing ExampleValue annotation "
-                f"(expected one of {expected_ids})"
+                f"Transform '{transform_id}' {context} missing ExampleValue annotation (expected one of {expected_ids})"
             )
             errors["transform_annotations"].append(message)
             print(f"  ⚠️  {message}")
@@ -2029,8 +2024,7 @@ class Engine:
         marker = self._extract_example_marker(annotation)
         if marker is None:
             message = (
-                f"Transform '{transform_id}' {context} missing ExampleValue marker "
-                f"(expected one of {expected_ids})"
+                f"Transform '{transform_id}' {context} missing ExampleValue marker (expected one of {expected_ids})"
             )
             errors["transform_annotations"].append(message)
             print(f"  ⚠️  {message}")
@@ -2060,9 +2054,7 @@ class Engine:
 
         example = example_map.get(example_id)
         if example is None:
-            message = (
-                f"Transform '{transform_id}' {context}: Example '{example_id}' not found in specification"
-            )
+            message = f"Transform '{transform_id}' {context}: Example '{example_id}' not found in specification"
             errors["transform_annotations"].append(message)
             print(f"  ⚠️  {message}")
             return
@@ -2070,9 +2062,7 @@ class Engine:
         expected_payload = example.expected if use_expected else example.input
         actual_payload = marker["__example_value__"]
         if actual_payload != expected_payload:
-            message = (
-                f"Transform '{transform_id}' {context}: ExampleValue payload mismatch for example '{example_id}'"
-            )
+            message = f"Transform '{transform_id}' {context}: ExampleValue payload mismatch for example '{example_id}'"
             errors["transform_annotations"].append(message)
             print(f"  ⚠️  {message}")
 

@@ -171,9 +171,12 @@ def process_text(
         spec_path = temp_project_dir / "spec.yaml"
         spec_path.write_text(yaml.dump(spec_data))
 
-        with pytest.raises(ValueError) as excinfo:
-            load_spec(spec_path)
-        assert "example_refs or generator_refs" in str(excinfo.value)
+        spec = load_spec(spec_path)
+        engine = Engine(spec)
+
+        errors = engine.validate_integrity(project_root=temp_project_dir)
+        assert len(errors["datatype_completeness"]) == 1
+        assert "missing examples/generators" in errors["datatype_completeness"][0]
 
     def test_detect_invalid_example_schema(self, temp_project_dir, sample_spec_yaml):
         """異常ケース: Example値がスキーマに違反"""
