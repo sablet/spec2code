@@ -4,6 +4,7 @@ from spec2code.engine import Check, ExampleValue
 from ..datatypes.type_aliases import AlignedFeatureTarget
 from ..datatypes.type_aliases import FeatureFrame
 from ..datatypes.type_aliases import MultiAssetOHLCVFrame
+from ..datatypes.type_aliases import OHLCVFrame
 from ..datatypes.type_aliases import TargetFrame
 from typing import Annotated
 from typing import Literal
@@ -22,7 +23,7 @@ def resample_ohlcv(
     ],
     freq: str = "1h",
 ) -> Annotated[
-    dict,
+    OHLCVFrame,
     Check["apps.algo-trade-pipeline.checks.feature_checks:check_ohlcv"],
     ExampleValue[
         {
@@ -39,7 +40,7 @@ def resample_ohlcv(
 # Auto-generated skeleton for Transform: calculate_rsi
 def calculate_rsi(
     df: Annotated[
-        dict,
+        OHLCVFrame,
         ExampleValue[
             {
                 "__generator_id__": "gen_ohlcv_frame",
@@ -66,7 +67,7 @@ def calculate_rsi(
 # Auto-generated skeleton for Transform: calculate_adx
 def calculate_adx(
     df: Annotated[
-        dict,
+        OHLCVFrame,
         ExampleValue[
             {
                 "__generator_id__": "gen_ohlcv_frame",
@@ -93,7 +94,7 @@ def calculate_adx(
 # Auto-generated skeleton for Transform: calculate_recent_return
 def calculate_recent_return(
     df: Annotated[
-        dict,
+        OHLCVFrame,
         ExampleValue[
             {
                 "__generator_id__": "gen_ohlcv_frame",
@@ -120,7 +121,7 @@ def calculate_recent_return(
 # Auto-generated skeleton for Transform: calculate_volatility
 def calculate_volatility(
     df: Annotated[
-        dict,
+        OHLCVFrame,
         ExampleValue[
             {
                 "__generator_id__": "gen_ohlcv_frame",

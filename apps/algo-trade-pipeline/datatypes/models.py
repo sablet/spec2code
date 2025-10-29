@@ -18,6 +18,20 @@ class MarketDataIngestionConfig(BaseModel):
     provider: str
 
 
+class ProviderBatchCollection(BaseModel):
+    """Collection of raw data batches from multiple providers"""
+
+    model_config = {"arbitrary_types_allowed": True}
+    batches: list[dict]
+
+
+class NormalizedOHLCVBundle(BaseModel):
+    """Normalized OHLCV data bundle from multiple providers"""
+
+    model_config = {"arbitrary_types_allowed": True}
+    data: dict
+
+
 class MarketDataSnapshotMeta(BaseModel):
     """Metadata for persisted market data snapshot"""
 
@@ -37,6 +51,13 @@ class OHLCVRow(BaseModel):
     low: float
     close: float
     volume: int = None
+
+
+class OHLCVFrame(BaseModel):
+    """OHLCV DataFrame where each row conforms to OHLCVRow structure"""
+
+    model_config = {"arbitrary_types_allowed": True}
+    pass
 
 
 class SimpleCVConfig(BaseModel):

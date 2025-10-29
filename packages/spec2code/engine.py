@@ -606,9 +606,9 @@ def _resolve_datatype_reference(
         resolved_type = "pd.DataFrame"
         imports = {"import pandas as pd"}
     elif datatype.schema_def:
-        # JSON Schema定義はdictとして扱う
-        resolved_type = "dict"
-        imports = set()
+        # JSON Schema定義もPydanticモデルとして扱う（modelsモジュールからインポート）
+        resolved_type = datatype.id
+        imports = _imports_for_datatype(datatype, context, normalized_app)
     else:
         imports = _imports_for_datatype(datatype, context, normalized_app)
 
@@ -640,6 +640,13 @@ def _imports_for_datatype(datatype: DataType, context: TypeContext, normalized_a
         if getattr(datatype, attr):
             line = _import_line_for_datatype(datatype, suffix, context, normalized_app)
             return {line} if line else set()
+
+    # For schema-defined datatypes that don't have explicit pydantic_model attribute,
+    # but are treated as models
+    if datatype.schema_def and not datatype.pydantic_model:
+        line = _import_line_for_datatype(datatype, "models", context, normalized_app)
+        return {line} if line else set()
+
     return set()
 
 
@@ -1168,12 +1175,49 @@ def _generate_pydantic_models(spec: Spec, datatypes: list[DataType], app_root: P
 
 def _collect_pydantic_model_lines(spec: Spec, datatype: DataType, app_root: Path) -> tuple[list[str], set[str]]:
     """Build class definition lines for a Pydantic model datatype."""
+    # Handle both explicit pydantic_model and schema-defined datatypes
     model_config = datatype.pydantic_model
-    if not model_config:
+    if model_config:
+        # Use existing pydantic model definition
+        imports: set[str] = set()
+        lines = [f"class {datatype.id}({model_config.base_class}):"]
+
+        description = datatype.description or ""
+        if description:
+            lines.append(f'    """{description}"""')
+        lines.append("")
+        lines.append('    model_config = {"arbitrary_types_allowed": True}')
+
+        fields = model_config.fields
+        if not fields:
+            lines.append("    pass")
+            return lines, imports
+
+        for field in fields:
+            type_str, type_imports = _build_type_string(spec, field.type, app_root, context="pydantic_model")
+            imports.update(type_imports)
+            field_line = f"    {field.name}: {type_str}"
+            has_default = "default" in field.model_fields_set
+            if has_default:
+                field_line += f" = {repr(field.default)}"
+            elif field.optional or not field.required:
+                field_line += " = None"
+            lines.append(field_line)
+
+        return lines, imports
+    if datatype.schema_def:
+        # Convert JSON Schema to Pydantic model
+        return _convert_schema_to_pydantic_model(datatype, app_root)
+    return [], set()
+
+
+def _convert_schema_to_pydantic_model(datatype: DataType, app_root: Path) -> tuple[list[str], set[str]]:
+    """Convert a JSON schema definition to Pydantic model code."""
+    if not datatype.schema_def:
         return [], set()
 
-    imports: set[str] = set()
-    lines = [f"class {datatype.id}({model_config.base_class}):"]
+    imports: set[str] = {"from pydantic import BaseModel"}
+    lines = [f"class {datatype.id}(BaseModel):"]
 
     description = datatype.description or ""
     if description:
@@ -1181,23 +1225,58 @@ def _collect_pydantic_model_lines(spec: Spec, datatype: DataType, app_root: Path
     lines.append("")
     lines.append('    model_config = {"arbitrary_types_allowed": True}')
 
-    fields = model_config.fields
-    if not fields:
+    schema = datatype.schema_def
+    properties = schema.get("properties", {})
+    required_fields = set(schema.get("required", []))
+
+    if not properties:
         lines.append("    pass")
         return lines, imports
 
-    for field in fields:
-        type_str, type_imports = _build_type_string(spec, field.type, app_root, context="pydantic_model")
+    for prop_name, prop_schema in properties.items():
+        type_str, type_imports = _convert_json_schema_type_to_python(prop_schema, app_root)
         imports.update(type_imports)
-        field_line = f"    {field.name}: {type_str}"
-        has_default = "default" in field.model_fields_set
-        if has_default:
-            field_line += f" = {repr(field.default)}"
-        elif field.optional or not field.required:
+
+        field_required = prop_name in required_fields
+        field_line = f"    {prop_name}: {type_str}"
+
+        if not field_required:
+            # For optional fields, use None as default
             field_line += " = None"
+
         lines.append(field_line)
 
     return lines, imports
+
+
+def _convert_json_schema_type_to_python(schema_def: dict[str, Any], app_root: Path) -> tuple[str, set[str]]:
+    """Convert JSON Schema type definition to Python type annotation."""
+    schema_type = schema_def.get("type")
+    result_type: str
+    imports: set[str] = set()
+
+    if schema_type == "string":
+        result_type = "str"
+    elif schema_type == "integer":
+        result_type = "int"
+    elif schema_type == "number":
+        result_type = "float"
+    elif schema_type == "boolean":
+        result_type = "bool"
+    elif schema_type == "array":
+        items_schema = schema_def.get("items", {})
+        element_type, element_imports = _convert_json_schema_type_to_python(items_schema, app_root)
+        imports.update(element_imports)
+        result_type = f"list[{element_type}]"
+    elif schema_type == "object":
+        # For nested objects, we can use dict
+        result_type = "dict"
+    else:
+        # Default fallback
+        result_type = "Any"
+        imports = {"from typing import Any"}
+
+    return result_type, imports
 
 
 def _render_transform_function(spec: Spec, transform: Transform, app_root: Path) -> tuple[str, set[str]]:
@@ -1517,21 +1596,44 @@ def _ensure_package_inits(app_root: Path) -> None:
         print(f"  ✅ Generated: {init_path}")
 
 
+def _generate_enum_datatypes(spec: Spec, app_root: Path) -> None:
+    """Generate files for enum datatypes."""
+    enum_datatypes = [dt for dt in spec.datatypes if dt.enum]
+    if enum_datatypes:
+        _generate_enum_file(spec, enum_datatypes, app_root)
+
+
+def _generate_model_datatypes(spec: Spec, app_root: Path) -> None:
+    """Generate files for model datatypes."""
+    # Include both explicit pydantic_model datatypes and schema-defined datatypes
+    # Schema-defined datatypes should also generate Pydantic models
+    model_datatypes = [dt for dt in spec.datatypes if dt.pydantic_model or dt.schema_def]
+    if model_datatypes:
+        _generate_pydantic_models(spec, model_datatypes, app_root)
+
+
+def _generate_alias_datatypes(spec: Spec, app_root: Path) -> None:
+    """Generate files for alias datatypes."""
+    alias_datatypes = [dt for dt in spec.datatypes if dt.type_alias]
+    if alias_datatypes:
+        _generate_type_aliases(spec, alias_datatypes, app_root)
+
+
+def _generate_datatype_files(spec: Spec, app_root: Path) -> None:
+    """Generate files for all datatype categories."""
+    _generate_enum_datatypes(spec, app_root)
+    _generate_model_datatypes(spec, app_root)
+    _generate_alias_datatypes(spec, app_root)
+
+
 def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
     """未実装ファイルを自動生成"""
     print("🔨 Generating skeleton code...")
     app_package = _infer_app_package(spec)
     app_root = project_root / "apps" / app_package
     print(f"  📁 Target directory: {app_root}")
-    enum_datatypes = [dt for dt in spec.datatypes if dt.enum]
-    if enum_datatypes:
-        _generate_enum_file(spec, enum_datatypes, app_root)
-    model_datatypes = [dt for dt in spec.datatypes if dt.pydantic_model]
-    if model_datatypes:
-        _generate_pydantic_models(spec, model_datatypes, app_root)
-    alias_datatypes = [dt for dt in spec.datatypes if dt.type_alias]
-    if alias_datatypes:
-        _generate_type_aliases(spec, alias_datatypes, app_root)
+
+    _generate_datatype_files(spec, app_root)
     _generate_check_skeletons(spec, app_root)
     _generate_transform_skeletons(spec, app_root)
     _generate_generator_skeletons(spec, app_root)

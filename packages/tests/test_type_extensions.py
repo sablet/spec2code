@@ -232,5 +232,10 @@ def test_transform_return_has_example_annotations(temp_project_dir, sample_spec_
     transform_code = transform_file.read_text()
 
     assert "ExampleValue" in transform_code
-    assert "Annotated[dict" in transform_code
+    # Now schema-defined types should be referenced by name, not as 'dict'
+    # Check that the return type has the defined type name (TextResult) and not just 'dict'
+    assert "Annotated[" in transform_code  # Ensure we still have Annotated
+    assert "TextResult" in transform_code  # Ensure we have the proper type name
+    # The import from models should also be present
+    assert "from ..datatypes.models import" in transform_code
     assert "__example_id__': 'example_result'" in transform_code

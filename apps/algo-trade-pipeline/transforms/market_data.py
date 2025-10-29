@@ -3,6 +3,8 @@
 from spec2code.engine import Check, ExampleValue
 from ..datatypes.models import MarketDataIngestionConfig
 from ..datatypes.models import MarketDataSnapshotMeta
+from ..datatypes.models import NormalizedOHLCVBundle
+from ..datatypes.models import ProviderBatchCollection
 from ..datatypes.type_aliases import MultiAssetOHLCVFrame
 from typing import Annotated
 
@@ -24,7 +26,7 @@ def fetch_yahoo_finance_ohlcv(
         ],
     ],
 ) -> Annotated[
-    dict,
+    ProviderBatchCollection,
     Check["apps.algo-trade-pipeline.checks.market_data_checks:check_batch_collection"],
     ExampleValue[
         {
@@ -41,7 +43,7 @@ def fetch_yahoo_finance_ohlcv(
 # Auto-generated skeleton for Transform: normalize_multi_provider
 def normalize_multi_provider(
     batches: Annotated[
-        dict,
+        ProviderBatchCollection,
         ExampleValue[
             {
                 "__generator_id__": "gen_provider_batches",
@@ -50,7 +52,7 @@ def normalize_multi_provider(
         ],
     ],
 ) -> Annotated[
-    dict,
+    NormalizedOHLCVBundle,
     Check["apps.algo-trade-pipeline.checks.market_data_checks:check_normalized_bundle"],
     ExampleValue[
         {
@@ -67,7 +69,7 @@ def normalize_multi_provider(
 # Auto-generated skeleton for Transform: merge_market_data_bundle
 def merge_market_data_bundle(
     bundle: Annotated[
-        dict,
+        NormalizedOHLCVBundle,
         ExampleValue[
             {
                 "__generator_id__": "gen_normalized_bundle",
