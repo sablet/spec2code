@@ -1637,7 +1637,9 @@ class Engine:
         print("\n📋 DataType Completeness Check:")
         print("=" * 80)
 
-        has_issues = any(self._check_single_datatype_completeness(dt, errors) for dt in self.spec.datatypes)
+        # Check all datatypes without short-circuiting
+        issue_flags = [self._check_single_datatype_completeness(dt, errors) for dt in self.spec.datatypes]
+        has_issues = any(issue_flags)
 
         summary = (
             "\n  ⚠️  Some datatypes are missing checks or sample sources"
