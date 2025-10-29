@@ -23,7 +23,16 @@ def fetch_yahoo_finance_ohlcv(
             }
         ],
     ],
-) -> Annotated[dict, Check["apps.algo-trade-pipeline.checks.market_data_checks:check_batch_collection"]]:
+) -> Annotated[
+    dict,
+    Check["apps.algo-trade-pipeline.checks.market_data_checks:check_batch_collection"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_provider_batches",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_provider_batches",
+        }
+    ],
+]:
     """Fetch OHLCV data from Yahoo Finance API"""
     # TODO: implement transform logic
     return {}
@@ -31,8 +40,25 @@ def fetch_yahoo_finance_ohlcv(
 
 # Auto-generated skeleton for Transform: normalize_multi_provider
 def normalize_multi_provider(
-    batches: dict,
-) -> Annotated[dict, Check["apps.algo-trade-pipeline.checks.market_data_checks:check_normalized_bundle"]]:
+    batches: Annotated[
+        dict,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_provider_batches",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_provider_batches",
+            }
+        ],
+    ],
+) -> Annotated[
+    dict,
+    Check["apps.algo-trade-pipeline.checks.market_data_checks:check_normalized_bundle"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_normalized_bundle",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_normalized_bundle",
+        }
+    ],
+]:
     """Normalize data from multiple providers to unified format"""
     # TODO: implement transform logic
     return {}
@@ -40,9 +66,24 @@ def normalize_multi_provider(
 
 # Auto-generated skeleton for Transform: merge_market_data_bundle
 def merge_market_data_bundle(
-    bundle: dict,
+    bundle: Annotated[
+        dict,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_normalized_bundle",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_normalized_bundle",
+            }
+        ],
+    ],
 ) -> Annotated[
-    MultiAssetOHLCVFrame, Check["apps.algo-trade-pipeline.checks.market_data_checks:check_multiasset_frame"]
+    MultiAssetOHLCVFrame,
+    Check["apps.algo-trade-pipeline.checks.market_data_checks:check_multiasset_frame"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_multiasset_frame",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_multiasset_frame",
+        }
+    ],
 ]:
     """Merge normalized bundle into MultiIndex DataFrame"""
     # TODO: implement transform logic
@@ -51,7 +92,15 @@ def merge_market_data_bundle(
 
 # Auto-generated skeleton for Transform: persist_market_data_snapshot
 def persist_market_data_snapshot(
-    frame: MultiAssetOHLCVFrame,
+    frame: Annotated[
+        MultiAssetOHLCVFrame,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_multiasset_frame",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_multiasset_frame",
+            }
+        ],
+    ],
     config: Annotated[
         MarketDataIngestionConfig,
         ExampleValue[
@@ -66,7 +115,16 @@ def persist_market_data_snapshot(
             }
         ],
     ],
-) -> Annotated[MarketDataSnapshotMeta, Check["apps.algo-trade-pipeline.checks.market_data_checks:check_snapshot_meta"]]:
+) -> Annotated[
+    MarketDataSnapshotMeta,
+    Check["apps.algo-trade-pipeline.checks.market_data_checks:check_snapshot_meta"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_snapshot_meta",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.market_data:generate_snapshot_meta",
+        }
+    ],
+]:
     """Persist market data to storage and return metadata"""
     # TODO: implement transform logic
     return {}

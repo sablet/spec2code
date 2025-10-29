@@ -14,9 +14,24 @@ from typing import Literal
 
 # Auto-generated skeleton for Transform: rank_predictions
 def rank_predictions(
-    predictions: list[PredictionData],
+    predictions: Annotated[
+        list[PredictionData],
+        ExampleValue[
+            {
+                "__generator_id__": "gen_prediction_data_list",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.model:generate_prediction_data_list",
+            }
+        ],
+    ],
 ) -> Annotated[
-    list[RankedPredictionData], Check["apps.algo-trade-pipeline.checks.backtest_checks:check_ranked_predictions"]
+    list[RankedPredictionData],
+    Check["apps.algo-trade-pipeline.checks.backtest_checks:check_ranked_predictions"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_ranked_prediction_data_list",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_ranked_prediction_data_list",
+        }
+    ],
 ]:
     """Rank predictions and add prediction_rank_pct column"""
     # TODO: implement transform logic
@@ -25,9 +40,26 @@ def rank_predictions(
 
 # Auto-generated skeleton for Transform: filter_top_predictions
 def filter_top_predictions(
-    ranked: list[RankedPredictionData], top_n: int = 3, threshold: float = 0.7
+    ranked: Annotated[
+        list[RankedPredictionData],
+        ExampleValue[
+            {
+                "__generator_id__": "gen_ranked_prediction_data_list",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_ranked_prediction_data_list",
+            }
+        ],
+    ],
+    top_n: int = 3,
+    threshold: float = 0.7,
 ) -> Annotated[
-    list[SelectedCurrencyData], Check["apps.algo-trade-pipeline.checks.backtest_checks:check_selected_currencies"]
+    list[SelectedCurrencyData],
+    Check["apps.algo-trade-pipeline.checks.backtest_checks:check_selected_currencies"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_selected_currency_data_list",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_data_list",
+        }
+    ],
 ]:
     """Filter top N predictions and assign position signals"""
     # TODO: implement transform logic
@@ -36,10 +68,33 @@ def filter_top_predictions(
 
 # Auto-generated skeleton for Transform: apply_trading_costs
 def apply_trading_costs(
-    selected: list[SelectedCurrencyData], cost_config: TradingCostConfig | None = None
+    selected: Annotated[
+        list[SelectedCurrencyData],
+        ExampleValue[
+            {
+                "__generator_id__": "gen_selected_currency_data_list",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_data_list",
+            }
+        ],
+    ],
+    cost_config: Annotated[
+        TradingCostConfig | None,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_trading_cost_config",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_trading_cost_config",
+            }
+        ],
+    ] = None,
 ) -> Annotated[
     list[SelectedCurrencyDataWithCosts],
     Check["apps.algo-trade-pipeline.checks.backtest_checks:check_selected_currencies_with_costs"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_selected_currency_with_costs_list",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_with_costs_list",
+        }
+    ],
 ]:
     """Apply swap rates and spread costs to calculate adjusted returns"""
     # TODO: implement transform logic
@@ -48,9 +103,26 @@ def apply_trading_costs(
 
 # Auto-generated skeleton for Transform: simulate_buy_scenario
 def simulate_buy_scenario(
-    selected_currencies: list[SelectedCurrencyDataWithCosts],
+    selected_currencies: Annotated[
+        list[SelectedCurrencyDataWithCosts],
+        ExampleValue[
+            {
+                "__generator_id__": "gen_selected_currency_with_costs_list",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_with_costs_list",
+            }
+        ],
+    ],
     allocation_method: Literal["equal", "weighted", "risk_parity"] = "equal",
-) -> Annotated[SimulationResult, Check["apps.algo-trade-pipeline.checks.backtest_checks:check_simulation_result"]]:
+) -> Annotated[
+    SimulationResult,
+    Check["apps.algo-trade-pipeline.checks.backtest_checks:check_simulation_result"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_simulation_result",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_simulation_result",
+        }
+    ],
+]:
     """Run portfolio simulation with specified allocation method"""
     # TODO: implement transform logic
     return {}
@@ -58,7 +130,16 @@ def simulate_buy_scenario(
 
 # Auto-generated skeleton for Transform: calculate_performance_metrics
 def calculate_performance_metrics(
-    simulation: SimulationResult, risk_free_rate: float = 0.0
+    simulation: Annotated[
+        SimulationResult,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_simulation_result",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.backtest:generate_simulation_result",
+            }
+        ],
+    ],
+    risk_free_rate: float = 0.0,
 ) -> Annotated[
     PerformanceMetrics,
     Check["apps.algo-trade-pipeline.checks.backtest_checks:check_performance_metrics"],

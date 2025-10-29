@@ -11,7 +11,15 @@ from typing import Any
 
 # Auto-generated skeleton for Transform: train_lightgbm_cv
 def train_lightgbm_cv(
-    aligned_data: AlignedFeatureTarget,
+    aligned_data: Annotated[
+        AlignedFeatureTarget,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_aligned_feature_target",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.feature_engineering:generate_aligned_feature_target",
+            }
+        ],
+    ],
     cv_config: Annotated[
         SimpleCVConfig | None,
         ExampleValue[
@@ -21,8 +29,25 @@ def train_lightgbm_cv(
             }
         ],
     ] = None,
-    lgbm_params: dict[str, Any] | None = None,
-) -> Annotated[CVResult, Check["apps.algo-trade-pipeline.checks.model_checks:check_cv_result"]]:
+    lgbm_params: Annotated[
+        dict[str, Any] | None,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_simple_lgbm_params",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.model:generate_simple_lgbm_params",
+            }
+        ],
+    ] = None,
+) -> Annotated[
+    CVResult,
+    Check["apps.algo-trade-pipeline.checks.model_checks:check_cv_result"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_cv_result",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.model:generate_cv_result",
+        }
+    ],
+]:
     """Train LightGBM with cross-validation (internal CV split generation)"""
     # TODO: implement transform logic
     return {}
@@ -30,8 +55,34 @@ def train_lightgbm_cv(
 
 # Auto-generated skeleton for Transform: generate_predictions
 def generate_predictions(
-    cv_result: CVResult, aligned_data: AlignedFeatureTarget
-) -> Annotated[list[PredictionData], Check["apps.algo-trade-pipeline.checks.model_checks:check_prediction_data"]]:
+    cv_result: Annotated[
+        CVResult,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_cv_result",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.model:generate_cv_result",
+            }
+        ],
+    ],
+    aligned_data: Annotated[
+        AlignedFeatureTarget,
+        ExampleValue[
+            {
+                "__generator_id__": "gen_aligned_feature_target",
+                "__generator_impl__": "apps.algo-trade-pipeline.generators.feature_engineering:generate_aligned_feature_target",
+            }
+        ],
+    ],
+) -> Annotated[
+    list[PredictionData],
+    Check["apps.algo-trade-pipeline.checks.model_checks:check_prediction_data"],
+    ExampleValue[
+        {
+            "__generator_id__": "gen_prediction_data_list",
+            "__generator_impl__": "apps.algo-trade-pipeline.generators.model:generate_prediction_data_list",
+        }
+    ],
+]:
     """Generate prediction data list from CV OOS predictions"""
     # TODO: implement transform logic
     return {}

@@ -2178,7 +2178,7 @@ class Engine:
         transform: Transform,
         param_name: str,
         param_spec: Parameter,
-        param_annotation: Any,
+        param_annotation: type,
         errors: dict[str, list[str]],
     ) -> None:
         """Validate annotations for a single transform parameter."""
@@ -2187,7 +2187,8 @@ class Engine:
                 datatype = self._find_datatype(param_spec.datatype_ref)
                 if datatype and (datatype.example_refs or datatype.generator_refs):
                     errors["transform_annotations"].append(
-                        f"Transform '{transform.id}' parameter '{param_name}' is missing expected ExampleValue annotations."
+                        f"Transform '{transform.id}' parameter '{param_name}' "
+                        f"is missing expected ExampleValue annotations."
                     )
             return
 
@@ -2198,7 +2199,7 @@ class Engine:
     def _validate_return_annotations(
         self: "Engine",
         transform: Transform,
-        return_annotation: Any,
+        return_annotation: type,
         errors: dict[str, list[str]],
     ) -> None:
         """Validate annotations for a transform's return value."""
@@ -2225,9 +2226,11 @@ class Engine:
         if not datatype:
             return
 
-        spec_check_impls = {
-            _find_check(self.spec, check_id).impl for check_id in datatype.check_ids if _find_check(self.spec, check_id)
-        }
+        spec_check_impls = set()
+        for check_id in datatype.check_ids:
+            check_def = _find_check(self.spec, check_id)
+            if check_def:
+                spec_check_impls.add(check_def.impl)
         found_check_impls = {ann.__check_ref__ for ann in annotations if hasattr(ann, "__check_ref__")}
 
         if found_check_impls != spec_check_impls:
@@ -2247,7 +2250,7 @@ class Engine:
         transform: Transform,
         param_name: str,
         param_spec: Parameter,
-        annotations: tuple[Any, ...],
+        annotations: tuple[type, ...],
         errors: dict[str, list[str]],
     ) -> None:
         """Validate ExampleValue annotations for a parameter, checking for example_id and value."""
@@ -2258,6 +2261,26 @@ class Engine:
             return
 
         spec_example_ids = set(datatype.example_refs)
+
+        # Process annotations and collect found example IDs
+        found_example_ids, example_map = self._process_example_annotations(transform, param_name, annotations, errors)
+
+        # Check if we need to validate ID coverage
+        has_any_example_annotations = any("__example_id__" in getattr(a, "__example_value__", {}) for a in annotations)
+        if not spec_example_ids and not has_any_example_annotations:
+            return
+
+        # Compare found vs expected example IDs
+        Engine._compare_example_id_sets(transform, param_name, spec_example_ids, found_example_ids, errors)
+
+    def _process_example_annotations(
+        self,
+        transform: Transform,
+        param_name: str,
+        annotations: tuple[type, ...],
+        errors: dict[str, list[str]],
+    ) -> tuple[set[str], dict[str, Example]]:
+        """Process annotations and collect found example IDs."""
         found_example_ids: set[str] = set()
         example_map = {ex.id: ex for ex in self.spec.examples}
 
@@ -2272,45 +2295,82 @@ class Engine:
             if "__generator_id__" in value:
                 continue  # Skip generator annotations
 
-            example_id = value.get("__example_id__")
+            # Extract example validation into separate function
+            example_id = Engine._extract_and_validate_example_id(transform, param_name, value, errors)
             if not example_id:
-                errors["transform_annotations"].append(
-                    f"Transform '{transform.id}' parameter '{param_name}' has an ExampleValue annotation missing '__example_id__'."
-                )
                 continue
 
             found_example_ids.add(example_id)
 
-            example_spec = example_map.get(example_id)
-            if not example_spec:
-                # This case is already handled by spec validation, but good to be safe
-                continue
+            # Validate example payload
+            Engine._validate_example_payload(transform, param_name, example_id, value, example_map, errors)
 
-            # For return values, we check against 'expected', for params, 'input'
-            use_expected = param_name == "return"
-            expected_payload = example_spec.expected if use_expected else example_spec.input
-            actual_payload = value.get("__example_value__")
+        return found_example_ids, example_map
 
-            if actual_payload != expected_payload:
-                errors["transform_annotations"].append(
-                    f"Transform '{transform.id}' parameter '{param_name}' ExampleValue payload mismatch for example '{example_id}'."
-                )
+    @staticmethod
+    def _extract_and_validate_example_id(
+        transform: Transform,
+        param_name: str,
+        value: dict,
+        errors: dict[str, list[str]],
+    ) -> str | None:
+        """Extract and validate example_id from annotation value."""
+        example_id = value.get("__example_id__")
+        if not example_id:
+            errors["transform_annotations"].append(
+                f"Transform '{transform.id}' parameter '{param_name}' "
+                f"has an ExampleValue annotation missing '__example_id__'."
+            )
+            return None
+        return example_id
 
-        if not spec_example_ids and not any(
-            "__example_id__" in getattr(a, "__example_value__", {}) for a in annotations
-        ):
+    @staticmethod
+    def _validate_example_payload(
+        transform: Transform,
+        param_name: str,
+        example_id: str,
+        value: dict,
+        example_map: dict[str, Example],
+        errors: dict[str, list[str]],
+    ) -> None:
+        """Validate that example annotation has correct payload."""
+        example_spec = example_map.get(example_id)
+        if not example_spec:
+            # This case is already handled by spec validation, but good to be safe
             return
 
+        # For return values, we check against 'expected', for params, 'input'
+        use_expected = param_name == "return"
+        expected_payload = example_spec.expected if use_expected else example_spec.input
+        actual_payload = value.get("__example_value__")
+
+        if actual_payload != expected_payload:
+            errors["transform_annotations"].append(
+                f"Transform '{transform.id}' parameter '{param_name}' "
+                f"ExampleValue payload mismatch for example '{example_id}'."
+            )
+
+    @staticmethod
+    def _compare_example_id_sets(
+        transform: Transform,
+        param_name: str,
+        spec_example_ids: set[str],
+        found_example_ids: set[str],
+        errors: dict[str, list[str]],
+    ) -> None:
+        """Compare expected and found example IDs."""
         if found_example_ids != spec_example_ids:
             missing = sorted(spec_example_ids - found_example_ids)
             extra = sorted(found_example_ids - spec_example_ids)
             if missing:
                 errors["transform_annotations"].append(
-                    f"Transform '{transform.id}' parameter '{param_name}' missing ExampleValue marker (expected example_ids: {missing})"
+                    f"Transform '{transform.id}' parameter '{param_name}' "
+                    f"missing ExampleValue marker (expected example_ids: {missing})"
                 )
             if extra:
                 errors["transform_annotations"].append(
-                    f"Transform '{transform.id}' parameter '{param_name}' has unexpected ExampleValue marker (found: {extra})"
+                    f"Transform '{transform.id}' parameter '{param_name}' "
+                    f"has unexpected ExampleValue marker (found: {extra})"
                 )
 
     def _validate_generator_annotations(
@@ -2318,7 +2378,7 @@ class Engine:
         transform: Transform,
         param_name: str,
         param_spec: Parameter,
-        annotations: tuple[Any, ...],
+        annotations: tuple[type, ...],
         errors: dict[str, list[str]],
     ) -> None:
         """Validate ExampleValue annotations for a parameter, checking for generator_id."""
@@ -2329,6 +2389,19 @@ class Engine:
             return
 
         spec_generator_ids = set(datatype.generator_refs)
+        found_generator_ids = self._extract_generator_ids_from_annotations(annotations)
+
+        if not spec_generator_ids and not any(
+            "__generator_id__" in getattr(a, "__example_value__", {}) for a in annotations
+        ):
+            return
+
+        if found_generator_ids != spec_generator_ids:
+            self._report_generator_id_mismatch(transform, param_name, spec_generator_ids, found_generator_ids, errors)
+
+    @staticmethod
+    def _extract_generator_ids_from_annotations(annotations: tuple[type, ...]) -> set[str]:
+        """Extract generator IDs from annotations."""
         found_generator_ids: set[str] = set()
 
         for annotation in annotations:
@@ -2339,22 +2412,29 @@ class Engine:
             if isinstance(value, dict) and "__generator_id__" in value:
                 found_generator_ids.add(value["__generator_id__"])
 
-        if not spec_generator_ids and not any(
-            "__generator_id__" in getattr(a, "__example_value__", {}) for a in annotations
-        ):
-            return
+        return found_generator_ids
 
-        if found_generator_ids != spec_generator_ids:
-            missing = sorted(spec_generator_ids - found_generator_ids)
-            extra = sorted(found_generator_ids - spec_generator_ids)
-            if missing:
-                errors["transform_annotations"].append(
-                    f"Transform '{transform.id}' parameter '{param_name}' missing generator ExampleValue marker (expected generator_ids: {missing})"
-                )
-            if extra:
-                errors["transform_annotations"].append(
-                    f"Transform '{transform.id}' parameter '{param_name}' has unexpected generator ExampleValue marker (found: {extra})"
-                )
+    @staticmethod
+    def _report_generator_id_mismatch(
+        transform: Transform,
+        param_name: str,
+        spec_generator_ids: set[str],
+        found_generator_ids: set[str],
+        errors: dict[str, list[str]],
+    ) -> None:
+        """Report mismatch between spec and found generator IDs."""
+        missing = sorted(spec_generator_ids - found_generator_ids)
+        extra = sorted(found_generator_ids - spec_generator_ids)
+        if missing:
+            errors["transform_annotations"].append(
+                f"Transform '{transform.id}' parameter '{param_name}' "
+                f"missing generator ExampleValue marker (expected generator_ids: {missing})"
+            )
+        if extra:
+            errors["transform_annotations"].append(
+                f"Transform '{transform.id}' parameter '{param_name}' "
+                f"has unexpected generator ExampleValue marker (found: {extra})"
+            )
 
     def _validate_generator_refs(self, errors: dict[str, list[str]]) -> None:
         """Validate that all generator references are defined."""
