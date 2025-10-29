@@ -29,6 +29,7 @@ AnnotationSource = TypeVar("AnnotationSource")
 TypeContext = Literal["transform", "type_alias", "pydantic_model", "default"]
 
 APP_MODULE_MIN_PARTS = 2
+UNLINKED_INFO_SUFFIX = " (紐付いているデータ型がステージIO対象外: check がない・Unlinked、でも問題ない)"
 
 
 class Check(Generic[T]):
@@ -1623,8 +1624,8 @@ class Engine:
             f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
         )
 
+    @staticmethod
     def _check_single_datatype_completeness(
-        self: "Engine",
         datatype: DataType,
         errors: dict[str, list[str]],
         *,
@@ -2604,60 +2605,109 @@ class Engine:
             "generators": all_generators - referenced_generators,
         }
 
+    @staticmethod
+    def _collect_example_usage_map(datatypes: Iterable[DataType]) -> dict[str, list[str]]:
+        """Build a mapping from example id to datatypes referencing it."""
+        usage: dict[str, list[str]] = {}
+        for datatype in datatypes:
+            for example_id in datatype.example_ids:
+                usage.setdefault(example_id, []).append(datatype.id)
+        return usage
+
+    @staticmethod
+    def _collect_generator_usage_map(datatypes: Iterable[DataType]) -> dict[str, list[str]]:
+        """Build a mapping from generator id to datatypes referencing it."""
+        usage: dict[str, list[str]] = {}
+        for datatype in datatypes:
+            for generator_id in datatype.generator_refs:
+                usage.setdefault(generator_id, []).append(datatype.id)
+        return usage
+
+    @staticmethod
+    def _print_transform_unlinked(item_id: str) -> None:
+        print(f"  ⚠️  Unlinked transform: '{item_id}' is not referenced by any stage candidates")
+
+    @staticmethod
+    def _print_datatype_unlinked(item_id: str, stage_io_datatypes: set[str]) -> None:
+        if item_id in stage_io_datatypes:
+            print(f"  ⚠️  Unlinked datatype: '{item_id}' is not used in stages or transforms")
+        else:
+            print(f"  ℹ️  Unlinked datatype: '{item_id}'{UNLINKED_INFO_SUFFIX}")
+
+    @staticmethod
+    def _print_example_unlinked(
+        item_id: str,
+        stage_io_datatypes: set[str],
+        example_usage: dict[str, list[str]],
+    ) -> None:
+        linked_dtypes = example_usage.get(item_id, [])
+        if linked_dtypes and all(dtype not in stage_io_datatypes for dtype in linked_dtypes):
+            print(f"  ℹ️  Unlinked example: '{item_id}'{UNLINKED_INFO_SUFFIX}")
+        else:
+            print(f"  ⚠️  Unlinked example: '{item_id}' is not attached to any used datatype")
+
+    @staticmethod
+    def _print_check_unlinked(item_id: str) -> None:
+        print(f"  ⚠️  Unlinked check: '{item_id}' is not attached to any used datatype")
+
+    @staticmethod
+    def _print_generator_unlinked(
+        item_id: str,
+        stage_io_datatypes: set[str],
+        generator_usage: dict[str, list[str]],
+    ) -> None:
+        linked_dtypes = generator_usage.get(item_id, [])
+        if linked_dtypes and all(dtype not in stage_io_datatypes for dtype in linked_dtypes):
+            print(f"  ℹ️  Unlinked generator: '{item_id}'{UNLINKED_INFO_SUFFIX}")
+            return
+        if linked_dtypes:
+            joined = ", ".join(linked_dtypes)
+            print(f"  ⚠️  Unlinked generator: '{item_id}' is only referenced by unused datatype(s): {joined}")
+            return
+        print(f"  ⚠️  Unlinked generator: '{item_id}' is not referenced by any datatype")
+
+    @staticmethod
+    def _print_generic_unlinked(category: str, item_id: str) -> None:
+        print(f"  ⚠️  Unlinked {category[:-1]}: '{item_id}'")
+
+    def _build_unlinked_handlers(
+        self: "Engine",
+        stage_io_datatypes: set[str],
+        example_usage: dict[str, list[str]],
+        generator_usage: dict[str, list[str]],
+    ) -> dict[str, Callable[[str], None]]:
+        """Prepare warning handler functions per category."""
+        handlers: dict[str, Callable[[str], None]] = {
+            "transforms": self._print_transform_unlinked,
+            "datatypes": lambda item_id: self._print_datatype_unlinked(item_id, stage_io_datatypes),
+            "examples": lambda item_id: self._print_example_unlinked(item_id, stage_io_datatypes, example_usage),
+            "checks": self._print_check_unlinked,
+            "generators": lambda item_id: self._print_generator_unlinked(
+                item_id,
+                stage_io_datatypes,
+                generator_usage,
+            ),
+        }
+        return handlers
+
     def _warn_unlinked_items(self: "Engine") -> None:
         """Print warnings for unlinked items without failing validation."""
         unlinked = self._detect_unlinked_items()
         stage_io_datatypes = self._collect_stage_io_datatypes()
-        example_usage: dict[str, list[str]] = {
-            example.id: [dtype.id for dtype in self.spec.datatypes if example.id in dtype.example_ids]
-            for example in self.spec.examples
-        }
-        generator_usage: dict[str, list[str]] = {
-            generator_id: [dtype.id for dtype in self.spec.datatypes if generator_id in dtype.generator_refs]
-            for generator_id in self.spec.generators
-        }
-        any_warn = False
+        example_usage = self._collect_example_usage_map(self.spec.datatypes)
+        generator_usage = self._collect_generator_usage_map(self.spec.datatypes)
+        handlers = self._build_unlinked_handlers(stage_io_datatypes, example_usage, generator_usage)
+
+        has_items = False
         for category, ids in unlinked.items():
+            handler = handlers.get(category)
             for item_id in sorted(ids):
-                any_warn = True
-                if category == "transforms":
-                    print(f"  ⚠️  Unlinked transform: '{item_id}' is not referenced by any stage candidates")
-                elif category == "datatypes":
-                    if item_id in stage_io_datatypes:
-                        print(f"  ⚠️  Unlinked datatype: '{item_id}' is not used in stages or transforms")
-                    else:
-                        print(
-                            "  ℹ️  Unlinked datatype: "
-                            f"'{item_id}' (ステージIO対象外: check がない・Unlinked、でも問題ない)"
-                        )
-                elif category == "examples":
-                    linked_dtypes = example_usage.get(item_id, [])
-                    if linked_dtypes and all(dt not in stage_io_datatypes for dt in linked_dtypes):
-                        print(
-                            "  ℹ️  Unlinked example: "
-                            f"'{item_id}' (紐付いているデータ型がステージIO対象外: check がない・Unlinked、でも問題ない)"
-                        )
-                    else:
-                        print(f"  ⚠️  Unlinked example: '{item_id}' is not attached to any used datatype")
-                elif category == "checks":
-                    print(f"  ⚠️  Unlinked check: '{item_id}' is not attached to any used datatype")
-                elif category == "generators":
-                    linked_dtypes = generator_usage.get(item_id, [])
-                    if linked_dtypes and all(dt not in stage_io_datatypes for dt in linked_dtypes):
-                        print(
-                            "  ℹ️  Unlinked generator: "
-                            f"'{item_id}' (紐付いているデータ型がステージIO対象外: check がない・Unlinked、でも問題ない)"
-                        )
-                    elif linked_dtypes:
-                        joined = ", ".join(linked_dtypes)
-                        print(
-                            f"  ⚠️  Unlinked generator: '{item_id}' is only referenced by unused datatype(s): {joined}"
-                        )
-                    else:
-                        print(f"  ⚠️  Unlinked generator: '{item_id}' is not referenced by any datatype")
+                has_items = True
+                if handler:
+                    handler(item_id)
                 else:
-                    print(f"  ⚠️  Unlinked {category[:-1]}: '{item_id}'")
-        if not any_warn:
+                    self._print_generic_unlinked(category, item_id)
+        if not has_items:
             print("  ✅ No unlinked items detected")
 
     def build_stage_groups(self: "Engine") -> list[dict[str, Any]]:

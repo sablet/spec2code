@@ -95,6 +95,47 @@ def normalize_pydantic_fields(fields: list[dict[str, Any]]) -> list[dict[str, An
     return normalized
 
 
+def _format_literal_type(literal_values: list[Any]) -> str:
+    """Return Literal[...] representation from raw values."""
+    joined = ", ".join(str(value) for value in literal_values)
+    return f"Literal[{joined}]" if joined else "Literal"
+
+
+def _format_union_type(candidates: list[Any]) -> str:
+    """Return union type display from raw union candidates."""
+    formatted: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        type_hint = candidate.get("datatype_ref") or candidate.get("native")
+        if not type_hint and isinstance(candidate.get("literal"), list):
+            type_hint = _format_literal_type(candidate["literal"])
+        if type_hint:
+            formatted.append(str(type_hint))
+    return " | ".join(formatted) if formatted else "union"
+
+
+def _infer_param_type(param: dict[str, Any]) -> str:
+    """Infer a human friendly parameter type string."""
+    datatype_ref = param.get("datatype_ref")
+    if isinstance(datatype_ref, str):
+        return datatype_ref
+
+    native_type = param.get("native")
+    if isinstance(native_type, str):
+        return native_type
+
+    literal_values = param.get("literal")
+    if isinstance(literal_values, list):
+        return _format_literal_type(literal_values)
+
+    union_candidates = param.get("union")
+    if isinstance(union_candidates, list):
+        return _format_union_type(union_candidates)
+
+    return "unknown"
+
+
 def normalize_parameters(params: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Normalize parameter definitions into a frontend-friendly structure"""
     normalized: list[dict[str, Any]] = []
@@ -103,36 +144,10 @@ def normalize_parameters(params: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not isinstance(param, dict):
             continue
 
-        param_type = "unknown"
-        if "datatype_ref" in param and isinstance(param["datatype_ref"], str):
-            param_type = param["datatype_ref"]
-        elif "native" in param and isinstance(param["native"], str):
-            param_type = param["native"]
-        elif "literal" in param and isinstance(param["literal"], list):
-            literal_values = [str(value) for value in param["literal"]]
-            joined = ", ".join(literal_values)
-            param_type = f"Literal[{joined}]" if joined else "Literal"
-        elif "union" in param and isinstance(param["union"], list):
-            union_parts: list[str] = []
-            for candidate in param["union"]:
-                if not isinstance(candidate, dict):
-                    continue
-                union_parts.append(
-                    candidate.get("datatype_ref")
-                    or candidate.get("native")
-                    or (
-                        f"Literal[{', '.join(candidate['literal'])}]"
-                        if isinstance(candidate.get("literal"), list)
-                        else None
-                    )
-                )
-            formatted = [str(part) for part in union_parts if part]
-            param_type = " | ".join(formatted) if formatted else "union"
-
         normalized.append(
             {
                 "name": param.get("name"),
-                "type": param_type,
+                "type": _infer_param_type(param),
                 "optional": param.get("optional", False),
                 "default": param.get("default"),
                 "description": param.get("description", ""),
@@ -162,6 +177,138 @@ def _build_card_map(cards: list[dict[str, Any]]) -> dict[tuple[str, str, str], d
     return {(card["category"], card["id"], card["source_spec"]): card for card in cards}
 
 
+def _has_dag_metadata(raw_data: dict[str, Any]) -> bool:
+    """Return True when dag or stage metadata exists."""
+    dag_stages = raw_data.get("dag_stages")
+    if isinstance(dag_stages, list) and dag_stages:
+        return True
+    dag_edges = raw_data.get("dag")
+    return isinstance(dag_edges, list) and bool(dag_edges)
+
+
+def _lookup_card(
+    card_map: dict[tuple[str, str, str], dict[str, Any]],
+    spec_name: str,
+    category: str,
+    card_id: str | None,
+) -> dict[str, Any] | None:
+    """Fetch a single card from the lookup map."""
+    if not card_id:
+        return None
+    return card_map.get((category, card_id, spec_name))
+
+
+def _lookup_cards(
+    card_map: dict[tuple[str, str, str], dict[str, Any]],
+    spec_name: str,
+    category: str,
+    card_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Fetch multiple cards, skipping missing entries."""
+    return [card for card_id in card_ids if (card := _lookup_card(card_map, spec_name, category, card_id)) is not None]
+
+
+def _extract_dtype_sets(related_ids: dict[str, Any]) -> tuple[set[str], set[str], set[str]]:
+    """Split datatype ids into input/output/parameter groups."""
+    input_id = related_ids.get("input_dtype_id")
+    output_id = related_ids.get("output_dtype_id")
+    all_ids = set(related_ids.get("datatype_ids", []))
+    input_ids = {input_id} if input_id else set()
+    output_ids = {output_id} if output_id else set()
+    param_ids = all_ids - input_ids - output_ids
+    return input_ids, output_ids, param_ids
+
+
+def _collect_input_check_ids(
+    input_dtype_ids: set[str],
+    card_map: dict[tuple[str, str, str], dict[str, Any]],
+    spec_name: str,
+) -> set[str]:
+    """Collect check ids attached to input datatypes."""
+    check_ids: set[str] = set()
+    for dtype_id in input_dtype_ids:
+        dtype_card = card_map.get(("dtype", dtype_id, spec_name))
+        if not dtype_card:
+            continue
+        metadata = dtype_card.get("metadata")
+        if isinstance(metadata, dict):
+            check_ids.update(metadata.get("check_ids", []))
+    return check_ids
+
+
+def _build_related_cards(
+    related_ids: dict[str, Any],
+    card_map: dict[tuple[str, str, str], dict[str, Any]],
+    spec_name: str,
+    param_dtype_ids: set[str],
+    input_check_ids: set[str],
+    output_check_ids: list[str],
+) -> dict[str, Any]:
+    """Assemble related card payloads for a single stage."""
+    return {
+        "stage_card": _lookup_card(card_map, spec_name, "dag_stage", related_ids.get("stage_id")),
+        "input_dtype_card": _lookup_card(card_map, spec_name, "dtype", related_ids.get("input_dtype_id")),
+        "output_dtype_card": _lookup_card(card_map, spec_name, "dtype", related_ids.get("output_dtype_id")),
+        "transform_cards": _lookup_cards(
+            card_map,
+            spec_name,
+            "transform",
+            related_ids.get("transform_ids", []),
+        ),
+        "param_dtype_cards": _lookup_cards(card_map, spec_name, "dtype", sorted(param_dtype_ids)),
+        "generator_cards": _lookup_cards(
+            card_map,
+            spec_name,
+            "generator",
+            related_ids.get("generator_ids", []),
+        ),
+        "input_example_cards": [],
+        "output_example_cards": _lookup_cards(
+            card_map,
+            spec_name,
+            "example",
+            related_ids.get("example_ids", []),
+        ),
+        "input_check_cards": _lookup_cards(
+            card_map,
+            spec_name,
+            "checks",
+            sorted(input_check_ids),
+        ),
+        "output_check_cards": _lookup_cards(card_map, spec_name, "checks", output_check_ids),
+    }
+
+
+def _convert_stage_group(
+    group: dict[str, Any],
+    card_map: dict[tuple[str, str, str], dict[str, Any]],
+    spec_name: str,
+) -> dict[str, Any]:
+    """Convert Engine stage group info into export payload."""
+    related_ids = group["related_card_ids"]
+    input_dtype_ids, _, param_dtype_ids = _extract_dtype_sets(related_ids)
+    input_check_ids = _collect_input_check_ids(input_dtype_ids, card_map, spec_name)
+    output_check_ids = sorted(set(related_ids.get("check_ids", [])) - input_check_ids)
+
+    return {
+        "spec_name": spec_name,
+        "stage_id": group["stage_id"],
+        "stage_description": group["description"],
+        "input_type": group["input_type"],
+        "output_type": group["output_type"],
+        "selection_mode": group["selection_mode"],
+        "max_select": group["max_select"],
+        "related_cards": _build_related_cards(
+            related_ids,
+            card_map,
+            spec_name,
+            param_dtype_ids,
+            input_check_ids,
+            output_check_ids,
+        ),
+    }
+
+
 def build_dag_stage_groups(
     spec_path: Path, raw_data: dict[str, Any], cards: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -176,11 +323,7 @@ def build_dag_stage_groups(
         - stage metadata (spec_name, stage_id, input/output types, etc.)
         - related_cards: stage, input_dtype, output_dtype, transforms, examples, checks
     """
-    dag_stages = raw_data.get("dag_stages")
-    dag_edges = raw_data.get("dag")
-    has_stage_info = isinstance(dag_stages, list) and len(dag_stages) > 0
-    has_dag_edges = isinstance(dag_edges, list) and len(dag_edges) > 0
-    if not has_stage_info and not has_dag_edges:
+    if not _has_dag_metadata(raw_data):
         return []
 
     spec_name = spec_path.stem
@@ -195,64 +338,7 @@ def build_dag_stage_groups(
         stage_groups_from_engine = engine.build_stage_groups()
 
         # Convert Engine's ID-based groups to card-based groups
-        result = []
-        for group in stage_groups_from_engine:
-            related_ids = group["related_card_ids"]
-
-            # Build card lookup helpers
-            def get_card(category: str, card_id: str | None) -> dict[str, Any] | None:
-                if not card_id:
-                    return None
-                return card_map.get((category, card_id, spec_name))
-
-            def get_cards(category: str, card_ids: list[str]) -> list[dict[str, Any]]:
-                return [card for cid in card_ids if (card := get_card(category, cid)) is not None]
-
-            # Split datatypes into input/output categories for frontend display
-            input_dtype_ids = {related_ids["input_dtype_id"]} if related_ids["input_dtype_id"] else set()
-            output_dtype_ids = {related_ids["output_dtype_id"]} if related_ids["output_dtype_id"] else set()
-            all_dtype_ids = set(related_ids["datatype_ids"])
-
-            # Remaining datatypes are parameters/auxiliary types
-            param_dtype_ids = all_dtype_ids - input_dtype_ids - output_dtype_ids
-
-            # Separate check IDs into input/output categories for display
-            input_check_ids: set[str] = set()
-            for dtype_id in input_dtype_ids:
-                dtype_card = card_map.get(("dtype", dtype_id, spec_name))
-                if dtype_card and isinstance(dtype_card.get("metadata"), dict):
-                    input_check_ids.update(dtype_card["metadata"].get("check_ids", []))
-
-            all_check_ids = set(related_ids["check_ids"])
-            output_check_ids = sorted(all_check_ids - input_check_ids)
-
-            result.append(
-                {
-                    "spec_name": spec_name,
-                    "stage_id": group["stage_id"],
-                    "stage_description": group["description"],
-                    "input_type": group["input_type"],
-                    "output_type": group["output_type"],
-                    "selection_mode": group["selection_mode"],
-                    "max_select": group["max_select"],
-                    "related_cards": {
-                        "stage_card": get_card("dag_stage", related_ids["stage_id"]),
-                        "input_dtype_card": get_card("dtype", related_ids["input_dtype_id"]),
-                        "output_dtype_card": get_card("dtype", related_ids["output_dtype_id"]),
-                        "transform_cards": get_cards("transform", related_ids["transform_ids"]),
-                        "param_dtype_cards": get_cards("dtype", sorted(param_dtype_ids)),
-                        "generator_cards": get_cards("generator", related_ids.get("generator_ids", [])),
-                        # For simplicity, put all examples/checks in output category
-                        # (frontend can adjust display logic if needed)
-                        "input_example_cards": [],
-                        "output_example_cards": get_cards("example", related_ids["example_ids"]),
-                        "input_check_cards": get_cards("checks", sorted(input_check_ids)),
-                        "output_check_cards": get_cards("checks", output_check_ids),
-                    },
-                }
-            )
-
-        return result
+        return [_convert_stage_group(group, card_map, spec_name) for group in stage_groups_from_engine]
 
     except Exception as e:
         print(f"Warning: Failed to build stage groups via Engine: {e}")
@@ -345,9 +431,10 @@ def _process_generators(
         return result
 
     for generator in items:
-        gen_id = generator.get("id")
-        if not gen_id:
+        gen_id_raw = generator.get("id")
+        if not isinstance(gen_id_raw, str):
             continue
+        gen_id = gen_id_raw
         params = generator.get("parameters", [])
 
         result.append(

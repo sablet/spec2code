@@ -235,6 +235,7 @@ This system enforces **declarative development**: specifications define structur
 The separation of concerns enables specs to serve as living documentation that stays synchronized with code.
 
 commit
-* commit は以下のコメントを追加させないで
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+* commit は以下のようにどのボットを使ったかに関する注釈メッセージを含めないで
+  * 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+  *  Co-authored-by: Qwen-Coder <qwen-coder@alibabacloud.com>
 * commit するといったら全て対象、commit stagedといったらstaged filesのみをcommit, commit ammendといったら全てのファイルを適切なメッセージでcommit ammendする。聞き返さないで
