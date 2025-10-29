@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Search, Shuffle, Upload, CheckCircle, FileType, FileText, Workflow } from "lucide-react"
+import { ArrowLeft, Search, Shuffle, Upload, CheckCircle, FileType, FileText, Workflow, Sparkles } from "lucide-react"
 import Link from "next/link"
 
 interface CardDefinition {
@@ -29,7 +29,7 @@ interface CardDefinition {
   dtype?: string
   data?: any
   // transform用
-  params?: Record<string, any>
+  params?: any
   input_dtype?: string
   output_dtype?: string
   // dag用
@@ -126,6 +126,7 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
     "transform": Shuffle,
     "dag": Workflow,
     "dag_stage": Workflow,
+    "generator": Sparkles,
   }
 
   for (const card of jsonData.cards || []) {
@@ -180,6 +181,8 @@ interface DagStageGroup {
     input_dtype_card: RelatedCardSummary | null
     output_dtype_card: RelatedCardSummary | null
     transform_cards: RelatedCardSummary[]
+    param_dtype_cards: RelatedCardSummary[]
+    generator_cards: RelatedCardSummary[]
     input_example_cards: RelatedCardSummary[]
     output_example_cards: RelatedCardSummary[]
     input_check_cards: RelatedCardSummary[]
@@ -350,10 +353,10 @@ export function CardLibrary() {
       if (related.output_dtype_card) uniqueIds.add(`${related.output_dtype_card.source_spec}::${related.output_dtype_card.id}`)
       ;[
         ...(related.transform_cards || []),
+        ...(related.generator_cards || []),
         ...(related.param_dtype_cards || []),
         ...(related.input_example_cards || []),
         ...(related.output_example_cards || []),
-        ...(related.input_check_cards || []),
         ...(related.output_check_cards || []),
       ].forEach((card) => {
         if (card) uniqueIds.add(`${card.source_spec}::${card.id}`)
@@ -413,6 +416,9 @@ export function CardLibrary() {
         <div>
           {card.input_dtype} → {card.output_dtype}
         </div>
+      )}
+      {card.category === "generator" && Array.isArray(card.params) && (
+        <div>パラメータ数: {card.params.length}</div>
       )}
       {(card.category === "dag" || card.category === "dag_stage") && card.selection_mode && (
         <div>選択モード: {card.selection_mode}</div>
@@ -675,6 +681,14 @@ export function CardLibrary() {
                       },
                       globalSeenCards,
                     )
+                    const generatorCards = mapSummariesToCards(
+                      group.related_cards.generator_cards,
+                      {
+                        label: "Generator",
+                        labelColor: "text-yellow-600",
+                      },
+                      globalSeenCards,
+                    )
                     const inputExampleCards = mapSummariesToCards(
                       group.related_cards.input_example_cards,
                       {
@@ -722,6 +736,7 @@ export function CardLibrary() {
                         {inputTypeCard}
                         {outputTypeCard}
                         {transformCards}
+                        {generatorCards}
                         {paramDtypeCards}
                         {inputExampleCards}
                         {outputCheckCards}
@@ -924,6 +939,29 @@ export function CardLibrary() {
                           <h3 className="text-sm font-semibold text-foreground mb-2">出力データ型</h3>
                           <Card className="p-3 bg-background">
                             <code className="text-xs font-mono text-foreground">{selectedCard.output_dtype}</code>
+                          </Card>
+                        </div>
+                      )}
+                      {selectedCard.implementation && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
+                          <Card className="p-3 bg-background">
+                            <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
+                          </Card>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedCard.category === "generator" && (
+                    <>
+                      {selectedCard.params && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-2">パラメータ</h3>
+                          <Card className="p-3 bg-background">
+                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
+                              {JSON.stringify(selectedCard.params, null, 2)}
+                            </pre>
                           </Card>
                         </div>
                       )}

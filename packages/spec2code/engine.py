@@ -2569,7 +2569,7 @@ class Engine:
             (candidates are auto-populated when missing)
           - referenced datatypes: stage.input_type/output_type, plus input/return
             datatype of referenced transforms
-          - referenced examples/checks: those attached to referenced datatypes
+          - referenced examples/checks/generators: those attached to referenced datatypes
 
         Returns a mapping of category to unlinked id set.
         """
@@ -2581,17 +2581,27 @@ class Engine:
         all_dtypes = {dt.id for dt in self.spec.datatypes}
         all_examples = {ex.id for ex in self.spec.examples}
         all_checks = {ck.id for ck in self.spec.checks}
+        all_generators = set(self.spec.generators.keys())
+        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
 
         # Collect referenced items
         referenced_transforms, referenced_dtypes = self._collect_stage_references()
         referenced_dtypes.update(self._collect_transform_datatypes(referenced_transforms))
         referenced_examples, referenced_checks = self._collect_datatype_references(referenced_dtypes)
+        referenced_generators: set[str] = set()
+        if all_generators:
+            for dtype_id in referenced_dtypes:
+                dtype = dtype_by_id.get(dtype_id)
+                if not dtype:
+                    continue
+                referenced_generators.update(dtype.generator_refs)
 
         return {
             "transforms": all_transforms - referenced_transforms,
             "datatypes": all_dtypes - referenced_dtypes,
             "examples": all_examples - referenced_examples,
             "checks": all_checks - referenced_checks,
+            "generators": all_generators - referenced_generators,
         }
 
     def _warn_unlinked_items(self: "Engine") -> None:
@@ -2601,6 +2611,10 @@ class Engine:
         example_usage: dict[str, list[str]] = {
             example.id: [dtype.id for dtype in self.spec.datatypes if example.id in dtype.example_ids]
             for example in self.spec.examples
+        }
+        generator_usage: dict[str, list[str]] = {
+            generator_id: [dtype.id for dtype in self.spec.datatypes if generator_id in dtype.generator_refs]
+            for generator_id in self.spec.generators
         }
         any_warn = False
         for category, ids in unlinked.items():
@@ -2627,6 +2641,20 @@ class Engine:
                         print(f"  ⚠️  Unlinked example: '{item_id}' is not attached to any used datatype")
                 elif category == "checks":
                     print(f"  ⚠️  Unlinked check: '{item_id}' is not attached to any used datatype")
+                elif category == "generators":
+                    linked_dtypes = generator_usage.get(item_id, [])
+                    if linked_dtypes and all(dt not in stage_io_datatypes for dt in linked_dtypes):
+                        print(
+                            "  ℹ️  Unlinked generator: "
+                            f"'{item_id}' (紐付いているデータ型がステージIO対象外: check がない・Unlinked、でも問題ない)"
+                        )
+                    elif linked_dtypes:
+                        joined = ", ".join(linked_dtypes)
+                        print(
+                            f"  ⚠️  Unlinked generator: '{item_id}' is only referenced by unused datatype(s): {joined}"
+                        )
+                    else:
+                        print(f"  ⚠️  Unlinked generator: '{item_id}' is not referenced by any datatype")
                 else:
                     print(f"  ⚠️  Unlinked {category[:-1]}: '{item_id}'")
         if not any_warn:
@@ -2649,11 +2677,13 @@ class Engine:
                 - datatype_ids: list[str] (all related datatypes including nested)
                 - example_ids: list[str]
                 - check_ids: list[str]
+                - generator_ids: list[str]
         """
         # Ensure candidates are populated
         _auto_collect_stage_candidates(self.spec)
 
         stage_groups = []
+        dtype_by_id = {dt.id: dt for dt in self.spec.datatypes}
 
         for stage in self.spec.dag_stages:
             stage_id = stage.stage_id
@@ -2679,6 +2709,12 @@ class Engine:
 
             # Collect examples and checks from all related datatypes
             example_ids, check_ids = self._collect_datatype_references(all_dtype_ids)
+            generator_ids: set[str] = set()
+            for dtype_id in all_dtype_ids:
+                dtype = dtype_by_id.get(dtype_id)
+                if not dtype:
+                    continue
+                generator_ids.update(dtype.generator_refs)
 
             stage_groups.append(
                 {
@@ -2696,6 +2732,7 @@ class Engine:
                         "datatype_ids": sorted(all_dtype_ids),
                         "example_ids": sorted(example_ids),
                         "check_ids": sorted(check_ids),
+                        "generator_ids": sorted(generator_ids),
                     },
                 }
             )

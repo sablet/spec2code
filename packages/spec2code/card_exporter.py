@@ -95,33 +95,64 @@ def normalize_pydantic_fields(fields: list[dict[str, Any]]) -> list[dict[str, An
     return normalized
 
 
-def normalize_transform_params(params: list[dict[str, Any]]) -> dict[str, Any]:
-    """Extract input/output types from transform parameters"""
-    input_type = None
-    param_details = []
+def normalize_parameters(params: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize parameter definitions into a frontend-friendly structure"""
+    normalized: list[dict[str, Any]] = []
 
     for param in params:
+        if not isinstance(param, dict):
+            continue
+
         param_type = "unknown"
-
-        if "datatype_ref" in param:
+        if "datatype_ref" in param and isinstance(param["datatype_ref"], str):
             param_type = param["datatype_ref"]
-        elif "native" in param:
+        elif "native" in param and isinstance(param["native"], str):
             param_type = param["native"]
-        elif "literal" in param:
-            param_type = f"Literal[{', '.join(param['literal'])}]"
+        elif "literal" in param and isinstance(param["literal"], list):
+            literal_values = [str(value) for value in param["literal"]]
+            joined = ", ".join(literal_values)
+            param_type = f"Literal[{joined}]" if joined else "Literal"
+        elif "union" in param and isinstance(param["union"], list):
+            union_parts: list[str] = []
+            for candidate in param["union"]:
+                if not isinstance(candidate, dict):
+                    continue
+                union_parts.append(
+                    candidate.get("datatype_ref")
+                    or candidate.get("native")
+                    or (
+                        f"Literal[{', '.join(candidate['literal'])}]"
+                        if isinstance(candidate.get("literal"), list)
+                        else None
+                    )
+                )
+            formatted = [str(part) for part in union_parts if part]
+            param_type = " | ".join(formatted) if formatted else "union"
 
-        param_details.append(
+        normalized.append(
             {
                 "name": param.get("name"),
                 "type": param_type,
                 "optional": param.get("optional", False),
                 "default": param.get("default"),
+                "description": param.get("description", ""),
             }
         )
 
-        # First param is typically input type
-        if input_type is None and "datatype_ref" in param:
+    return normalized
+
+
+def normalize_transform_params(params: list[dict[str, Any]]) -> dict[str, Any]:
+    """Extract input/output types from transform parameters"""
+    input_type = None
+    param_details = normalize_parameters(params)
+
+    for param in params:
+        if not isinstance(param, dict):
+            continue
+        if "datatype_ref" in param and isinstance(param["datatype_ref"], str):
             input_type = param["datatype_ref"]
+            break
 
     return {"input_type": input_type, "param_details": param_details}
 
@@ -145,8 +176,11 @@ def build_dag_stage_groups(
         - stage metadata (spec_name, stage_id, input/output types, etc.)
         - related_cards: stage, input_dtype, output_dtype, transforms, examples, checks
     """
-    dag_stages = raw_data.get("dag_stages", [])
-    if not isinstance(dag_stages, list) or len(dag_stages) == 0:
+    dag_stages = raw_data.get("dag_stages")
+    dag_edges = raw_data.get("dag")
+    has_stage_info = isinstance(dag_stages, list) and len(dag_stages) > 0
+    has_dag_edges = isinstance(dag_edges, list) and len(dag_edges) > 0
+    if not has_stage_info and not has_dag_edges:
         return []
 
     spec_name = spec_path.stem
@@ -182,6 +216,16 @@ def build_dag_stage_groups(
             # Remaining datatypes are parameters/auxiliary types
             param_dtype_ids = all_dtype_ids - input_dtype_ids - output_dtype_ids
 
+            # Separate check IDs into input/output categories for display
+            input_check_ids: set[str] = set()
+            for dtype_id in input_dtype_ids:
+                dtype_card = card_map.get(("dtype", dtype_id, spec_name))
+                if dtype_card and isinstance(dtype_card.get("metadata"), dict):
+                    input_check_ids.update(dtype_card["metadata"].get("check_ids", []))
+
+            all_check_ids = set(related_ids["check_ids"])
+            output_check_ids = sorted(all_check_ids - input_check_ids)
+
             result.append(
                 {
                     "spec_name": spec_name,
@@ -197,12 +241,13 @@ def build_dag_stage_groups(
                         "output_dtype_card": get_card("dtype", related_ids["output_dtype_id"]),
                         "transform_cards": get_cards("transform", related_ids["transform_ids"]),
                         "param_dtype_cards": get_cards("dtype", sorted(param_dtype_ids)),
+                        "generator_cards": get_cards("generator", related_ids.get("generator_ids", [])),
                         # For simplicity, put all examples/checks in output category
                         # (frontend can adjust display logic if needed)
                         "input_example_cards": [],
                         "output_example_cards": get_cards("example", related_ids["example_ids"]),
-                        "input_check_cards": [],
-                        "output_check_cards": get_cards("checks", related_ids["check_ids"]),
+                        "input_check_cards": get_cards("checks", sorted(input_check_ids)),
+                        "output_check_cards": get_cards("checks", output_check_ids),
                     },
                 }
             )
@@ -241,6 +286,8 @@ def _process_datatypes(datatypes: list[dict[str, Any]], spec_name: str) -> list[
     if isinstance(datatypes, list):
         for dtype in datatypes:
             type_info = normalize_type_info(dtype)
+            example_ids = dtype.get("example_ids", dtype.get("example_refs", []))
+            generator_refs = dtype.get("generator_refs", dtype.get("generator_ids", []))
             result.append(
                 {
                     "id": dtype.get("id"),
@@ -252,7 +299,8 @@ def _process_datatypes(datatypes: list[dict[str, Any]], spec_name: str) -> list[
                         "type_category": type_info["type_category"],
                         "type_details": type_info["type_details"],
                         "check_ids": dtype.get("check_ids", []),
-                        "example_ids": dtype.get("example_ids", []),
+                        "example_ids": example_ids,
+                        "generator_refs": generator_refs,
                     },
                 }
             )
@@ -274,6 +322,49 @@ def _process_examples(examples: list[dict[str, Any]], spec_name: str) -> list[di
                     "metadata": {"input": example.get("input"), "expected": example.get("expected")},
                 }
             )
+    return result
+
+
+def _process_generators(
+    generators: list[dict[str, Any]] | dict[str, dict[str, Any]] | None, spec_name: str
+) -> list[dict[str, Any]]:
+    """Process generator definitions into cards"""
+    result: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
+
+    if isinstance(generators, dict):
+        for gen_id, payload in generators.items():
+            if not isinstance(payload, dict):
+                continue
+            candidate = dict(payload)
+            candidate.setdefault("id", gen_id)
+            items.append(candidate)
+    elif isinstance(generators, list):
+        items = [g for g in generators if isinstance(g, dict)]
+    else:
+        return result
+
+    for generator in items:
+        gen_id = generator.get("id")
+        if not gen_id:
+            continue
+        params = generator.get("parameters", [])
+
+        result.append(
+            {
+                "id": gen_id,
+                "category": "generator",
+                "name": gen_id,
+                "description": generator.get("description", ""),
+                "source_spec": spec_name,
+                "metadata": {
+                    "impl": generator.get("impl"),
+                    "file_path": generator.get("file_path"),
+                    "parameters": normalize_parameters(params) if isinstance(params, list) else [],
+                },
+            }
+        )
+
     return result
 
 
@@ -375,6 +466,7 @@ def _detect_referenced_and_unlinked(spec_path: Path, cards: list[dict[str, Any]]
             ("datatypes", "dtype"),
             ("examples", "example"),
             ("checks", "checks"),
+            ("generators", "generator"),
         ]:
             engine_category, card_category = category_map
             for item_id in unlinked_items.get(engine_category, set()):
@@ -421,6 +513,7 @@ def export_spec_to_cards(spec_path: Path) -> dict[str, Any]:
     # Process all card types
     cards = []
     cards.extend(_process_checks(raw_data.get("checks", []), spec_name))
+    cards.extend(_process_generators(raw_data.get("generators"), spec_name))
     cards.extend(_process_datatypes(raw_data.get("datatypes", []), spec_name))
     cards.extend(_process_examples(raw_data.get("examples", []), spec_name))
     cards.extend(_process_transforms(raw_data.get("transforms", []), spec_name))
