@@ -147,6 +147,112 @@ examples:
     expected:
       valid: true
 
+generators:
+  - id: gen_provider_batches
+    description: "Synthesize provider batch payloads"
+    impl: "apps.algo-trade-pipeline.generators.market_data:generate_provider_batches"
+    file_path: "generators/market_data.py"
+
+  - id: gen_normalized_bundle
+    description: "Create a normalized OHLCV bundle"
+    impl: "apps.algo-trade-pipeline.generators.market_data:generate_normalized_bundle"
+    file_path: "generators/market_data.py"
+
+  - id: gen_multiasset_frame
+    description: "Build a sample multi-asset OHLCV frame"
+    impl: "apps.algo-trade-pipeline.generators.market_data:generate_multiasset_frame"
+    file_path: "generators/market_data.py"
+
+  - id: gen_snapshot_meta
+    description: "Produce snapshot metadata for persisted market data"
+    impl: "apps.algo-trade-pipeline.generators.market_data:generate_snapshot_meta"
+    file_path: "generators/market_data.py"
+
+  - id: gen_ohlcv_frame
+    description: "Generate a resampled OHLCV frame"
+    impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_ohlcv_frame"
+    file_path: "generators/feature_engineering.py"
+
+  - id: gen_feature_frame
+    description: "Assemble a feature DataFrame"
+    impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_feature_frame"
+    file_path: "generators/feature_engineering.py"
+
+  - id: gen_target_frame
+    description: "Assemble a target DataFrame"
+    impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_target_frame"
+    file_path: "generators/feature_engineering.py"
+
+  - id: gen_aligned_feature_target
+    description: "Align feature and target frames"
+    impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_aligned_feature_target"
+    file_path: "generators/feature_engineering.py"
+
+  - id: gen_cv_method
+    description: "Select a cross-validation method"
+    impl: "apps.algo-trade-pipeline.generators.model:generate_cv_method"
+    file_path: "generators/model.py"
+
+  - id: gen_simple_lgbm_params
+    description: "Provide LightGBM hyperparameter defaults"
+    impl: "apps.algo-trade-pipeline.generators.model:generate_simple_lgbm_params"
+    file_path: "generators/model.py"
+
+  - id: gen_cv_result
+    description: "Create a minimal CV result payload"
+    impl: "apps.algo-trade-pipeline.generators.model:generate_cv_result"
+    file_path: "generators/model.py"
+
+  - id: gen_prediction_data_list
+    description: "Build a list of prediction records"
+    impl: "apps.algo-trade-pipeline.generators.model:generate_prediction_data_list"
+    file_path: "generators/model.py"
+
+  - id: gen_ranked_prediction_data
+    description: "Produce ranked prediction data"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_ranked_prediction_data"
+    file_path: "generators/backtest.py"
+
+  - id: gen_ranked_prediction_data_list
+    description: "Construct a ranked prediction list"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_ranked_prediction_data_list"
+    file_path: "generators/backtest.py"
+
+  - id: gen_position_signal
+    description: "Emit a position signal sample"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_position_signal"
+    file_path: "generators/backtest.py"
+
+  - id: gen_selected_currency_data
+    description: "Create selected currency data entry"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_data"
+    file_path: "generators/backtest.py"
+
+  - id: gen_selected_currency_data_list
+    description: "Create selected currency allocation list"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_data_list"
+    file_path: "generators/backtest.py"
+
+  - id: gen_trading_cost_config
+    description: "Provide trading cost configuration"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_trading_cost_config"
+    file_path: "generators/backtest.py"
+
+  - id: gen_selected_currency_with_costs
+    description: "Produce currency selection with costs"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_with_costs"
+    file_path: "generators/backtest.py"
+
+  - id: gen_selected_currency_with_costs_list
+    description: "Produce currency selection list including costs"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_with_costs_list"
+    file_path: "generators/backtest.py"
+
+  - id: gen_simulation_result
+    description: "Create a simulation result payload"
+    impl: "apps.algo-trade-pipeline.generators.backtest:generate_simulation_result"
+    file_path: "generators/backtest.py"
+
 datatypes:
   # ===== Phase 1: Market Data Ingestion =====
   - id: MarketDataIngestionConfig
@@ -181,6 +287,8 @@ datatypes:
     description: "Collection of raw data batches from multiple providers"
     check_ids:
       - check_batch_collection
+    generator_refs:
+      - gen_provider_batches
     schema:
       type: object
       properties:
@@ -195,6 +303,8 @@ datatypes:
     description: "Normalized OHLCV data bundle from multiple providers"
     check_ids:
       - check_normalized_bundle
+    generator_refs:
+      - gen_normalized_bundle
     schema:
       type: object
       properties:
@@ -208,6 +318,8 @@ datatypes:
     description: "Multi-asset OHLCV DataFrame with MultiIndex structure (symbol, column)"
     check_ids:
       - check_multiasset_frame
+    generator_refs:
+      - gen_multiasset_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -216,6 +328,8 @@ datatypes:
     description: "Metadata for persisted market data snapshot"
     check_ids:
       - check_snapshot_meta
+    generator_refs:
+      - gen_snapshot_meta
     pydantic_model:
       fields:
         - name: snapshot_id
@@ -272,6 +386,8 @@ datatypes:
     description: "OHLCV DataFrame where each row conforms to OHLCVRow structure"
     check_ids:
       - check_ohlcv
+    generator_refs:
+      - gen_ohlcv_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -304,6 +420,8 @@ datatypes:
     description: "Feature DataFrame (flattened from MultiIndex)"
     check_ids:
       - check_feature_frame
+    generator_refs:
+      - gen_feature_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -312,6 +430,8 @@ datatypes:
     description: "Target variable DataFrame (single column)"
     check_ids:
       - check_target
+    generator_refs:
+      - gen_target_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -321,6 +441,8 @@ datatypes:
     description: "Aligned feature and target DataFrames (cleaned, index-matched)"
     check_ids:
       - check_aligned_data
+    generator_refs:
+      - gen_aligned_feature_target
     type_alias:
       type: tuple
       elements:
@@ -330,6 +452,8 @@ datatypes:
   # ===== Phase 3: Model Training & Prediction =====
   - id: CVMethod
     description: "Cross-validation method types"
+    generator_refs:
+      - gen_cv_method
     enum:
       base_type: str
       members:
@@ -373,6 +497,8 @@ datatypes:
   # Using generic for dict
   - id: SimpleLGBMParams
     description: "LightGBM hyperparameters dictionary"
+    generator_refs:
+      - gen_simple_lgbm_params
     generic:
       container: dict
       key_type:
@@ -384,6 +510,8 @@ datatypes:
     description: "Cross-validation training result (models, metrics, OOS predictions)"
     check_ids:
       - check_cv_result
+    generator_refs:
+      - gen_cv_result
     pydantic_model:
       fields:
         - name: fold_results
@@ -430,6 +558,8 @@ datatypes:
     description: "List of prediction data points"
     check_ids:
       - check_prediction_data
+    generator_refs:
+      - gen_prediction_data_list
     generic:
       container: list
       element_type:
@@ -440,6 +570,8 @@ datatypes:
     description: "Prediction data with ranking percentile"
     check_ids:
       - check_ranked_predictions
+    generator_refs:
+      - gen_ranked_prediction_data
     pydantic_model:
       fields:
         - name: timestamp
@@ -464,6 +596,8 @@ datatypes:
     description: "List of ranked prediction data"
     check_ids:
       - check_ranked_predictions
+    generator_refs:
+      - gen_ranked_prediction_data_list
     generic:
       container: list
       element_type:
@@ -472,6 +606,8 @@ datatypes:
   # Using enum for PositionSignal
   - id: PositionSignal
     description: "Trading position signal"
+    generator_refs:
+      - gen_position_signal
     enum:
       base_type: int
       members:
@@ -489,6 +625,8 @@ datatypes:
     description: "Selected currency with position signal (BUY/SELL/HOLD)"
     check_ids:
       - check_selected_currencies
+    generator_refs:
+      - gen_selected_currency_data
     pydantic_model:
       fields:
         - name: timestamp
@@ -509,6 +647,8 @@ datatypes:
     description: "List of selected currency data"
     check_ids:
       - check_selected_currencies
+    generator_refs:
+      - gen_selected_currency_data_list
     generic:
       container: list
       element_type:
@@ -516,6 +656,8 @@ datatypes:
 
   - id: TradingCostConfig
     description: "Trading cost configuration (swap rates, spreads)"
+    generator_refs:
+      - gen_trading_cost_config
     pydantic_model:
       fields:
         - name: swap_rates
@@ -541,6 +683,8 @@ datatypes:
     description: "Selected currency data with adjusted returns (swap & spread)"
     check_ids:
       - check_selected_currencies_with_costs
+    generator_refs:
+      - gen_selected_currency_with_costs
     pydantic_model:
       fields:
         - name: timestamp
@@ -564,6 +708,8 @@ datatypes:
     description: "List of selected currency data with costs"
     check_ids:
       - check_selected_currencies_with_costs
+    generator_refs:
+      - gen_selected_currency_with_costs_list
     generic:
       container: list
       element_type:
@@ -573,6 +719,8 @@ datatypes:
     description: "Portfolio simulation result (returns, positions, equity curve)"
     check_ids:
       - check_simulation_result
+    generator_refs:
+      - gen_simulation_result
     pydantic_model:
       fields:
         - name: portfolio_returns

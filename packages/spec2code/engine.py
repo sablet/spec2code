@@ -1602,26 +1602,50 @@ class Engine:
         return errors
 
     @staticmethod
-    def _format_datatype_status(datatype: DataType, has_checks: bool, has_sample_source: bool) -> None:
+    def _format_datatype_status(
+        datatype: DataType,
+        has_checks: bool,
+        has_sample_source: bool,
+        *,
+        is_stage_io: bool,
+    ) -> None:
         """Print formatted datatype status line."""
         check_status = f"✓ ({len(datatype.check_ids)})" if has_checks else "✗ (0)"
         example_status = f"✓ ({len(datatype.example_refs)})" if datatype.example_refs else "✗ (0)"
         generator_status = f"✓ ({len(datatype.generator_refs)})" if datatype.generator_refs else "✗ (0)"
-        icon = "✅" if has_checks and has_sample_source else "⚠️ "
+        scope_label = "ステージIO対象" if is_stage_io else "ステージIO対象外"
+        if is_stage_io:
+            icon = "✅" if has_checks and has_sample_source else "⚠️ "
+        else:
+            icon = "✅" if has_checks and has_sample_source else "ℹ️ "
         print(
-            f"  {icon} {datatype.id:30s} | Checks: {check_status:8s} | "
+            f"  {icon} {datatype.id:30s} | Scope: {scope_label:12s} | Checks: {check_status:8s} | "
             f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
         )
 
-    @staticmethod
-    def _check_single_datatype_completeness(datatype: DataType, errors: dict[str, list[str]]) -> bool:
+    def _check_single_datatype_completeness(
+        self: "Engine",
+        datatype: DataType,
+        errors: dict[str, list[str]],
+        *,
+        stage_io_datatypes: set[str],
+    ) -> bool:
         """Check single datatype completeness and return True if has issues."""
         has_checks = bool(datatype.check_ids)
         has_sample_source = bool(datatype.example_refs or datatype.generator_refs)
+        is_stage_io = datatype.id in stage_io_datatypes
 
-        Engine._format_datatype_status(datatype, has_checks, has_sample_source)
+        Engine._format_datatype_status(
+            datatype,
+            has_checks,
+            has_sample_source,
+            is_stage_io=is_stage_io,
+        )
 
         if has_checks and has_sample_source:
+            return False
+
+        if not is_stage_io:
             return False
 
         issues = []
@@ -1638,7 +1662,15 @@ class Engine:
         print("=" * 80)
 
         # Check all datatypes without short-circuiting
-        issue_flags = [self._check_single_datatype_completeness(dt, errors) for dt in self.spec.datatypes]
+        stage_io_datatypes = self._collect_stage_io_datatypes()
+        issue_flags = [
+            self._check_single_datatype_completeness(
+                dt,
+                errors,
+                stage_io_datatypes=stage_io_datatypes,
+            )
+            for dt in self.spec.datatypes
+        ]
         has_issues = any(issue_flags)
 
         summary = (
@@ -2347,20 +2379,22 @@ class Engine:
 
     # ==================== Unlinked item detection (warning only) ====================
 
-    def _collect_stage_references(self: "Engine") -> tuple[set[str], set[str]]:
-        """Collect transforms and datatypes directly referenced by stages (including nested refs)"""
-        referenced_transforms: set[str] = set()
-        referenced_dtypes: set[str] = set()
-
+    def _collect_stage_io_datatypes(self: "Engine") -> set[str]:
+        """Collect datatypes directly referenced by dag_stages input/output."""
+        stage_io_dtypes: set[str] = set()
         for stage in self.spec.dag_stages:
             if stage.input_type:
-                referenced_dtypes.add(stage.input_type)
-                # Also collect nested datatype references
-                referenced_dtypes.update(self._collect_nested_datatype_refs(stage.input_type))
+                stage_io_dtypes.add(stage.input_type)
             if stage.output_type:
-                referenced_dtypes.add(stage.output_type)
-                # Also collect nested datatype references
-                referenced_dtypes.update(self._collect_nested_datatype_refs(stage.output_type))
+                stage_io_dtypes.add(stage.output_type)
+        return stage_io_dtypes
+
+    def _collect_stage_references(self: "Engine") -> tuple[set[str], set[str]]:
+        """Collect transforms and datatypes directly referenced by stages (including nested refs)."""
+        referenced_transforms: set[str] = set()
+        referenced_dtypes: set[str] = set(self._collect_stage_io_datatypes())
+
+        for stage in self.spec.dag_stages:
             for tid in stage.candidates:
                 if tid:
                     referenced_transforms.add(tid)
@@ -2563,6 +2597,11 @@ class Engine:
     def _warn_unlinked_items(self: "Engine") -> None:
         """Print warnings for unlinked items without failing validation."""
         unlinked = self._detect_unlinked_items()
+        stage_io_datatypes = self._collect_stage_io_datatypes()
+        example_usage: dict[str, list[str]] = {
+            example.id: [dtype.id for dtype in self.spec.datatypes if example.id in dtype.example_ids]
+            for example in self.spec.examples
+        }
         any_warn = False
         for category, ids in unlinked.items():
             for item_id in sorted(ids):
@@ -2570,9 +2609,22 @@ class Engine:
                 if category == "transforms":
                     print(f"  ⚠️  Unlinked transform: '{item_id}' is not referenced by any stage candidates")
                 elif category == "datatypes":
-                    print(f"  ⚠️  Unlinked datatype: '{item_id}' is not used in stages or transforms")
+                    if item_id in stage_io_datatypes:
+                        print(f"  ⚠️  Unlinked datatype: '{item_id}' is not used in stages or transforms")
+                    else:
+                        print(
+                            "  ℹ️  Unlinked datatype: "
+                            f"'{item_id}' (ステージIO対象外: check がない・Unlinked、でも問題ない)"
+                        )
                 elif category == "examples":
-                    print(f"  ⚠️  Unlinked example: '{item_id}' is not attached to any used datatype")
+                    linked_dtypes = example_usage.get(item_id, [])
+                    if linked_dtypes and all(dt not in stage_io_datatypes for dt in linked_dtypes):
+                        print(
+                            "  ℹ️  Unlinked example: "
+                            f"'{item_id}' (紐付いているデータ型がステージIO対象外: check がない・Unlinked、でも問題ない)"
+                        )
+                    else:
+                        print(f"  ⚠️  Unlinked example: '{item_id}' is not attached to any used datatype")
                 elif category == "checks":
                     print(f"  ⚠️  Unlinked check: '{item_id}' is not attached to any used datatype")
                 else:
