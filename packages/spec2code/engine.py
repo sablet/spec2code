@@ -154,7 +154,8 @@ class DataType(BaseModel):
     id: str
     description: str
     check_ids: list[str] = Field(default_factory=list)
-    example_ids: list[str] = Field(default_factory=list)
+    example_refs: list[str] = Field(default_factory=list, alias="example_ids")
+    generator_refs: list[str] = Field(default_factory=list, alias="generator_ids")
     schema_def: dict[str, Any] | None = Field(default=None, alias="schema")  # JSON Schema
     type_alias: TypeAliasConfig | None = None
     enum: EnumConfig | None = None
@@ -189,7 +190,22 @@ class DataType(BaseModel):
 
         # check_ids と example_ids の検証は警告レベルに緩和
         # 詳細な検証は validate_integrity() で実施
+        if not self.example_refs and not self.generator_refs:
+            message = (
+                f"DataType '{self.id}' must define at least one of example_refs or generator_refs"
+            )
+            raise ValueError(message)
         return self
+
+    @property
+    def example_ids(self) -> list[str]:
+        """後方互換性のためのエイリアス"""
+        return self.example_refs
+
+    @property
+    def generator_ids(self) -> list[str]:
+        """後方互換性のためのエイリアス"""
+        return self.generator_refs
 
 
 class Parameter(BaseModel):
@@ -221,6 +237,16 @@ class Parameter(BaseModel):
             )
             raise ValueError(message)
         return self
+
+
+class GeneratorSpec(BaseModel):
+    """データ生成関数定義"""
+
+    id: str
+    description: str
+    impl: str  # "module:function"形式
+    file_path: str
+    parameters: list[Parameter] = Field(default_factory=list)
 
 
 class Transform(BaseModel):
@@ -272,10 +298,38 @@ class Spec(BaseModel):
     meta: Meta
     checks: list[CheckDef] = Field(default_factory=list)
     examples: list[Example] = Field(default_factory=list)
+    generators: dict[str, GeneratorSpec] = Field(default_factory=dict)
     datatypes: list[DataType] = Field(default_factory=list)
     transforms: list[Transform] = Field(default_factory=list)
     dag: list[DAGEdge] = Field(default_factory=list)
     dag_stages: list[DAGStage] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_generators(cls, data: dict[str, Any]) -> dict[str, Any]:
+        generators = data.get("generators")
+        if generators is None:
+            return data
+
+        if isinstance(generators, dict):
+            normalized = {}
+            for gen_id, payload in generators.items():
+                if isinstance(payload, dict):
+                    payload.setdefault("id", gen_id)
+                normalized[gen_id] = payload
+        elif isinstance(generators, list):
+            normalized = {}
+            for item in generators:
+                if not isinstance(item, dict):
+                    continue
+                gen_id = item.get("id")
+                if not gen_id:
+                    continue
+                normalized[gen_id] = item
+        else:
+            normalized = {}
+        data["generators"] = normalized
+        return data
 
 
 # ==================== 仕様読み込み・検証 ====================
@@ -1110,6 +1164,41 @@ def {func_name}({params}) -> {return_type}:
     return code, all_imports
 
 
+def _render_generator_function(spec: Spec, generator: GeneratorSpec, app_root: Path) -> tuple[str, set[str]]:
+    """Render generator function skeleton and required imports."""
+    func_name = generator.impl.split(":")[-1]
+
+    param_strs: list[str] = []
+    all_imports: set[str] = set()
+    for param in generator.parameters:
+        type_str, imports = _build_type_annotation(spec, param, app_root)
+        all_imports.update(imports)
+
+        has_explicit_default = "default" in getattr(param, "model_fields_set", set())
+        default_value = None
+        if has_explicit_default:
+            default_value = param.default
+        elif param.optional:
+            default_value = None
+
+        if has_explicit_default or param.optional:
+            param_strs.append(f"{param.name}: {type_str} = {repr(default_value)}")
+        else:
+            param_strs.append(f"{param.name}: {type_str}")
+
+    signature = ", ".join(param_strs)
+    all_imports.add("from typing import Any")
+
+    description = generator.description or ""
+    code = f'''# Auto-generated skeleton for Generator: {generator.id}
+def {func_name}({signature}) -> dict[str, Any]:
+    """{description}"""
+    # TODO: implement data generation logic
+    return {{}}
+'''
+    return code, all_imports
+
+
 def _extract_existing_function_names(source: str) -> set[str]:
     """Extract function names defined in existing Python source."""
     try:
@@ -1272,6 +1361,58 @@ def _write_transform_file(spec: Spec, transforms: list[Transform], app_root: Pat
     print(f"  ✏️  Appended {len(new_blocks)} transform(s): {file_path}")
 
 
+def _write_generator_file(spec: Spec, generators: list[GeneratorSpec], app_root: Path) -> None:
+    """Create or update a generator module with the provided generator functions."""
+    relative_path = generators[0].file_path
+    file_path = app_root / relative_path
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_code = ""
+    existing_functions: set[str] = set()
+    if file_path.exists():
+        existing_code = file_path.read_text()
+        existing_functions = _extract_existing_function_names(existing_code)
+
+    new_blocks: list[str] = []
+    required_imports: set[str] = set()
+    for generator in generators:
+        func_name = generator.impl.split(":")[-1]
+        if func_name in existing_functions:
+            print(f"  ⏭️  Skip (exists): {file_path}::{func_name}")
+            continue
+        block, imports = _render_generator_function(spec, generator, app_root)
+        new_blocks.append(block)
+        required_imports.update(imports)
+
+    if not file_path.exists():
+        if not new_blocks:
+            print(f"  ⏭️  Skip (exists): {file_path}")
+            return
+        header = "# Auto-generated skeleton for Generator functions\n"
+        imports_block = _render_imports(required_imports)
+        sections = [header]
+        if imports_block:
+            sections.append(f"{imports_block}\n")
+        sections.append("\n\n".join(new_blocks))
+        content = "\n".join(sections)
+        if not content.endswith("\n"):
+            content += "\n"
+        file_path.write_text(content)
+        print(f"  ✅ Generated: {file_path}")
+        return
+
+    if not new_blocks:
+        print(f"  ⏭️  Skip (up-to-date): {file_path}")
+        return
+
+    updated_code = _merge_imports_into_code(existing_code, required_imports)
+    append_block = "\n\n".join(new_blocks)
+    updated_code = updated_code.rstrip("\n")
+    updated_code = f"{updated_code}\n\n{append_block}\n"
+    file_path.write_text(updated_code)
+    print(f"  ✏️  Appended {len(new_blocks)} generator(s): {file_path}")
+
+
 def _generate_transform_skeletons(spec: Spec, app_root: Path) -> None:
     """Generate skeleton files for all transforms, grouping by file path."""
     grouped: dict[str, list[Transform]] = {}
@@ -1282,9 +1423,22 @@ def _generate_transform_skeletons(spec: Spec, app_root: Path) -> None:
         _write_transform_file(spec, transforms, app_root)
 
 
+def _generate_generator_skeletons(spec: Spec, app_root: Path) -> None:
+    """Generate skeleton files for generator functions, grouped by file path."""
+    if not spec.generators:
+        return
+
+    grouped: dict[str, list[GeneratorSpec]] = {}
+    for generator in spec.generators.values():
+        grouped.setdefault(generator.file_path, []).append(generator)
+
+    for generators in grouped.values():
+        _write_generator_file(spec, generators, app_root)
+
+
 def _ensure_package_inits(app_root: Path) -> None:
     """Ensure __init__.py files exist for generated packages."""
-    for directory in ["checks", "transforms", "datatypes"]:
+    for directory in ["checks", "transforms", "datatypes", "generators"]:
         init_path = app_root / directory / "__init__.py"
         if init_path.exists():
             continue
@@ -1310,6 +1464,7 @@ def generate_skeleton(spec: Spec, project_root: Path = Path(".")) -> None:
         _generate_type_aliases(spec, alias_datatypes, app_root)
     _generate_check_skeletons(spec, app_root)
     _generate_transform_skeletons(spec, app_root)
+    _generate_generator_skeletons(spec, app_root)
     _ensure_package_inits(app_root)
     generate_default_config(spec, project_root)
 
@@ -1372,6 +1527,9 @@ class Engine:
             "check_locations": [],
             "transform_functions": [],
             "transform_signatures": [],
+            "generator_functions": [],
+            "generator_locations": [],
+            "generator_signatures": [],
             "example_schemas": [],
             "datatype_definitions": [],
             "datatype_completeness": [],
@@ -1388,6 +1546,7 @@ class Engine:
         self._validate_datatypes(app_root, errors)
         self._validate_checks(app_root, errors)
         self._validate_transforms(app_root, errors)
+        self._validate_generators(app_root, errors)
         self._validate_examples(app_root, errors)
         # 未紐付け要素の警告を表示（バリデーション失敗にはしない）
         self._warn_unlinked_items()
@@ -1402,29 +1561,39 @@ class Engine:
         has_issues = False
         for datatype in self.spec.datatypes:
             has_checks = bool(datatype.check_ids)
-            has_examples = bool(datatype.example_ids)
+            has_examples = bool(datatype.example_refs)
+            has_generators = bool(datatype.generator_refs)
+            has_sample_source = has_examples or has_generators
 
-            if has_checks and has_examples:
-                print(f"  ✅ {datatype.id:30s} | Checks: ✓ ({len(datatype.check_ids)}) | Examples: ✓ ({len(datatype.example_ids)})")
+            check_status = f"✓ ({len(datatype.check_ids)})" if has_checks else "✗ (0)"
+            example_status = f"✓ ({len(datatype.example_refs)})" if has_examples else "✗ (0)"
+            generator_status = f"✓ ({len(datatype.generator_refs)})" if has_generators else "✗ (0)"
+
+            if has_checks and has_sample_source:
+                print(
+                    f"  ✅ {datatype.id:30s} | Checks: {check_status:8s} | "
+                    f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
+                )
             else:
                 has_issues = True
-                check_status = f"✓ ({len(datatype.check_ids)})" if has_checks else "✗ (0)"
-                example_status = f"✓ ({len(datatype.example_ids)})" if has_examples else "✗ (0)"
-                print(f"  ⚠️  {datatype.id:30s} | Checks: {check_status:8s} | Examples: {example_status:8s}")
+                print(
+                    f"  ⚠️  {datatype.id:30s} | Checks: {check_status:8s} | "
+                    f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
+                )
 
                 issues = []
                 if not has_checks:
                     issues.append("missing checks")
-                if not has_examples:
-                    issues.append("missing examples")
+                if not has_sample_source:
+                    issues.append("missing examples/generators")
 
                 error_msg = f"DataType '{datatype.id}' is incomplete: {', '.join(issues)}"
                 errors["datatype_completeness"].append(error_msg)
 
         if not has_issues:
-            print("\n  ✅ All datatypes have checks and examples!")
+            print("\n  ✅ All datatypes have checks and sample sources (examples/generators)!")
         else:
-            print("\n  ⚠️  Some datatypes are missing checks or examples")
+            print("\n  ⚠️  Some datatypes are missing checks or sample sources")
         print("=" * 80)
 
     def _validate_datatypes(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
@@ -1732,6 +1901,66 @@ class Engine:
                 message = f"Transform '{transform.id}' not found: {exc}"
                 errors["transform_functions"].append(message)
                 print(f"  ❌ {message}")
+
+    def _validate_generators(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
+        """Validate generator implementations and signatures."""
+        if not self.spec.generators:
+            return
+
+        defined_generators = self.spec.generators
+        for datatype in self.spec.datatypes:
+            for generator_id in datatype.generator_refs:
+                if generator_id not in defined_generators:
+                    message = (
+                        f"Generator '{generator_id}' referenced by DataType '{datatype.id}' is not defined in spec"
+                    )
+                    errors["generator_functions"].append(message)
+                    print(f"  ❌ {message}")
+
+        for generator in defined_generators.values():
+            module_path, func_name = generator.impl.split(":")
+            expected_file = app_root / generator.file_path
+
+            try:
+                module = importlib.import_module(module_path)
+                func = getattr(module, func_name)
+                print(f"  ✅ Generator {generator.id}: function exists")
+            except (ImportError, AttributeError) as exc:
+                message = f"Generator '{generator.id}' not found: {exc}"
+                errors["generator_functions"].append(message)
+                print(f"  ❌ {message}")
+                continue
+
+            try:
+                actual_file = Path(inspect.getfile(func)).resolve()
+            except (TypeError, OSError) as exc:
+                message = (
+                    f"Generator '{generator.id}' location could not be determined: {exc}"
+                )
+                errors["generator_locations"].append(message)
+                print(f"  ⚠️  {message}")
+            else:
+                expected_file_resolved = expected_file.resolve()
+                if actual_file != expected_file_resolved:
+                    message = (
+                        f"Generator '{generator.id}' location mismatch:\n"
+                        f"    Expected: {expected_file}\n"
+                        f"    Actual:   {actual_file}"
+                    )
+                    errors["generator_locations"].append(message)
+                    print(f"  ⚠️  {message}")
+
+            signature = inspect.signature(func)
+            expected_params = {p.name for p in generator.parameters}
+            actual_params = set(signature.parameters.keys())
+            if expected_params != actual_params:
+                message = (
+                    f"Generator '{generator.id}' signature mismatch:\n"
+                    f"    Expected params: {sorted(expected_params)}\n"
+                    f"    Actual params:   {sorted(actual_params)}"
+                )
+                errors["generator_signatures"].append(message)
+                print(f"  ⚠️  {message}")
 
     def _validate_examples(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
         """Validate that example payloads satisfy their referenced schemas."""

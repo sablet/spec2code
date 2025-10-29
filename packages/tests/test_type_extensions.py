@@ -198,3 +198,23 @@ def test_literal_parameter_generation(temp_project_dir, sample_spec_yaml):
     assert "from typing import Literal" in transform_code
     assert "allocation_method: Literal['equal', 'weighted', 'risk_parity'] = 'equal'" in transform_code
     assert "-> bool" in transform_code
+
+
+def test_generator_skeleton_generation(temp_project_dir, sample_spec_yaml):
+    """Generator定義に基づくスケルトンが生成される"""
+    spec_data = copy.deepcopy(sample_spec_yaml)
+
+    spec_path = _write_spec(temp_project_dir, spec_data)
+    spec = load_spec(spec_path)
+    generate_skeleton(spec, project_root=temp_project_dir)
+
+    generator_file = temp_project_dir / "apps" / "test-pipeline" / "generators" / "data_generators.py"
+    assert generator_file.exists()
+
+    generator_code = generator_file.read_text()
+    assert "# Auto-generated skeleton for Generator functions" in generator_code
+    assert "def generate_text_input(" in generator_code
+    assert "uppercase: bool = False" in generator_code
+    assert "-> dict[str, Any]" in generator_code
+    assert '"""テキスト入力データを生成"""' in generator_code
+    assert "from typing import Any" in generator_code

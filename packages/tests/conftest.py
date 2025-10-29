@@ -15,11 +15,35 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 @pytest.fixture(autouse=True)
 def clean_module_cache():
     """各テスト実行前にtest-pipelineモジュールをクリア"""
-    yield
-    # test-pipelineモジュールをクリア
-    modules_to_remove = [key for key in sys.modules.keys() if key.startswith("test-pipeline")]
+    modules_to_remove = [
+        key
+        for key in list(sys.modules.keys())
+        if "test_pipeline" in key or "test-pipeline" in key
+    ]
     for module in modules_to_remove:
         del sys.modules[module]
+    sys.modules.pop("apps", None)
+    sys.path = [
+        path
+        for path in sys.path
+        if not ("/pytest-" in path and path.endswith("/apps"))
+    ]
+
+    yield
+    # test-pipelineモジュールをクリア
+    modules_to_remove = [
+        key
+        for key in list(sys.modules.keys())
+        if "test_pipeline" in key or "test-pipeline" in key
+    ]
+    for module in modules_to_remove:
+        del sys.modules[module]
+    sys.modules.pop("apps", None)
+    sys.path = [
+        path
+        for path in sys.path
+        if not ("/pytest-" in path and path.endswith("/apps"))
+    ]
 
 
 @pytest.fixture
@@ -70,12 +94,24 @@ def sample_spec_yaml():
                 "expected": {"length": 5},
             }
         ],
+        "generators": [
+            {
+                "id": "generate_text_input",
+                "description": "テキスト入力データを生成",
+                "impl": "test-pipeline.generators.data_generators:generate_text_input",
+                "file_path": "generators/data_generators.py",
+                "parameters": [
+                    {"name": "uppercase", "native": "builtins:bool", "default": False}
+                ],
+            }
+        ],
         "datatypes": [
             {
                 "id": "TextInput",
                 "description": "テキスト入力",
                 "check_ids": ["check_text_length"],
-                "example_ids": ["example_hello"],
+                "example_refs": ["example_hello"],
+                "generator_refs": ["generate_text_input"],
                 "schema": {
                     "type": "object",
                     "properties": {"text": {"type": "string"}},
@@ -86,7 +122,7 @@ def sample_spec_yaml():
                 "id": "TextResult",
                 "description": "テキスト処理結果",
                 "check_ids": ["check_result_positive"],
-                "example_ids": ["example_result"],
+                "example_refs": ["example_result"],
                 "schema": {
                     "type": "object",
                     "properties": {
@@ -132,6 +168,11 @@ def generated_project(temp_project_dir, spec_file):
     spec = load_spec(spec_file)
     generate_skeleton(spec, project_root=temp_project_dir)
 
+    apps_dir = str((temp_project_dir / "apps").resolve())
+    if apps_dir in sys.path:
+        sys.path.remove(apps_dir)
+    sys.path.insert(0, apps_dir)
+
     return temp_project_dir
 
 
@@ -140,14 +181,16 @@ def implemented_project(generated_project):
     """実装が完了したプロジェクト"""
     # sys.pathにappsディレクトリを追加
     apps_dir = str((generated_project / "apps").resolve())
-    if apps_dir not in sys.path:
-        sys.path.insert(0, apps_dir)
+    if apps_dir in sys.path:
+        sys.path.remove(apps_dir)
+    sys.path.insert(0, apps_dir)
 
     app_root = generated_project / "apps" / "test-pipeline"
 
     # __init__.pyを作成してモジュール化
     (app_root / "__init__.py").write_text("")
     (app_root / "checks" / "__init__.py").write_text("")
+    (app_root / "generators" / "__init__.py").write_text("")
     (app_root / "transforms" / "__init__.py").write_text("")
 
     # Check関数を実装
@@ -186,5 +229,20 @@ def process_text(
     return {"length": len(text), "processed": True}
 '''
     processors_file.write_text(processors_code)
+
+    # Generator関数を実装
+    generators_file = app_root / "generators" / "data_generators.py"
+    generators_code = '''# Generator functions
+from typing import Any
+
+
+def generate_text_input(uppercase: bool = False) -> dict[str, Any]:
+    """テキスト入力データを生成"""
+    payload: dict[str, Any] = {"text": "hello"}
+    if uppercase:
+        payload["text"] = payload["text"].upper()
+    return payload
+'''
+    generators_file.write_text(generators_code)
 
     return generated_project

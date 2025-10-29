@@ -1,5 +1,9 @@
 """仕様と実装の整合性検証テスト"""
 
+import copy
+
+import pytest
+
 from spec2code.engine import Engine, load_spec
 
 
@@ -26,6 +30,9 @@ class TestIntegrityValidation:
         assert len(errors["check_locations"]) == 0
         assert len(errors["transform_functions"]) == 0
         assert len(errors["transform_signatures"]) == 0
+        assert len(errors["generator_functions"]) == 0
+        assert len(errors["generator_locations"]) == 0
+        assert len(errors["generator_signatures"]) == 0
         assert len(errors["example_schemas"]) == 0
 
     def test_detect_missing_check_function(self, implemented_project, spec_file):
@@ -108,6 +115,21 @@ def process_text(
         assert "process_text" in errors["transform_signatures"][0]
         assert "extra_param" in errors["transform_signatures"][0]
 
+    def test_datatype_requires_example_or_generator(self, temp_project_dir, sample_spec_yaml):
+        """DataTypeはexampleかgeneratorのいずれかを要求する"""
+        import yaml
+
+        spec_data = copy.deepcopy(sample_spec_yaml)
+        spec_data["datatypes"][0]["example_refs"] = []
+        spec_data["datatypes"][0]["generator_refs"] = []
+
+        spec_path = temp_project_dir / "spec.yaml"
+        spec_path.write_text(yaml.dump(spec_data))
+
+        with pytest.raises(ValueError) as excinfo:
+            load_spec(spec_path)
+        assert "example_refs or generator_refs" in str(excinfo.value)
+
     def test_detect_invalid_example_schema(self, temp_project_dir, sample_spec_yaml):
         """異常ケース: Example値がスキーマに違反"""
         # 不正なExample値を設定
@@ -144,6 +166,73 @@ def process_text(
         # Transform関数が削除されたのでエラーが発生
         assert len(errors["transform_functions"]) >= 1
         assert "process_text" in errors["transform_functions"][0]
+
+    def test_detect_missing_generator_function(self, generated_project, spec_file):
+        """異常ケース: Generator関数が未実装"""
+        app_root = generated_project / "apps" / "test-pipeline"
+        generator_file = app_root / "generators" / "data_generators.py"
+        generator_file.write_text("# Generator file without functions\n")
+
+        spec = load_spec(spec_file)
+        engine = Engine(spec)
+
+        errors = engine.validate_integrity(project_root=generated_project)
+
+        assert len(errors["generator_functions"]) >= 1
+        message = "generate_text_input"
+        assert any(message in err for err in errors["generator_functions"])
+
+    def test_detect_generator_signature_mismatch(self, implemented_project, spec_file):
+        """異常ケース: Generator関数のシグネチャ不一致"""
+        app_root = implemented_project / "apps" / "test-pipeline"
+        generator_file = app_root / "generators" / "data_generators.py"
+        generator_code = '''# Generator functions
+from typing import Any
+
+
+def generate_text_input(uppercase: bool = False, extra: int = 1) -> dict[str, Any]:
+    """テキスト入力データを生成"""
+    payload: dict[str, Any] = {"text": "hello"}
+    if uppercase:
+        payload["text"] = payload["text"].upper()
+    payload["extra"] = extra
+    return payload
+'''
+        generator_file.write_text(generator_code)
+
+        spec = load_spec(spec_file)
+        engine = Engine(spec)
+
+        errors = engine.validate_integrity(project_root=implemented_project)
+
+        assert len(errors["generator_signatures"]) >= 1
+        assert "generate_text_input" in errors["generator_signatures"][0]
+
+    def test_detect_generator_location_mismatch(self, implemented_project, spec_file):
+        """異常ケース: Generator関数が別ファイルから再エクスポートされる"""
+        app_root = implemented_project / "apps" / "test-pipeline"
+        generator_file = app_root / "generators" / "data_generators.py"
+        helper_file = app_root / "generators" / "helper_generators.py"
+        helper_code = '''from typing import Any
+
+
+def generate_text_input(uppercase: bool = False) -> dict[str, Any]:
+    payload: dict[str, Any] = {"text": "hello"}
+    if uppercase:
+        payload["text"] = payload["text"].upper()
+    payload["text"] += "_moved"
+    return payload
+'''
+        helper_file.write_text(helper_code)
+        generator_file.write_text("from .helper_generators import generate_text_input\n")
+
+        spec = load_spec(spec_file)
+        engine = Engine(spec)
+
+        errors = engine.validate_integrity(project_root=implemented_project)
+
+        assert len(errors["generator_locations"]) >= 1
+        assert "generate_text_input" in errors["generator_locations"][0]
 
     def test_multiple_errors_reported(self, implemented_project, spec_file):
         """複数のエラーが同時に報告される"""

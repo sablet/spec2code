@@ -81,11 +81,33 @@
 7. **Literal型（パラメータ）**:
 ```yaml
 parameters:
-  - name: method
+ - name: method
     literal:
       - "momentum"
       - "mean_reversion"
 ```
+
+8. **Generator関数によるサンプルデータ生成**:
+```yaml
+generators:
+  generate_training_input:
+    description: "モデル学習用のサンプルを生成"
+    impl: "apps.algo_trade.generators.data_generators:generate_training_input"
+    file_path: "generators/data_generators.py"
+    parameters:
+      - name: seed
+        native: "builtins:int"
+        optional: true
+
+datatypes:
+  - id: TrainingInput
+    description: "学習用特徴量の入力"
+    check_ids: ["check_training_input"]
+    generator_refs:
+      - generate_training_input
+```
+
+`DataType`は`example_refs`または`generator_refs`のいずれか（もしくは両方）を少なくとも1件持つ必要がある。`generator_refs`を指定すると、静的な`examples`を用意できないケースでも整合性検証を通過できる。
 
 ## 残存する制約
 
@@ -294,7 +316,7 @@ def check_multiasset_frame(df: pd.DataFrame) -> bool:
 
 1. **Helper関数の@transform化**: `select_features`等を正式なTransformとしてDAGに組み込む
 2. **動的型の段階的定義**: OHLCVFrame → OHLCVFrameWithRSI → OHLCVFrameWithRSIAndADX
-3. **テストカバレッジ拡充**: example_idsを各フェーズで追加
+3. **テストカバレッジ拡充**: example_refs / generator_refs を各フェーズで整備
 
 ---
 
