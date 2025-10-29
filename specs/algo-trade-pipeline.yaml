@@ -866,6 +866,7 @@ dag_stages:
     selection_mode: "single"
     input_type: MultiAssetOHLCVFrame
     output_type: MarketDataSnapshotMeta
+    collect_output: true
 
   # Phase 2: Feature Engineering
   # NOTE: resample output uses pandas DataFrame (OHLCVFrame type_alias)
@@ -939,3 +940,4 @@ dag_stages:
     selection_mode: "single"
     input_type: SimulationResult
     output_type: PerformanceMetrics
+    collect_output: true

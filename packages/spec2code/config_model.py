@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TransformSelection(BaseModel):
@@ -75,6 +75,8 @@ class DAGStage(BaseModel):
     default_transform_id: str | None = Field(
         default=None
     )  # For DAG edge generation (auto-set to candidates[0] if not specified)
+    publish_output: bool = Field(default=False)  # Legacy property (deprecated in favor of collect_output)
+    collect_output: bool = Field(default=False)  # Allow stage output to be treated as terminal
 
 
 class ExtendedSpec(BaseModel):
@@ -88,6 +90,74 @@ class ExtendedSpec(BaseModel):
     transforms: list[dict[str, Any]] = Field(default_factory=list)
     dag: list[dict[str, Any]] = Field(default_factory=list)  # Traditional DAG edges
     dag_stages: list[DAGStage] = Field(default_factory=list)  # Extended DAG stages
+
+    @staticmethod
+    def _build_stage_edges(stages: list[DAGStage]) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+        """Build reverse and forward edges between stages."""
+        reverse_edges: dict[str, set[str]] = {stage.stage_id: set() for stage in stages}
+        forward_edges: dict[str, set[str]] = {stage.stage_id: set() for stage in stages}
+        for src in stages:
+            for dst in stages:
+                if src.stage_id != dst.stage_id and src.output_type == dst.input_type:
+                    reverse_edges[dst.stage_id].add(src.stage_id)
+                    forward_edges[src.stage_id].add(dst.stage_id)
+        return reverse_edges, forward_edges
+
+    @staticmethod
+    def _compute_reachable_from_node(start_id: str, edges: dict[str, set[str]]) -> set[str]:
+        """Compute all nodes reachable from a start node following edges."""
+        reachable: set[str] = set()
+        stack = [start_id]
+        while stack:
+            current_id = stack.pop()
+            if current_id not in reachable:
+                reachable.add(current_id)
+                stack.extend(edges[current_id])
+        return reachable
+
+    @staticmethod
+    def _validate_type_continuity(stages: list[DAGStage]) -> None:
+        """Validate output/input type continuity between adjacent stages."""
+        for index in range(len(stages) - 1):
+            current_stage = stages[index]
+            next_stage = stages[index + 1]
+            if current_stage.collect_output or next_stage.collect_output:
+                continue
+            if current_stage.output_type != next_stage.input_type:
+                raise ValueError(
+                    f"dag_stages[{index}] ({current_stage.stage_id}) の output_type "
+                    f"'{current_stage.output_type}' が "
+                    f"dag_stages[{index + 1}] ({next_stage.stage_id}) の input_type "
+                    f"'{next_stage.input_type}' と一致しません"
+                )
+
+    @model_validator(mode="after")
+    def _validate_stage_flow(self) -> "ExtendedSpec":
+        """Ensure dag_stages form a valid flow ending at the final stage."""
+        stages = self.dag_stages
+        if not stages:
+            return self
+
+        final_stage_id = stages[-1].stage_id
+        reverse_edges, forward_edges = self._build_stage_edges(stages)
+
+        reachable = self._compute_reachable_from_node(final_stage_id, reverse_edges)
+
+        terminals = {stage.stage_id for stage in stages if stage.collect_output or stage.publish_output}
+        extra_reachable: set[str] = set()
+        for terminal_id in terminals:
+            extra_reachable.update(self._compute_reachable_from_node(terminal_id, forward_edges))
+
+        effective_reachable = reachable.union(extra_reachable)
+        unreachable = [stage.stage_id for stage in stages if stage.stage_id not in effective_reachable]
+        if unreachable:
+            unreachable_list = ", ".join(unreachable)
+            raise ValueError(
+                f"dag_stages の最終ステージ '{final_stage_id}' に到達できないステージがあります: {unreachable_list}"
+            )
+
+        self._validate_type_continuity(stages)
+        return self
 
 
 # ==================== Config loading ====================

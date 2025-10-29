@@ -2,8 +2,12 @@
 Tests for config-based DAG execution system
 """
 
+import copy
+
 import pandas as pd
 import pytest
+import yaml
+from pydantic import ValidationError
 
 from packages.spec2code.config_model import load_config, load_extended_spec
 from packages.spec2code.config_runner import ConfigRunner
@@ -11,6 +15,7 @@ from packages.spec2code.config_validator import (
     ConfigValidationError,
     validate_config,
 )
+from packages.spec2code.engine import Engine, load_spec
 
 
 @pytest.fixture
@@ -51,6 +56,107 @@ class TestConfigModel:
         spec = load_extended_spec("specs/dataframe-pipeline-extended.yaml")
         assert spec.version == "1"
         assert len(spec.dag_stages) == 3  # normalization, feature_engineering, output
+        first_stage = spec.dag_stages[0]
+        assert first_stage.candidates  # 自動収集された候補が設定されていること
+        assert first_stage.default_transform_id == first_stage.candidates[0].transform_id
+        assert first_stage.collect_output is False
+        feature_stage = spec.dag_stages[1]
+        assert feature_stage.collect_output is True
+
+    def test_load_extended_spec_invalid_selection_mode(self, tmp_path):
+        """Invalid selection_mode in dag_stages fails validation"""
+        spec_path = tmp_path / "invalid-selection.yaml"
+        with open("specs/dataframe-pipeline-extended.yaml") as base_spec:
+            spec_data = yaml.safe_load(base_spec)
+
+        spec_data["dag_stages"][0]["selection_mode"] = "unsupported"
+
+        with open(spec_path, "w") as f:
+            yaml.safe_dump(spec_data, f)
+
+        with pytest.raises(ValidationError):
+            load_extended_spec(str(spec_path))
+
+    def test_load_extended_spec_disconnected_flow(self, tmp_path):
+        """Mismatched input/output types between stages fails validation"""
+        spec_path = tmp_path / "invalid-flow.yaml"
+        with open("specs/dataframe-pipeline-extended.yaml") as base_spec:
+            spec_data = yaml.safe_load(base_spec)
+
+        spec_data["dag_stages"][1]["input_type"] = "StepAFrame"
+        spec_data["dag_stages"][1]["collect_output"] = False
+
+        with open(spec_path, "w") as f:
+            yaml.safe_dump(spec_data, f)
+
+        with pytest.raises(ValidationError) as exc_info:
+            load_extended_spec(str(spec_path))
+
+        assert "output_type" in str(exc_info.value)
+        assert "input_type" in str(exc_info.value)
+
+    def test_load_extended_spec_unreachable_stage(self, tmp_path):
+        """Stage not connected to final stage fails validation"""
+        spec_path = tmp_path / "invalid-unreachable.yaml"
+        with open("specs/dataframe-pipeline-extended.yaml") as base_spec:
+            spec_data = yaml.safe_load(base_spec)
+
+        dag_stages = copy.deepcopy(spec_data["dag_stages"])
+        # Reorder so final stage becomes feature_engineering, leaving output unreachable
+        spec_data["dag_stages"] = [dag_stages[0], dag_stages[2], dag_stages[1]]
+        spec_data["dag_stages"][1]["collect_output"] = False
+        spec_data["dag_stages"][2]["collect_output"] = False
+
+        with open(spec_path, "w") as f:
+            yaml.safe_dump(spec_data, f)
+
+        with pytest.raises(ValidationError) as exc_info:
+            load_extended_spec(str(spec_path))
+
+        message = str(exc_info.value)
+        assert "到達できない" in message
+        assert "output" in message
+
+    def test_load_extended_spec_collect_output_break(self, tmp_path):
+        """collect_output=True allows branch termination before final stage"""
+        spec_path = tmp_path / "publish-break.yaml"
+        with open("specs/dataframe-pipeline-extended.yaml") as base_spec:
+            spec_data = yaml.safe_load(base_spec)
+
+        spec_data["dag_stages"][0]["collect_output"] = True
+        spec_data["dag_stages"][1]["input_type"] = "StepAFrame"
+        spec_data["dag_stages"][1]["collect_output"] = False
+
+        with open(spec_path, "w") as f:
+            yaml.safe_dump(spec_data, f)
+
+        load_extended_spec(str(spec_path))
+
+    def test_validate_spec_structure(self):
+        """Spec structure validation returns no errors for valid spec"""
+        spec = load_spec("specs/dataframe-pipeline-extended.yaml")
+        engine = Engine(spec)
+        errors = engine.validate_spec_structure()
+        total_errors = sum(len(items) for items in errors.values())
+        assert total_errors == 0
+
+    def test_validate_spec_structure_missing_example(self, tmp_path):
+        """Spec structure validation flags missing example attachments"""
+        spec_path = tmp_path / "invalid-missing-example.yaml"
+        with open("specs/dataframe-pipeline-extended.yaml") as base_spec:
+            spec_data = yaml.safe_load(base_spec)
+
+        # Remove example linkage from the first datatype to trigger warning/error
+        spec_data["datatypes"][0]["example_ids"] = []
+
+        with open(spec_path, "w") as f:
+            yaml.safe_dump(spec_data, f)
+
+        spec = load_spec(str(spec_path))
+        engine = Engine(spec)
+        errors = engine.validate_spec_structure()
+        assert errors["datatype_completeness"]  # Missing examples should be reported
+        assert any("Example" in msg for msg in errors["example_links"])
 
 
 class TestConfigValidation:
@@ -335,8 +441,6 @@ execution:
         )
 
         # First, ensure implementations exist by running generation
-        from packages.spec2code.engine import load_spec
-
         load_spec("specs/dataframe-pipeline-extended.yaml")
 
         # Now test validation with implementations

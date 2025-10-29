@@ -222,6 +222,7 @@ dag_stages:
     max_select: null  # null = unlimited
     input_type: NormalizedFrame
     output_type: NormalizedFrame
+    collect_output: true  # 中間生成物を出力として公開
     # candidates auto-collected: add_rolling_mean, add_diff, add_lag_features
     # default_transform_id auto-set to: add_rolling_mean
 

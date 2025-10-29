@@ -6,6 +6,7 @@ Usage:
     python main.py gen <spec_file>
     python main.py run <spec_file>
     python main.py validate <spec_file>
+    python main.py validate_spec <spec_file>
     python main.py run_config <config_file>
     python main.py validate_config <config_file>
     python main.py export_cards <spec1> <spec2> ... --output=<dir>
@@ -15,6 +16,7 @@ import sys
 from pathlib import Path
 
 import fire
+from pydantic import ValidationError
 
 from packages.spec2code.engine import (
     Engine,
@@ -22,6 +24,7 @@ from packages.spec2code.engine import (
     load_spec,
 )
 from packages.spec2code.card_exporter import export_spec_to_cards
+from packages.spec2code.config_model import load_extended_spec
 
 
 class Spec2CodeCLI:
@@ -80,6 +83,81 @@ class Spec2CodeCLI:
                 sys.exit(1)
         except Exception as exc:
             print(f"❌ Failed to validate: {exc}")
+            sys.exit(1)
+
+    def _extract_validation_errors(self, exc: ValidationError | ValueError) -> list[str]:
+        """Extract error messages from validation exception."""
+        issues: list[str] = []
+        if isinstance(exc, ValidationError):
+            for error_dict in exc.errors():
+                loc = " -> ".join(str(part) for part in error_dict.get("loc", ())) or "spec"
+                msg = error_dict.get("msg", "Unknown validation error")
+                issues.append(f"{loc}: {msg}")
+        else:
+            issues.append(str(exc))
+        return issues
+
+    def _load_and_check_extended_spec(self, spec_file: str) -> list[str]:
+        """Load extended spec and collect validation issues."""
+        try:
+            extended_spec = load_extended_spec(spec_file)
+            meta_name = extended_spec.meta.get("name") if isinstance(extended_spec.meta, dict) else None
+            spec_name = meta_name or spec_file
+            print(f"✅ Loaded spec metadata: {spec_name}")
+            if extended_spec.dag_stages:
+                print(f"  ✅ dag_stages connectivity verified ({len(extended_spec.dag_stages)} stage(s))")
+            else:
+                print("  ⚠️  No dag_stages defined")
+            return []
+        except (ValidationError, ValueError) as exc:
+            print(f"❌ Spec structural validation failed: {spec_file}")
+            issues = self._extract_validation_errors(exc)
+            for message in issues:
+                print(f"  ❌ {message}")
+            return issues
+        except Exception as exc:
+            print(f"❌ Spec structural validation error: {exc}")
+            sys.exit(1)
+
+    def _print_unreachable_stages(self, issues: list[str]) -> None:
+        """Print unreachable stage warnings."""
+        if not issues:
+            return
+        print("\n⚠️  dag_stages connectivity issues detected above:")
+        for issue_str in issues:
+            if "到達できない" in issue_str:
+                try:
+                    unreachable_section = issue_str.split("到達できないステージがあります: ", 1)[1]
+                    for stage_id in [item.strip() for item in unreachable_section.split(",") if item.strip()]:
+                        print(f"  ⚠️  Stage '{stage_id}' is unreachable from final stage")
+                except IndexError:
+                    pass
+
+    def validate_spec(self, spec_file: str) -> None:
+        """仕様ファイルの構造のみを検証
+
+        Args:
+            spec_file: 仕様ファイル (YAML/JSON)
+        """
+        dag_stage_issues = self._load_and_check_extended_spec(spec_file)
+
+        try:
+            spec = load_spec(spec_file)
+            engine = Engine(spec)
+            errors = engine.validate_spec_structure(summarize=False)
+            structural_errors: dict[str, list[str]] = {"dag_stage_flow": dag_stage_issues}
+            for category, messages in errors.items():
+                structural_errors.setdefault(category, []).extend(messages)
+
+            total_errors = sum(len(msgs) for msgs in structural_errors.values())
+            self._print_unreachable_stages(dag_stage_issues)
+            engine._summarize_integrity(structural_errors)
+
+            if total_errors > 0:
+                sys.exit(1)
+            print("✅ Spec structural validation completed successfully")
+        except Exception as exc:
+            print(f"❌ Spec structural validation error: {exc}")
             sys.exit(1)
 
     def run_config(self, config_file: str) -> None:

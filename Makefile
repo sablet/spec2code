@@ -1,4 +1,4 @@
-.PHONY: help gen run validate clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards callgraph
+.PHONY: help gen run validate validate-spec clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards callgraph
 
 # UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 # export UV_CACHE_DIR
@@ -19,6 +19,7 @@ help: ## ヘルプを表示
 	@echo "  make gen [SPEC=specs/xxx.yaml]        スケルトンコード生成"
 	@echo "  make run [SPEC=specs/xxx.yaml]        DAG実行・検証"
 	@echo "  make validate [SPEC=specs/xxx.yaml]   仕様と実装の整合性検証"
+	@echo "  make validate-spec [SPEC=specs/xxx.yaml]  仕様構造のみ検証"
 	@echo ""
 	@echo "Config実行コマンド:"
 	@echo "  make run-config [CONFIG=configs/xxx.yaml]      Config駆動でDAG実行"
@@ -69,6 +70,9 @@ run: ## DAG実行・検証
 
 validate: ## 仕様と実装の整合性検証
 	uv run python main.py validate $(SPEC)
+
+validate-spec: ## 仕様構造の検証（実装チェックなし）
+	uv run python main.py validate_spec $(SPEC)
 
 run-config: ## Config駆動でDAG実行
 	uv run python main.py run_config $(CONFIG)

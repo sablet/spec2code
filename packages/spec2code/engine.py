@@ -286,6 +286,8 @@ class DAGStage(BaseModel):
     output_type: str
     candidates: list[str] = Field(default_factory=list)  # transform_ids
     default_transform_id: str | None = None
+    publish_output: bool = False
+    collect_output: bool = False
 
 
 class Spec(BaseModel):
@@ -303,7 +305,7 @@ class Spec(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_generators(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_generators(_: type["Spec"], data: dict[str, Any]) -> dict[str, Any]:
         generators = data.get("generators")
         if generators is None:
             return data
@@ -409,6 +411,8 @@ def _stage_from_transform(transform: Transform, index: int) -> DAGStage:
         output_type=_infer_output_type(transform),
         candidates=[transform.id],
         default_transform_id=transform.id,
+        publish_output=False,
+        collect_output=False,
     )
 
 
@@ -841,7 +845,9 @@ def _collect_example_annotations(
     value_getter: Callable[[Example], dict[str, Any] | None] | None = None,
 ) -> tuple[list[str], set[str]]:
     if value_getter is None:
-        value_getter = lambda example: example.input
+
+        def value_getter(example: Example) -> dict[str, Any] | None:
+            return example.input
 
     def _format_example(example: Example) -> str | None:
         value = value_getter(example)
@@ -1575,47 +1581,178 @@ class Engine:
         self._summarize_integrity(errors)
         return errors
 
+    def validate_spec_structure(self: "Engine", *, summarize: bool = True) -> dict[str, list[str]]:
+        """Implementation-free spec validation focusing on metadata completeness."""
+        print("🔍 Validating spec structure and references...")
+        errors: dict[str, list[str]] = {
+            "datatype_completeness": [],
+            "example_links": [],
+            "check_links": [],
+            "generator_links": [],
+        }
+
+        self._validate_datatype_completeness(errors)
+        self._validate_example_attachments(errors)
+        self._validate_check_attachments(errors)
+        self._validate_generator_attachments(errors)
+        self._report_stage_publication()
+        self._warn_unlinked_items()
+        if summarize:
+            self._summarize_integrity(errors)
+        return errors
+
+    @staticmethod
+    def _format_datatype_status(datatype: DataType, has_checks: bool, has_sample_source: bool) -> None:
+        """Print formatted datatype status line."""
+        check_status = f"✓ ({len(datatype.check_ids)})" if has_checks else "✗ (0)"
+        example_status = f"✓ ({len(datatype.example_refs)})" if datatype.example_refs else "✗ (0)"
+        generator_status = f"✓ ({len(datatype.generator_refs)})" if datatype.generator_refs else "✗ (0)"
+        icon = "✅" if has_checks and has_sample_source else "⚠️ "
+        print(
+            f"  {icon} {datatype.id:30s} | Checks: {check_status:8s} | "
+            f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
+        )
+
+    @staticmethod
+    def _check_single_datatype_completeness(datatype: DataType, errors: dict[str, list[str]]) -> bool:
+        """Check single datatype completeness and return True if has issues."""
+        has_checks = bool(datatype.check_ids)
+        has_sample_source = bool(datatype.example_refs or datatype.generator_refs)
+
+        Engine._format_datatype_status(datatype, has_checks, has_sample_source)
+
+        if has_checks and has_sample_source:
+            return False
+
+        issues = []
+        if not has_checks:
+            issues.append("missing checks")
+        if not has_sample_source:
+            issues.append("missing examples/generators")
+        errors["datatype_completeness"].append(f"DataType '{datatype.id}' is incomplete: {', '.join(issues)}")
+        return True
+
     def _validate_datatype_completeness(self: "Engine", errors: dict[str, list[str]]) -> None:
         """DataTypeのcheck/example完全性を検証"""
         print("\n📋 DataType Completeness Check:")
         print("=" * 80)
 
-        has_issues = False
+        has_issues = any(self._check_single_datatype_completeness(dt, errors) for dt in self.spec.datatypes)
+
+        summary = (
+            "\n  ⚠️  Some datatypes are missing checks or sample sources"
+            if has_issues
+            else "\n  ✅ All datatypes have checks and sample sources (examples/generators)!"
+        )
+        print(summary)
+        print("=" * 80)
+
+    def _report_stage_publication(self: "Engine") -> None:
+        """Report which stages are marked to collect outputs."""
+        if not self.spec.dag_stages:
+            return
+
+        print("\n📋 DAG Stage Output Collection:")
+        print("=" * 80)
+        collect_count = 0
+        for stage in self.spec.dag_stages:
+            if stage.collect_output or stage.publish_output:
+                collect_count += 1
+                flag = "collect_output" if stage.collect_output else "publish_output"
+                print(f"  ✅ Stage {stage.stage_id}: {flag}=True (allowed terminal)")
+        if collect_count == 0:
+            print("  ⏭️  No stages marked with collect_output=True")
+        print("=" * 80)
+
+    def _validate_example_attachments(self: "Engine", errors: dict[str, list[str]]) -> None:
+        """Validate that examples are referenced by datatypes."""
+        print("\n📋 Example Attachments:")
+        print("=" * 80)
+        example_map = {example.id: example for example in self.spec.examples}
+        usage: dict[str, list[str]] = {example_id: [] for example_id in example_map}
+
         for datatype in self.spec.datatypes:
-            has_checks = bool(datatype.check_ids)
-            has_examples = bool(datatype.example_refs)
-            has_generators = bool(datatype.generator_refs)
-            has_sample_source = has_examples or has_generators
+            for example_id in datatype.example_refs:
+                if example_id in example_map:
+                    usage.setdefault(example_id, []).append(datatype.id)
+                else:
+                    message = f"DataType '{datatype.id}' references unknown example '{example_id}'"
+                    errors["example_links"].append(message)
+                    print(f"  ❌ {message}")
 
-            check_status = f"✓ ({len(datatype.check_ids)})" if has_checks else "✗ (0)"
-            example_status = f"✓ ({len(datatype.example_refs)})" if has_examples else "✗ (0)"
-            generator_status = f"✓ ({len(datatype.generator_refs)})" if has_generators else "✗ (0)"
-
-            if has_checks and has_sample_source:
-                print(
-                    f"  ✅ {datatype.id:30s} | Checks: {check_status:8s} | "
-                    f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
-                )
-            else:
-                has_issues = True
-                print(
-                    f"  ⚠️  {datatype.id:30s} | Checks: {check_status:8s} | "
-                    f"Examples: {example_status:8s} | Generators: {generator_status:8s}"
-                )
-
-                issues = []
-                if not has_checks:
-                    issues.append("missing checks")
-                if not has_sample_source:
-                    issues.append("missing examples/generators")
-
-                error_msg = f"DataType '{datatype.id}' is incomplete: {', '.join(issues)}"
-                errors["datatype_completeness"].append(error_msg)
-
-        if not has_issues:
-            print("\n  ✅ All datatypes have checks and sample sources (examples/generators)!")
+        if not example_map:
+            print("  ⚠️  No examples defined in spec")
         else:
-            print("\n  ⚠️  Some datatypes are missing checks or sample sources")
+            for example_id in sorted(example_map):
+                dtype_ids = sorted(usage.get(example_id, []))
+                if dtype_ids:
+                    dtype_list = ", ".join(dtype_ids)
+                    print(f"  ✅ Example {example_id}: linked to datatypes [{dtype_list}]")
+                else:
+                    message = f"Example '{example_id}' is not referenced by any datatype"
+                    errors["example_links"].append(message)
+                    print(f"  ⚠️  {message}")
+        print("=" * 80)
+
+    def _validate_check_attachments(self: "Engine", errors: dict[str, list[str]]) -> None:
+        """Validate that checks are referenced by datatypes."""
+        print("\n📋 Check Attachments:")
+        print("=" * 80)
+        check_map = {check.id: check for check in self.spec.checks}
+        usage: dict[str, list[str]] = {check_id: [] for check_id in check_map}
+
+        for datatype in self.spec.datatypes:
+            for check_id in datatype.check_ids:
+                if check_id in check_map:
+                    usage.setdefault(check_id, []).append(datatype.id)
+                else:
+                    message = f"DataType '{datatype.id}' references unknown check '{check_id}'"
+                    errors["check_links"].append(message)
+                    print(f"  ❌ {message}")
+
+        if not check_map:
+            print("  ⚠️  No checks defined in spec")
+        else:
+            for check_id in sorted(check_map):
+                dtype_ids = sorted(usage.get(check_id, []))
+                if dtype_ids:
+                    dtype_list = ", ".join(dtype_ids)
+                    print(f"  ✅ Check {check_id}: linked to datatypes [{dtype_list}]")
+                else:
+                    message = f"Check '{check_id}' is not referenced by any datatype"
+                    errors["check_links"].append(message)
+                    print(f"  ⚠️  {message}")
+        print("=" * 80)
+
+    def _validate_generator_attachments(self: "Engine", errors: dict[str, list[str]]) -> None:
+        """Validate that generators are referenced by datatypes."""
+        print("\n📋 Generator Attachments:")
+        print("=" * 80)
+        generator_specs = self.spec.generators or {}
+        generator_map = {gen.id: gen for gen in generator_specs.values()}
+        usage: dict[str, list[str]] = {gen_id: [] for gen_id in generator_map}
+
+        for datatype in self.spec.datatypes:
+            for generator_id in datatype.generator_refs:
+                if generator_id in generator_map:
+                    usage.setdefault(generator_id, []).append(datatype.id)
+                else:
+                    message = f"DataType '{datatype.id}' references unknown generator '{generator_id}'"
+                    errors["generator_links"].append(message)
+                    print(f"  ❌ {message}")
+
+        if not generator_map:
+            print("  ⚠️  No generators defined in spec")
+        else:
+            for generator_id in sorted(generator_map):
+                dtype_ids = sorted(usage.get(generator_id, []))
+                if dtype_ids:
+                    dtype_list = ", ".join(dtype_ids)
+                    print(f"  ✅ Generator {generator_id}: linked to datatypes [{dtype_list}]")
+                else:
+                    message = f"Generator '{generator_id}' is not referenced by any datatype"
+                    errors["generator_links"].append(message)
+                    print(f"  ⚠️  {message}")
         print("=" * 80)
 
     def _validate_datatypes(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
@@ -1997,6 +2134,12 @@ class Engine:
                     use_expected=True,
                 )
 
+    @staticmethod
+    def _report_example_error(errors: dict[str, list[str]], message: str) -> None:
+        """Helper to report example validation errors."""
+        errors["transform_annotations"].append(message)
+        print(f"  ⚠️  {message}")
+
     def _check_example_marker(
         self: "Engine",
         transform_id: str,
@@ -2013,64 +2156,53 @@ class Engine:
         if not expected_ids:
             return
 
-        if annotation is None:
-            message = (
-                f"Transform '{transform_id}' {context} missing ExampleValue annotation (expected one of {expected_ids})"
-            )
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
-            return
+        error_msg = self._validate_example_annotation(
+            transform_id, context, annotation, expected_ids, example_map, use_expected
+        )
+        if error_msg:
+            self._report_example_error(errors, error_msg)
 
-        marker = self._extract_example_marker(annotation)
-        if marker is None:
-            message = (
-                f"Transform '{transform_id}' {context} missing ExampleValue marker (expected one of {expected_ids})"
-            )
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
-            return
-
+    @staticmethod
+    def _validate_marker_content(
+        marker: dict[str, Any], expected_ids: list[str], example_map: dict[str, Example], use_expected: bool
+    ) -> tuple[str | None, Example | None]:
+        """Validate marker content and return error message if any, otherwise return example."""
         example_id = marker.get("__example_id__")
-        if not example_id:
-            message = f"Transform '{transform_id}' {context}: ExampleValue missing '__example_id__'"
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
-            return
-
-        if example_id not in expected_ids:
-            message = (
-                f"Transform '{transform_id}' {context}: ExampleValue references unknown example_id '{example_id}' "
-                f"(expected one of {expected_ids})"
-            )
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
-            return
+        if not example_id or example_id not in expected_ids:
+            id_desc = "missing" if not example_id else f"unknown '{example_id}'"
+            return f"ExampleValue has {id_desc} example_id (expected one of {expected_ids})", None
 
         if "__example_value__" not in marker:
-            message = f"Transform '{transform_id}' {context}: ExampleValue missing '__example_value__'"
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
-            return
+            return "missing '__example_value__'", None
 
         example = example_map.get(example_id)
         if example is None:
-            message = f"Transform '{transform_id}' {context}: Example '{example_id}' not found in specification"
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
-            return
+            return f"Example '{example_id}' not found", None
 
         expected_payload = example.expected if use_expected else example.input
-        actual_payload = marker["__example_value__"]
-        if actual_payload != expected_payload:
-            message = f"Transform '{transform_id}' {context}: ExampleValue payload mismatch for example '{example_id}'"
-            errors["transform_annotations"].append(message)
-            print(f"  ⚠️  {message}")
+        if marker["__example_value__"] != expected_payload:
+            return f"ExampleValue payload mismatch for example '{example_id}'", None
 
-    def _validate_generators(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
-        """Validate generator implementations and signatures."""
-        if not self.spec.generators:
-            return
+        return None, example
 
+    def _validate_example_annotation(
+        self,
+        transform_id: str,
+        context: str,
+        annotation: object | None,
+        expected_ids: list[str],
+        example_map: dict[str, Example],
+        use_expected: bool,
+    ) -> str | None:
+        """Validate example annotation and return error message if any."""
+        if annotation is None or (marker := self._extract_example_marker(annotation)) is None:
+            return f"Transform '{transform_id}' {context} missing ExampleValue marker (expected one of {expected_ids})"
+
+        error_msg, _ = self._validate_marker_content(marker, expected_ids, example_map, use_expected)
+        return f"Transform '{transform_id}' {context}: {error_msg}" if error_msg else None
+
+    def _validate_generator_refs(self, errors: dict[str, list[str]]) -> None:
+        """Validate that all generator references are defined."""
         defined_generators = self.spec.generators
         for datatype in self.spec.datatypes:
             for generator_id in datatype.generator_refs:
@@ -2081,48 +2213,70 @@ class Engine:
                     errors["generator_functions"].append(message)
                     print(f"  ❌ {message}")
 
-        for generator in defined_generators.values():
-            module_path, func_name = generator.impl.split(":")
-            expected_file = app_root / generator.file_path
+    def _validate_single_generator(
+        self, generator: GeneratorSpec, app_root: Path, errors: dict[str, list[str]]
+    ) -> None:
+        """Validate a single generator's implementation and signature."""
+        module_path, func_name = generator.impl.split(":")
+        expected_file = app_root / generator.file_path
 
-            try:
-                module = importlib.import_module(module_path)
-                func = getattr(module, func_name)
-                print(f"  ✅ Generator {generator.id}: function exists")
-            except (ImportError, AttributeError) as exc:
-                message = f"Generator '{generator.id}' not found: {exc}"
-                errors["generator_functions"].append(message)
-                print(f"  ❌ {message}")
-                continue
+        try:
+            module = importlib.import_module(module_path)
+            func = getattr(module, func_name)
+            print(f"  ✅ Generator {generator.id}: function exists")
+        except (ImportError, AttributeError) as exc:
+            message = f"Generator '{generator.id}' not found: {exc}"
+            errors["generator_functions"].append(message)
+            print(f"  ❌ {message}")
+            return
 
-            try:
-                actual_file = Path(inspect.getfile(func)).resolve()
-            except (TypeError, OSError) as exc:
-                message = f"Generator '{generator.id}' location could not be determined: {exc}"
+        self._check_generator_location(generator, func, expected_file, errors)
+        self._check_generator_signature(generator, func, errors)
+
+    @staticmethod
+    def _check_generator_location(
+        generator: GeneratorSpec, func: object, expected_file: Path, errors: dict[str, list[str]]
+    ) -> None:
+        """Check if generator is in the expected file location."""
+        try:
+            actual_file = Path(inspect.getfile(func)).resolve()  # type: ignore[arg-type]
+            expected_file_resolved = expected_file.resolve()
+            if actual_file != expected_file_resolved:
+                message = (
+                    f"Generator '{generator.id}' location mismatch:\n"
+                    f"    Expected: {expected_file}\n"
+                    f"    Actual:   {actual_file}"
+                )
                 errors["generator_locations"].append(message)
                 print(f"  ⚠️  {message}")
-            else:
-                expected_file_resolved = expected_file.resolve()
-                if actual_file != expected_file_resolved:
-                    message = (
-                        f"Generator '{generator.id}' location mismatch:\n"
-                        f"    Expected: {expected_file}\n"
-                        f"    Actual:   {actual_file}"
-                    )
-                    errors["generator_locations"].append(message)
-                    print(f"  ⚠️  {message}")
+        except (TypeError, OSError) as exc:
+            message = f"Generator '{generator.id}' location could not be determined: {exc}"
+            errors["generator_locations"].append(message)
+            print(f"  ⚠️  {message}")
 
-            signature = inspect.signature(func)
-            expected_params = {p.name for p in generator.parameters}
-            actual_params = set(signature.parameters.keys())
-            if expected_params != actual_params:
-                message = (
-                    f"Generator '{generator.id}' signature mismatch:\n"
-                    f"    Expected params: {sorted(expected_params)}\n"
-                    f"    Actual params:   {sorted(actual_params)}"
-                )
-                errors["generator_signatures"].append(message)
-                print(f"  ⚠️  {message}")
+    @staticmethod
+    def _check_generator_signature(generator: GeneratorSpec, func: object, errors: dict[str, list[str]]) -> None:
+        """Check if generator signature matches specification."""
+        signature = inspect.signature(func)  # type: ignore[arg-type]
+        expected_params = {p.name for p in generator.parameters}
+        actual_params = set(signature.parameters.keys())
+        if expected_params != actual_params:
+            message = (
+                f"Generator '{generator.id}' signature mismatch:\n"
+                f"    Expected params: {sorted(expected_params)}\n"
+                f"    Actual params:   {sorted(actual_params)}"
+            )
+            errors["generator_signatures"].append(message)
+            print(f"  ⚠️  {message}")
+
+    def _validate_generators(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
+        """Validate generator implementations and signatures."""
+        if not self.spec.generators:
+            return
+
+        self._validate_generator_refs(errors)
+        for generator in self.spec.generators.values():
+            self._validate_single_generator(generator, app_root, errors)
 
     def _validate_examples(self: "Engine", app_root: Path, errors: dict[str, list[str]]) -> None:
         """Validate that example payloads satisfy their referenced schemas."""
