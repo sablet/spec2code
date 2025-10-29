@@ -203,6 +203,13 @@ def process_text(
         ExampleValue[
             {"__example_id__": "example_hello", "__example_value__": {"text": "hello"}}
         ],
+        ExampleValue[
+            {
+                "__generator_id__": "generate_text_input",
+                "__generator_impl__": "test-pipeline.generators.data_generators:generate_text_input",
+                "__generator_defaults__": {"uppercase": False},
+            }
+        ],
     ],
     uppercase: bool,
 ) -> Annotated[

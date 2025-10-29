@@ -128,7 +128,7 @@ def process_text(
         processors_file = app_root / "transforms" / "processors.py"
 
         code = processors_file.read_text()
-        code = code.replace('"__example_id__": "example_hello", ', "", 1)
+        code = code.replace('"__example_id__"', '"__invalid_id__"')
         processors_file.write_text(code)
 
         spec = load_spec(spec_file)
@@ -137,7 +137,7 @@ def process_text(
         errors = engine.validate_integrity(project_root=implemented_project)
 
         assert len(errors["transform_annotations"]) >= 1
-        assert any("missing example_id" in msg for msg in errors["transform_annotations"])
+        assert any("missing '__example_id__'" in msg for msg in errors["transform_annotations"])
 
     def test_detect_mismatched_example_value_annotation(self, implemented_project, spec_file):
         """異常ケース: ExampleValueが仕様上の例と一致しない"""
