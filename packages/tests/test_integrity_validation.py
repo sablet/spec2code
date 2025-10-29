@@ -30,6 +30,7 @@ class TestIntegrityValidation:
         assert len(errors["check_locations"]) == 0
         assert len(errors["transform_functions"]) == 0
         assert len(errors["transform_signatures"]) == 0
+        assert len(errors["transform_annotations"]) == 0
         assert len(errors["generator_functions"]) == 0
         assert len(errors["generator_locations"]) == 0
         assert len(errors["generator_signatures"]) == 0
@@ -92,11 +93,17 @@ def process_text(
     input_data: Annotated[
         dict,
         Check["test-pipeline.checks.validators:check_text_length"],
-        ExampleValue[{"text": "hello"}],
+        ExampleValue[
+            {"__example_id__": "example_hello", "__example_value__": {"text": "hello"}}
+        ],
     ],
     uppercase: bool,
     extra_param: str = "default",
-) -> Annotated[dict, Check["test-pipeline.checks.validators:check_result_positive"]]:
+) -> Annotated[
+    dict,
+    Check["test-pipeline.checks.validators:check_result_positive"],
+    ExampleValue[{"__example_id__": "example_result", "__example_value__": {"length": 5}}],
+]:
     """テキストを処理"""
     text = input_data.get("text", "")
     if uppercase:
@@ -114,6 +121,44 @@ def process_text(
         assert len(errors["transform_signatures"]) == 1
         assert "process_text" in errors["transform_signatures"][0]
         assert "extra_param" in errors["transform_signatures"][0]
+
+    def test_detect_missing_example_id_annotation(self, implemented_project, spec_file):
+        """異常ケース: ExampleValueに__example_id__が含まれていない"""
+        app_root = implemented_project / "apps" / "test-pipeline"
+        processors_file = app_root / "transforms" / "processors.py"
+
+        code = processors_file.read_text()
+        code = code.replace('"__example_id__": "example_hello", ', "", 1)
+        processors_file.write_text(code)
+
+        spec = load_spec(spec_file)
+        engine = Engine(spec)
+
+        errors = engine.validate_integrity(project_root=implemented_project)
+
+        assert len(errors["transform_annotations"]) >= 1
+        assert any("__example_id__" in msg for msg in errors["transform_annotations"])
+
+    def test_detect_mismatched_example_value_annotation(self, implemented_project, spec_file):
+        """異常ケース: ExampleValueが仕様上の例と一致しない"""
+        app_root = implemented_project / "apps" / "test-pipeline"
+        processors_file = app_root / "transforms" / "processors.py"
+
+        code = processors_file.read_text()
+        code = code.replace(
+            '{"__example_id__": "example_result", "__example_value__": {"length": 5}}',
+            '{"__example_id__": "example_result", "__example_value__": {"length": 999}}',
+            1,
+        )
+        processors_file.write_text(code)
+
+        spec = load_spec(spec_file)
+        engine = Engine(spec)
+
+        errors = engine.validate_integrity(project_root=implemented_project)
+
+        assert len(errors["transform_annotations"]) >= 1
+        assert any("payload mismatch" in msg for msg in errors["transform_annotations"])
 
     def test_datatype_requires_example_or_generator(self, temp_project_dir, sample_spec_yaml):
         """DataTypeはexampleかgeneratorのいずれかを要求する"""
@@ -213,7 +258,7 @@ def generate_text_input(uppercase: bool = False, extra: int = 1) -> dict[str, An
         app_root = implemented_project / "apps" / "test-pipeline"
         generator_file = app_root / "generators" / "data_generators.py"
         helper_file = app_root / "generators" / "helper_generators.py"
-        helper_code = '''from typing import Any
+        helper_code = """from typing import Any
 
 
 def generate_text_input(uppercase: bool = False) -> dict[str, Any]:
@@ -222,7 +267,7 @@ def generate_text_input(uppercase: bool = False) -> dict[str, Any]:
         payload["text"] = payload["text"].upper()
     payload["text"] += "_moved"
     return payload
-'''
+"""
         helper_file.write_text(helper_code)
         generator_file.write_text("from .helper_generators import generate_text_input\n")
 
@@ -254,7 +299,12 @@ from spec2code.engine import Check, ExampleValue
 
 
 def process_text(
-    input_data: Annotated[dict, ExampleValue[{"text": "hello"}]],
+    input_data: Annotated[
+        dict,
+        ExampleValue[
+            {"__example_id__": "example_hello", "__example_value__": {"text": "hello"}}
+        ],
+    ],
     uppercase: bool,
     new_param: int,
 ) -> dict:

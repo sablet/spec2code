@@ -1,0 +1,7 @@
+version: '1'
+meta:
+  config_name: dataframe-abcd-default
+  description: Default configuration for dataframe-abcd
+  base_spec: specs/dataframe-abcd.yaml
+execution:
+  stages: []

@@ -1,6 +1,6 @@
 # Auto-generated skeleton for Transform functions
 
-from spec2code.engine import Check
+from spec2code.engine import Check, ExampleValue
 from ..datatypes.models import PerformanceMetrics
 from ..datatypes.models import PredictionData
 from ..datatypes.models import RankedPredictionData
@@ -59,7 +59,11 @@ def simulate_buy_scenario(
 # Auto-generated skeleton for Transform: calculate_performance_metrics
 def calculate_performance_metrics(
     simulation: SimulationResult, risk_free_rate: float = 0.0
-) -> Annotated[PerformanceMetrics, Check["apps.algo-trade-pipeline.checks.backtest_checks:check_performance_metrics"]]:
+) -> Annotated[
+    PerformanceMetrics,
+    Check["apps.algo-trade-pipeline.checks.backtest_checks:check_performance_metrics"],
+    ExampleValue[{"__example_id__": "ex_performance_metrics", "__example_value__": {"valid": True}}],
+]:
     """Calculate performance metrics (Sharpe, max drawdown, Calmar, etc.)"""
     # TODO: implement transform logic
     return {}

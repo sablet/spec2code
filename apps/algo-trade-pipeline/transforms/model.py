@@ -13,7 +13,13 @@ from typing import Any
 def train_lightgbm_cv(
     aligned_data: AlignedFeatureTarget,
     cv_config: Annotated[
-        SimpleCVConfig | None, ExampleValue[{"method": "TIME_SERIES", "n_splits": 5, "test_size": 0.2, "gap": 0}]
+        SimpleCVConfig | None,
+        ExampleValue[
+            {
+                "__example_id__": "ex_cv_config",
+                "__example_value__": {"method": "TIME_SERIES", "n_splits": 5, "test_size": 0.2, "gap": 0},
+            }
+        ],
     ] = None,
     lgbm_params: dict[str, Any] | None = None,
 ) -> Annotated[CVResult, Check["apps.algo-trade-pipeline.checks.model_checks:check_cv_result"]]:

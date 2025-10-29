@@ -74,7 +74,7 @@ def test_dataframe_pipeline_generates_correct_code(dataframe_spec_path, tmp_path
     assert "def transform_step_a_to_step_b(" in generated_code
     assert "step_a_data: Annotated[" in generated_code
     assert "pd.DataFrame" in generated_code
-    assert "ExampleValue[" in generated_code
+    assert "__example_id__" in generated_code
 
     # Verify that input does NOT have Check (only Example)
     lines = generated_code.split("\n")
@@ -90,21 +90,19 @@ def test_dataframe_pipeline_generates_correct_code(dataframe_spec_path, tmp_path
 
     param_section = "\n".join(param_lines)
     # Input should have ExampleValue but NOT Check
-    assert "ExampleValue[" in param_section
+    assert "__example_id__" in param_section
     # Check that Check is NOT in the parameter annotation
     # (Check should only be in return type)
     check_in_param = "Check[" in param_section and "->" not in param_section.split("Check[")[0]
     assert not check_in_param, "Input parameter should not have Check annotation"
 
-    # Verify return type - with Check only
+    # Verify return type - with Check and ExampleValue
     assert "-> Annotated[" in generated_code
-    return_section = generated_code.split("-> Annotated[")[1].split(":")[0]
+    return_section = generated_code.split("-> Annotated[", 1)[1].split("]:", 1)[0]
     assert "pd.DataFrame" in return_section
     assert "Check[" in return_section
+    assert "__example_id__" in return_section
     assert "check_step_b" in generated_code
-
-    # Verify that return does NOT have ExampleValue
-    assert "ExampleValue[" not in return_section
 
 
 def test_dataframe_pipeline_generates_check_files(dataframe_spec_path, tmp_path):

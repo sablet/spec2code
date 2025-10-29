@@ -1,0 +1,7 @@
+version: '1'
+meta:
+  config_name: dataframe-pipeline-default
+  description: Default configuration for dataframe-pipeline
+  base_spec: specs/dataframe-pipeline.yaml
+execution:
+  stages: []

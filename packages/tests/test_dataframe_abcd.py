@@ -181,7 +181,7 @@ def test_dataframe_abcd_type_annotations(dataframe_abcd_spec_path, tmp_path):
     code_a = transform_a_file.read_text()
 
     # Input parameters should have ExampleValue
-    assert "ExampleValue[" in code_a
+    assert "__example_id__" in code_a
 
     # Return types should have Check
     assert "Check[" in code_a
@@ -192,7 +192,7 @@ def test_dataframe_abcd_type_annotations(dataframe_abcd_spec_path, tmp_path):
     code_bc = transform_bc_file.read_text()
 
     # Both input parameters should have ExampleValue
-    assert "ExampleValue[" in code_bc
+    assert "__example_id__" in code_bc
 
     # Return type should have Check
     assert "Check[" in code_bc
@@ -244,7 +244,7 @@ from spec2code.engine import Check, ExampleValue
 from typing import Annotated
 import pandas as pd
 
-def transform_a_to_b(data_a: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'id': 1, 'value': 100}, {'id': 2, 'value': 200}]}]]) -> Annotated[pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_b"]]:
+def transform_a_to_b(data_a: Annotated[pd.DataFrame, ExampleValue[{'__example_id__': 'ex_a', '__example_value__': {'id': 1, 'value': 100}}]]) -> Annotated[pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_b"]]:
     """Transform from A to B (add processed column)"""
     # Add processed column (value + 10% for testing)
     data_b = data_a.copy()
@@ -259,7 +259,7 @@ from spec2code.engine import Check, ExampleValue
 from typing import Annotated
 import pandas as pd
 
-def transform_bc_to_d(data_b: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'id': 1, 'value': 100, 'processed': 110}, {'id': 2, 'value': 200, 'processed': 220}]}]], data_c: Annotated[pd.DataFrame, ExampleValue[{'rows': [{'id': 1, 'factor': 1.5}, {'id': 2, 'factor': 2.0}]}]]) -> Annotated[pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_d"]]:
+def transform_bc_to_d(data_b: Annotated[pd.DataFrame, ExampleValue[{'__example_id__': 'ex_b', '__example_value__': {'id': 1, 'value': 100, 'processed': 110}}]], data_c: Annotated[pd.DataFrame, ExampleValue[{'__example_id__': 'ex_c', '__example_value__': {'id': 1, 'factor': 1.5}}]]) -> Annotated[pd.DataFrame, Check["apps.dataframe-abcd.checks.dataframe_checks:check_d"]]:
     """Transform from B and C to D (combine and calculate result)"""
     # Merge B and C on 'id', then calculate result
     data_d = data_b.merge(data_c, on='id')

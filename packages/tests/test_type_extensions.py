@@ -218,3 +218,19 @@ def test_generator_skeleton_generation(temp_project_dir, sample_spec_yaml):
     assert "-> dict[str, Any]" in generator_code
     assert '"""テキスト入力データを生成"""' in generator_code
     assert "from typing import Any" in generator_code
+
+
+def test_transform_return_has_example_annotations(temp_project_dir, sample_spec_yaml):
+    """Transform戻り値にExampleValueアノテーションが付与される"""
+    spec_data = copy.deepcopy(sample_spec_yaml)
+
+    spec_path = _write_spec(temp_project_dir, spec_data)
+    spec = load_spec(spec_path)
+    generate_skeleton(spec, project_root=temp_project_dir)
+
+    transform_file = temp_project_dir / "apps" / "test-pipeline" / "transforms" / "processors.py"
+    transform_code = transform_file.read_text()
+
+    assert "ExampleValue" in transform_code
+    assert "Annotated[dict" in transform_code
+    assert "__example_id__': 'example_result'" in transform_code

@@ -21,6 +21,24 @@ examples:
       text: "hello"
     expected:
       length: 5
+  - id: ex_length
+    description: "テキスト長の例"
+    input:
+      length: 5
+      normalized: false
+    expected:
+      length: 5
+      normalized: false
+
+generators:
+  - id: text_length_sample
+    description: "ダミーのテキスト長データを生成"
+    impl: "apps.sample-pipeline.generators.text_generators:generate_text_length"
+    file_path: "generators/text_generators.py"
+    parameters:
+      - name: base_text
+        native: "builtins:str"
+        default: "hello world"
 
 datatypes:
   - id: Text
@@ -41,7 +59,10 @@ datatypes:
     description: "テキスト長情報"
     check_ids:
       - length_positive
-    example_ids: []
+    example_ids:
+      - ex_length
+    generator_refs:
+      - text_length_sample
     schema:
       type: object
       properties:

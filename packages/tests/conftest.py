@@ -15,35 +15,19 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 @pytest.fixture(autouse=True)
 def clean_module_cache():
     """各テスト実行前にtest-pipelineモジュールをクリア"""
-    modules_to_remove = [
-        key
-        for key in list(sys.modules.keys())
-        if "test_pipeline" in key or "test-pipeline" in key
-    ]
+    modules_to_remove = [key for key in list(sys.modules.keys()) if "test_pipeline" in key or "test-pipeline" in key]
     for module in modules_to_remove:
         del sys.modules[module]
     sys.modules.pop("apps", None)
-    sys.path = [
-        path
-        for path in sys.path
-        if not ("/pytest-" in path and path.endswith("/apps"))
-    ]
+    sys.path = [path for path in sys.path if not ("/pytest-" in path and path.endswith("/apps"))]
 
     yield
     # test-pipelineモジュールをクリア
-    modules_to_remove = [
-        key
-        for key in list(sys.modules.keys())
-        if "test_pipeline" in key or "test-pipeline" in key
-    ]
+    modules_to_remove = [key for key in list(sys.modules.keys()) if "test_pipeline" in key or "test-pipeline" in key]
     for module in modules_to_remove:
         del sys.modules[module]
     sys.modules.pop("apps", None)
-    sys.path = [
-        path
-        for path in sys.path
-        if not ("/pytest-" in path and path.endswith("/apps"))
-    ]
+    sys.path = [path for path in sys.path if not ("/pytest-" in path and path.endswith("/apps"))]
 
 
 @pytest.fixture
@@ -92,7 +76,7 @@ def sample_spec_yaml():
                 "description": "処理結果例",
                 "input": {"length": 5, "processed": True},
                 "expected": {"length": 5},
-            }
+            },
         ],
         "generators": [
             {
@@ -100,9 +84,7 @@ def sample_spec_yaml():
                 "description": "テキスト入力データを生成",
                 "impl": "test-pipeline.generators.data_generators:generate_text_input",
                 "file_path": "generators/data_generators.py",
-                "parameters": [
-                    {"name": "uppercase", "native": "builtins:bool", "default": False}
-                ],
+                "parameters": [{"name": "uppercase", "native": "builtins:bool", "default": False}],
             }
         ],
         "datatypes": [
@@ -218,10 +200,16 @@ def process_text(
     input_data: Annotated[
         dict,
         Check["test-pipeline.checks.validators:check_text_length"],
-        ExampleValue[{"text": "hello"}],
+        ExampleValue[
+            {"__example_id__": "example_hello", "__example_value__": {"text": "hello"}}
+        ],
     ],
     uppercase: bool,
-) -> Annotated[dict, Check["test-pipeline.checks.validators:check_result_positive"]]:
+) -> Annotated[
+    dict,
+    Check["test-pipeline.checks.validators:check_result_positive"],
+    ExampleValue[{"__example_id__": "example_result", "__example_value__": {"length": 5}}],
+]:
     """テキストを処理"""
     text = input_data.get("text", "")
     if uppercase:

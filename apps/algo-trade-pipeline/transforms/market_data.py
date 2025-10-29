@@ -12,7 +12,15 @@ def fetch_yahoo_finance_ohlcv(
     config: Annotated[
         MarketDataIngestionConfig,
         ExampleValue[
-            {"symbols": ["USDJPY", "EURUSD"], "start_date": "2024-01-01", "end_date": "2024-01-31", "provider": "yahoo"}
+            {
+                "__example_id__": "ex_ingestion_config",
+                "__example_value__": {
+                    "symbols": ["USDJPY", "EURUSD"],
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-01-31",
+                    "provider": "yahoo",
+                },
+            }
         ],
     ],
 ) -> Annotated[dict, Check["apps.algo-trade-pipeline.checks.market_data_checks:check_batch_collection"]]:
@@ -47,7 +55,15 @@ def persist_market_data_snapshot(
     config: Annotated[
         MarketDataIngestionConfig,
         ExampleValue[
-            {"symbols": ["USDJPY", "EURUSD"], "start_date": "2024-01-01", "end_date": "2024-01-31", "provider": "yahoo"}
+            {
+                "__example_id__": "ex_ingestion_config",
+                "__example_value__": {
+                    "symbols": ["USDJPY", "EURUSD"],
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-01-31",
+                    "provider": "yahoo",
+                },
+            }
         ],
     ],
 ) -> Annotated[MarketDataSnapshotMeta, Check["apps.algo-trade-pipeline.checks.market_data_checks:check_snapshot_meta"]]:
