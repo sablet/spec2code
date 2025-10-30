@@ -1,0 +1,222 @@
+# 新アーキテクチャのサンプルSpec（ハイブリッドアプローチ）
+# 全ての型定義をYAMLで記述し、ExampleSpec/CheckSpecでAnnotatedメタ型を生成
+
+version: "1"
+meta:
+  name: "sample-pipeline"
+  description: "Sample pipeline demonstrating hybrid architecture"
+
+# Pydanticモデル定義（YAMLで定義 → Pythonコード生成 → TypeAlias生成）
+datatypes:
+  - id: MarketDataConfig
+    description: "Market data ingestion configuration"
+    pydantic_model:
+      fields:
+        - name: symbols
+          type:
+            generic:
+              container: list
+              element_type:
+                native: "builtins:str"
+          description: "List of symbols to fetch"
+        - name: start_date
+          type:
+            native: "builtins:str"
+          description: "Start date (YYYY-MM-DD)"
+        - name: end_date
+          type:
+            native: "builtins:str"
+          description: "End date (YYYY-MM-DD)"
+        - name: provider
+          type:
+            native: "builtins:str"
+          default: "yahoo"
+          description: "Data provider"
+    examples:
+      - symbols: ["AAPL", "GOOGL"]
+        start_date: "2024-01-01"
+        end_date: "2024-12-31"
+        provider: "yahoo"
+    check_functions:
+      - "apps.sample_pipeline.checks:validate_market_data_config"
+
+  - id: AssetClass
+    description: "Asset class types"
+    enum:
+      base_type: str
+      members:
+        - name: EQUITY
+          value: "EQUITY"
+        - name: CRYPTO
+          value: "CRYPTO"
+        - name: FOREX
+          value: "FOREX"
+    examples:
+      - "EQUITY"
+      - "CRYPTO"
+    check_functions:
+      - "apps.sample_pipeline.checks:validate_asset_class"
+
+  # DataFrameの各行に対応するPydanticモデル
+  - id: OHLCVRowModel
+    description: "Row model for OHLCV DataFrame"
+    pydantic_model:
+      fields:
+        - name: timestamp
+          type:
+            native: "datetime:datetime"
+        - name: symbol
+          type:
+            native: "builtins:str"
+        - name: open
+          type:
+            native: "builtins:float"
+          constraints:
+            ge: 0
+        - name: high
+          type:
+            native: "builtins:float"
+          constraints:
+            ge: 0
+        - name: low
+          type:
+            native: "builtins:float"
+          constraints:
+            ge: 0
+        - name: close
+          type:
+            native: "builtins:float"
+          constraints:
+            ge: 0
+        - name: volume
+          type:
+            native: "builtins:float"
+          constraints:
+            ge: 0
+
+  - id: FeatureRowModel
+    description: "Row model for Feature DataFrame"
+    pydantic_model:
+      fields:
+        - name: timestamp
+          type:
+            native: "datetime:datetime"
+        - name: symbol
+          type:
+            native: "builtins:str"
+        - name: sma_20
+          type:
+            native: "builtins:float"
+          optional: true
+        - name: rsi_14
+          type:
+            native: "builtins:float"
+          optional: true
+          constraints:
+            ge: 0
+            le: 100
+
+# DataFrameスキーマ定義（メタデータ付き）
+dataframes:
+  - id: OHLCVFrame
+    description: "OHLCV DataFrame with timestamp index"
+    datatype_ref: "OHLCVRowModel"  # Row modelを参照
+    generator_factory: "apps.sample_pipeline.generators:generate_ohlcv_frame"
+    check_functions:
+      - "apps.sample_pipeline.checks:check_ohlcv_valid"
+    index:
+      - name: timestamp
+        dtype: datetime64[ns]
+        unique: false
+    columns:
+      - name: symbol
+        dtype: str
+        nullable: false
+      - name: open
+        dtype: float64
+        nullable: false
+        checks:
+          - type: ge
+            value: 0
+      - name: high
+        dtype: float64
+        nullable: false
+        checks:
+          - type: ge
+            value: 0
+      - name: low
+        dtype: float64
+        nullable: false
+        checks:
+          - type: ge
+            value: 0
+      - name: close
+        dtype: float64
+        nullable: false
+        checks:
+          - type: ge
+            value: 0
+      - name: volume
+        dtype: float64
+        nullable: false
+        checks:
+          - type: ge
+            value: 0
+
+  - id: FeatureFrame
+    description: "Feature DataFrame for ML models"
+    datatype_ref: "FeatureRowModel"  # Row modelを参照
+    index:
+      - name: timestamp
+        dtype: datetime64[ns]
+        unique: false
+    columns:
+      - name: symbol
+        dtype: str
+        nullable: false
+      - name: sma_20
+        dtype: float64
+        nullable: true
+      - name: rsi_14
+        dtype: float64
+        nullable: true
+        checks:
+          - type: ge
+            value: 0
+          - type: le
+            value: 100
+
+# パイプライン定義
+transforms:
+  - id: fetch_market_data
+    impl: "apps.sample_pipeline.transforms.data_fetch:fetch_market_data"
+    file_path: "transforms/data_fetch.py"
+    description: "Fetch market data from provider"
+    parameters:
+      - name: config
+        type_ref: "MarketDataConfig"  # Python型参照
+    return_type_ref: "OHLCVFrame"  # DataFrame ID参照
+
+  - id: compute_features
+    impl: "apps.sample_pipeline.transforms.feature_engineering:compute_features"
+    file_path: "transforms/feature_engineering.py"
+    description: "Compute technical indicators"
+    parameters:
+      - name: df
+        type_ref: "OHLCVFrame"  # DataFrame ID参照
+    return_type_ref: "FeatureFrame"
+
+dag_stages:
+  - stage_id: "data_ingestion"
+    selection_mode: "single"
+    input_type: "MarketDataConfig"  # Python型参照
+    output_type: "OHLCVFrame"
+    candidates:
+      - fetch_market_data
+
+  - stage_id: "feature_engineering"
+    selection_mode: "single"
+    input_type: "OHLCVFrame"
+    output_type: "FeatureFrame"
+    candidates:
+      - compute_features

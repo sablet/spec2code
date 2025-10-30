@@ -64,6 +64,7 @@ htmlcov/
 
 # Output directory (generated files)
 output/
+!doc/examples/output
 
 # Logs
 *.log
