@@ -1,0 +1,20 @@
+version: "1.0"
+meta:
+  name: minimal-test
+  description: "Minimal test spec"
+
+datatypes:
+  - id: SampleFrame
+    description: "Simple DataFrame with basic columns"
+    dataframe_schema:
+      index:
+        name: idx
+        dtype: int
+        nullable: false
+      columns:
+        - name: value
+          dtype: float
+          nullable: false
+        - name: label
+          dtype: str
+          nullable: false

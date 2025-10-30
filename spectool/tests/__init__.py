@@ -1,0 +1,1 @@
+"""spectool.tests: テストスイート"""

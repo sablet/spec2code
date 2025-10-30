@@ -1,0 +1,19 @@
+version: "1.0"
+meta:
+  name: invalid-missing-type
+  description: "Invalid spec with missing dtype"
+
+datatypes:
+  - id: InvalidFrame
+    description: "DataFrame with missing dtype"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+      columns:
+        - name: value
+          dtype: ""  # Missing dtype!
+          nullable: false
+        - name: status
+          dtype: str
+          nullable: false

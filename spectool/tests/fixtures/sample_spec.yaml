@@ -1,0 +1,110 @@
+version: "1.0"
+meta:
+  name: sample_project
+  description: "Sample spec with DataFrame, Enum, Transform"
+
+checks:
+  - id: validate_positive
+    description: "Validate positive values"
+    impl: "apps.checks:validate_positive"
+    file_path: "apps/checks/validators.py"
+
+datatypes:
+  - id: Status
+    description: "Status enumeration"
+    enum:
+      base_type: str
+      members:
+        - name: ACTIVE
+          value: active
+          description: "Active status"
+        - name: INACTIVE
+          value: inactive
+          description: "Inactive status"
+    examples:
+      - ACTIVE
+      - INACTIVE
+    check_functions:
+      - "apps.checks:validate_status"
+
+  - id: DataPoint
+    description: "Data point Pydantic model"
+    pydantic_model:
+      fields:
+        - name: timestamp
+          type:
+            native: "builtins:str"
+          required: true
+        - name: value
+          type:
+            native: "builtins:float"
+          required: true
+    examples:
+      - timestamp: "2024-01-01T00:00:00"
+        value: 100.0
+
+  - id: TimeSeriesFrame
+    description: "Time series DataFrame"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+        nullable: false
+      columns:
+        - name: value
+          dtype: float
+          nullable: false
+          checks:
+            - type: ge
+              value: 0
+        - name: status
+          dtype: str
+          nullable: false
+    row_model: "apps.models:TimeSeriesRow"
+    generator_factory: "apps.generators:generate_timeseries"
+    check_functions:
+      - "apps.checks:validate_timeseries"
+
+generators:
+  - id: generate_timeseries
+    description: "Generate time series data"
+    impl: "apps.generators:generate_timeseries"
+    file_path: "apps/generators/data_generators.py"
+    parameters: []
+
+transforms:
+  - id: process_data
+    description: "Process time series data"
+    impl: "apps.transforms:process_data"
+    file_path: "apps/transforms/processors.py"
+    parameters:
+      - name: data
+        datatype_ref: TimeSeriesFrame
+      - name: threshold
+        native: "builtins:float"
+        optional: true
+        default: 0.5
+    return_datatype_ref: TimeSeriesFrame
+
+dag_stages:
+  - stage_id: stage_1
+    description: "First processing stage"
+    selection_mode: single
+    input_type: TimeSeriesFrame
+    output_type: TimeSeriesFrame
+    candidates:
+      - process_data
+    default_transform_id: process_data
+
+examples:
+  - id: example_1
+    description: "Example test case"
+    input:
+      data:
+        timestamp: ["2024-01-01T00:00:00"]
+        value: [100.0]
+        status: ["active"]
+    expected:
+      timestamp: ["2024-01-01T00:00:00"]
+      value: [100.0]
+      status: ["active"]

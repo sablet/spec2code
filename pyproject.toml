@@ -8,6 +8,7 @@ dependencies = [
     "jsonschema>=4.25.1",
     "networkx>=3.5",
     "pandas>=2.3.3",
+    "pandera>=0.26.1",
     "pydantic>=2.12.3",
     "pyyaml>=6.0.3",
 ]
@@ -27,7 +28,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/tests"]
+# testpaths = ["packages/tests"]
+testpaths = ["spectool/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -77,4 +79,4 @@ extend_exclude = ["apps", "output", "frontend", "packages/tests"]
 ignore_notebooks = true
 
 [tool.deptry.per_rule_ignores]
-DEP001 = ["spec2code"]  # Local package import (project itself)
+DEP001 = ["spec2code", "spectool"]  # Local package import (project itself)

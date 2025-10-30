@@ -1,0 +1,59 @@
+version: "1.0"
+meta:
+  name: valid-spec
+  description: "Valid spec without errors"
+
+checks:
+  - id: validate_positive
+    description: "Validate positive values"
+    impl: "apps.checks:validate_positive"
+    file_path: "apps/checks/validators.py"
+
+datatypes:
+  - id: Status
+    description: "Status enumeration"
+    enum:
+      base_type: str
+      members:
+        - name: ACTIVE
+          value: active
+        - name: INACTIVE
+          value: inactive
+
+  - id: TimeSeriesFrame
+    description: "Time series DataFrame"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+      columns:
+        - name: value
+          dtype: float
+          nullable: false
+        - name: status
+          dtype: str
+          nullable: false
+
+transforms:
+  - id: process_data
+    description: "Process time series data"
+    impl: "apps.transforms:process_data"
+    file_path: "apps/transforms/processors.py"
+    parameters:
+      - name: data
+        datatype_ref: TimeSeriesFrame
+      - name: threshold
+        native: "builtins:float"
+        optional: true
+        default: 0.5
+    return_datatype_ref: TimeSeriesFrame
+
+dag_stages:
+  - stage_id: stage_1
+    description: "First processing stage"
+    selection_mode: single
+    input_type: TimeSeriesFrame
+    output_type: TimeSeriesFrame
+    candidates:
+      - process_data
+    default_transform_id: process_data

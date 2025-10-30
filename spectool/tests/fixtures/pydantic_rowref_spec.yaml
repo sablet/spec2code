@@ -1,0 +1,33 @@
+version: "1.0"
+meta:
+  name: pydantic-rowref-test
+  description: "Test spec with Pydantic row_model reference"
+
+datatypes:
+  - id: TimeSeriesFrame
+    description: "Time series DataFrame with Pydantic row reference"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+        nullable: false
+      columns:
+        - name: value
+          dtype: float
+          nullable: false
+        # timestampとstatusはPydanticモデルから推論される
+        # metadataはオプショナルなので推論される
+    row_model: "apps.test-project.datatypes.models:TimeSeriesRow"
+    generator_factory: "apps.generators:generate_timeseries"
+    check_functions:
+      - "apps.checks:validate_timeseries"
+
+  - id: SensorDataFrame
+    description: "Sensor data DataFrame with full Pydantic inference"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+        nullable: false
+      columns: []  # 全てPydanticモデルから推論
+    row_model: "apps.test-project.datatypes.models:SensorDataRow"

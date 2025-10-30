@@ -1,0 +1,22 @@
+version: "1.0"
+meta:
+  name: invalid-duplicate-cols
+  description: "Invalid spec with duplicate column names"
+
+datatypes:
+  - id: InvalidFrame
+    description: "DataFrame with duplicate columns"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+      columns:
+        - name: value
+          dtype: float
+          nullable: false
+        - name: status
+          dtype: str
+          nullable: false
+        - name: value  # Duplicate!
+          dtype: int
+          nullable: false

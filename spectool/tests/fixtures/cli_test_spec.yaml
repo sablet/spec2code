@@ -1,0 +1,20 @@
+version: "1"
+meta:
+  name: "cli-test-project"
+  description: "Simple spec for CLI testing"
+
+datatypes:
+  - id: TestFrame
+    dataframe_schema:
+      index:
+        - name: timestamp
+          dtype: datetime64[ns]
+      columns:
+        - name: value
+          dtype: float64
+          nullable: false
+        - name: category
+          dtype: str
+          nullable: true
+      checks: []
+    description: "Test DataFrame for CLI"

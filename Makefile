@@ -1,4 +1,4 @@
-.PHONY: help gen run validate validate-spec clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards callgraph
+.PHONY: help gen run validate validate-spec clean format check test gen-all run-all validate-all run-config run-config-all validate-config validate-config-all tree bootstrap install install-python install-frontend duplication lint typecheck complexity front-run front-build export-cards callgraph spectool-test
 
 # UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 # export UV_CACHE_DIR
@@ -7,10 +7,10 @@
 SPEC ?= specs/spec.yaml
 # デフォルトのconfig
 CONFIG ?= configs/pipeline-config-minmax.yaml
-# チェック対象ディレクトリ
-CHECK_DIRS ?= packages apps main.py tools
-# Lint/Type/Complexity/Dead-codeチェック対象
-LINT_DIRS ?= packages/spec2code main.py
+# チェック対象ディレクトリ（spectool追加）
+CHECK_DIRS ?= packages apps main.py tools spectool
+# Lint/Type/Complexity/Dead-codeチェック対象（spectool追加）
+LINT_DIRS ?= packages/spec2code spectool main.py
 
 help: ## ヘルプを表示
 	@echo "Spec2Code - スケルトンコード生成・検証システム"
@@ -62,17 +62,17 @@ help: ## ヘルプを表示
 	@echo ""
 
 gen: ## スケルトンコード生成
-	uv run python main.py gen $(SPEC)
+	uv run python -m spectool gen $(SPEC)
 	@make format
 
 run: ## DAG実行・検証
 	uv run python main.py run $(SPEC)
 
 validate: ## 仕様と実装の整合性検証
-	uv run python main.py validate $(SPEC)
+	uv run python -m spectool validate-integrity $(SPEC)
 
 validate-spec: ## 仕様構造の検証（実装チェックなし）
-	uv run python main.py validate_spec $(SPEC)
+	uv run python -m spectool validate $(SPEC)
 
 run-config: ## Config駆動でDAG実行
 	uv run python main.py run_config $(CONFIG)
@@ -109,7 +109,7 @@ complexity: ## 複雑度チェック
 	uv run xenon -b B -m B -a A $(LINT_DIRS)
 
 duplication: ## 重複コードチェック
-	npx jscpd --config .jscpd.json $(LINT_DIRS)
+	npx jscpd --config .jscpd.json
 
 dead-code: ## 未使用コード検出
 	uv run vulture $(LINT_DIRS) --min-confidence 80
@@ -124,7 +124,7 @@ deps: ## 依存関係チェック
 module-lines: ## モジュール行数チェック（max-module-lines=500）
 	uv run pylint $(LINT_DIRS) --rcfile=pyproject.toml
 
-check: duplication dead-code callgraph deps format lint typecheck complexity ## module-linesは現在通らないので別
+check: format duplication dead-code callgraph deps lint typecheck complexity ## module-linesは現在通らないので別
 
 test:
 	uv run python -m pytest -v
@@ -140,7 +140,7 @@ gen-all: ## 全てのspecファイルからスケルトン生成
 	@for spec in specs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$spec"; \
-		uv run python main.py gen $$spec; \
+		uv run python -m spectool gen $$spec; \
 	done
 	uv run ruff format apps/ 2>/dev/null || true
 
@@ -158,7 +158,7 @@ validate-all: ## 全てのspecファイルで整合性検証
 	@for spec in specs/*.yaml; do \
 		echo ""; \
 		echo "�� 処理中: $$spec"; \
-		uv run python main.py validate $$spec; \
+		uv run python -m spectool validate-integrity $$spec; \
 	done
 	echo ""
 
