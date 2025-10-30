@@ -30,7 +30,6 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# testpaths = ["packages/tests"]
 testpaths = ["spectool/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -77,7 +76,7 @@ module = "fire"
 ignore_missing_imports = true
 
 [tool.deptry]
-extend_exclude = ["apps", "output", "frontend", "packages/tests"]
+extend_exclude = ["apps", "output", "frontend"]
 ignore_notebooks = true
 
 [tool.deptry.per_rule_ignores]
