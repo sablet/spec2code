@@ -8,6 +8,62 @@ from __future__ import annotations
 from spectool.spectool.core.base.ir import EnumSpec, PydanticModelSpec
 
 
+def _resolve_generic_type(generic_def: dict) -> str:
+    """Generic型定義から型アノテーション文字列を生成
+
+    Args:
+        generic_def: Generic型定義（container, element_type, key_type, value_typeなど）
+
+    Returns:
+        型アノテーション文字列（例: "list[str]", "dict[str, float]"）
+    """
+    container = generic_def.get("container", "list")
+
+    if container == "list":
+        element_type = generic_def.get("element_type", {})
+        element_str = _resolve_type_from_def(element_type)
+        return f"list[{element_str}]"
+
+    elif container == "dict":
+        key_type = generic_def.get("key_type", {})
+        value_type = generic_def.get("value_type", {})
+        key_str = _resolve_type_from_def(key_type)
+        value_str = _resolve_type_from_def(value_type)
+        return f"dict[{key_str}, {value_str}]"
+
+    elif container == "set":
+        element_type = generic_def.get("element_type", {})
+        element_str = _resolve_type_from_def(element_type)
+        return f"set[{element_str}]"
+
+    elif container == "tuple":
+        elements = generic_def.get("elements", [])
+        if elements:
+            element_strs = [_resolve_type_from_def(elem) for elem in elements]
+            return f"tuple[{', '.join(element_strs)}]"
+        return "tuple"
+
+    return "Any"
+
+
+def _resolve_type_from_def(type_def: dict) -> str:
+    """型定義dictから型文字列を解決
+
+    Args:
+        type_def: 型定義（native, datatype_ref, genericなど）
+
+    Returns:
+        型文字列
+    """
+    if "native" in type_def:
+        return type_def["native"].split(":")[-1]
+    elif "datatype_ref" in type_def:
+        return type_def["datatype_ref"]
+    elif "generic" in type_def:
+        return _resolve_generic_type(type_def["generic"])
+    return "Any"
+
+
 def generate_enum_class(enum: EnumSpec) -> str:
     """Enumクラスを生成
 
@@ -64,6 +120,9 @@ def generate_pydantic_model(model: PydanticModelSpec) -> str:
                 type_str = native_type
             elif "datatype_ref" in field_type:
                 type_str = field_type["datatype_ref"]
+            elif "generic" in field_type:
+                # Generic型の処理
+                type_str = _resolve_generic_type(field_type["generic"])
             else:
                 type_str = "Any"
 
