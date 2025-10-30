@@ -41,7 +41,7 @@ class DAGRunner:
         Returns:
             NetworkX DiGraph
         """
-        graph = nx.DiGraph()
+        graph: nx.DiGraph = nx.DiGraph()
 
         # ノードを追加
         for stage in self.ir.dag_stages:

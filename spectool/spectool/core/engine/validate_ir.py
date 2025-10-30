@@ -183,7 +183,7 @@ def _collect_all_datatype_ids(ir: SpecIR) -> set[str]:
     Returns:
         全datatype IDのセット
     """
-    all_datatype_ids = set()
+    all_datatype_ids: set[str] = set()
     all_datatype_ids.update(f.id for f in ir.frames)
     all_datatype_ids.update(e.id for e in ir.enums)
     all_datatype_ids.update(p.id for p in ir.pydantic_models)

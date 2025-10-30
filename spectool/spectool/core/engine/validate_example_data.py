@@ -86,7 +86,7 @@ def _pandera_dtype_from_str(dtype_str: str) -> type | str | None:
     Returns:
         Pandera型、または None
     """
-    mapping = {
+    mapping: dict[str, type | str] = {
         "int": int,
         "float": float,
         "str": str,

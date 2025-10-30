@@ -14,6 +14,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from pydantic.fields import FieldInfo
+
 from spectool.spectool.core.base.ir import ColumnRule, SpecIR
 
 logger = logging.getLogger(__name__)
@@ -161,7 +163,7 @@ def _import_python_type(type_ref: str) -> type[Any]:
     return getattr(module, class_name)
 
 
-def _infer_dtype_from_pydantic_field(field_info: object) -> str:
+def _infer_dtype_from_pydantic_field(field_info: FieldInfo) -> str:
     """Pydanticフィールドからdtypeを推論
 
     Args:
@@ -172,6 +174,8 @@ def _infer_dtype_from_pydantic_field(field_info: object) -> str:
     """
     # field_info.annotationから型を取得
     annotation = field_info.annotation
+    if annotation is None:
+        return "str"
 
     # 型名を文字列に変換
     type_name = annotation.__name__ if hasattr(annotation, "__name__") else str(annotation)

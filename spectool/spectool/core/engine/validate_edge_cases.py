@@ -5,7 +5,14 @@
 
 from __future__ import annotations
 
-from spectool.spectool.core.base.ir import SpecIR
+from spectool.spectool.core.base.ir import (
+    EnumSpec,
+    FrameSpec,
+    GenericSpec,
+    PydanticModelSpec,
+    SpecIR,
+    TypeAliasSpec,
+)
 from spectool.spectool.core.engine.validate_ir import _collect_all_datatype_ids
 
 
@@ -200,7 +207,7 @@ def validate_datatype_examples_generators(ir: SpecIR) -> list[str]:
     generator_datatypes = _collect_generator_datatypes(ir)
 
     # 各DataTypeでexampleもgeneratorも存在しないものを警告
-    all_datatypes = [
+    all_datatypes: list[FrameSpec | EnumSpec | PydanticModelSpec | TypeAliasSpec | GenericSpec] = [
         *ir.frames,
         *ir.enums,
         *ir.pydantic_models,

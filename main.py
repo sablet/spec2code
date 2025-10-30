@@ -149,7 +149,7 @@ class SpectoolCLI:
             normalized = self._load_and_normalize_spec(spec_path)
             app_root = self._check_generated_directory(normalized)
             self._check_directory_structure(app_root)
-            self._run_integrity_validation(normalized)
+            self._run_integrity_validation(normalized, app_root)
         except Exception as e:
             print(f"❌ Error: {e}")
             if debug:
@@ -197,11 +197,11 @@ class SpectoolCLI:
             else:
                 print(f"    ⚠️  {dirname}/ (missing, may not be needed)")
 
-    def _run_integrity_validation(self, normalized: SpecIR) -> None:
+    def _run_integrity_validation(self, normalized: SpecIR, app_root: Path) -> None:
         """Run integrity validation."""
         print("  🔍 Validating implementation integrity...")
         validator = IntegrityValidator(normalized)
-        result = validator.validate_integrity()
+        result = validator.validate_integrity(app_root)
 
         total_errors = sum(len(errors) for errors in result.values())
         if total_errors > 0:
