@@ -93,9 +93,36 @@ checks:
     impl: "apps.algo-trade-pipeline.checks.backtest_checks:check_performance_metrics"
     file_path: "checks/backtest_checks.py"
 
+  # Additional type checks
+  - id: check_cv_method
+    description: "Validate CV method enum value"
+    impl: "apps.algo-trade-pipeline.checks.model_checks:check_cv_method"
+    file_path: "checks/model_checks.py"
+
+  - id: check_position_signal
+    description: "Validate position signal enum value"
+    impl: "apps.algo-trade-pipeline.checks.backtest_checks:check_position_signal"
+    file_path: "checks/backtest_checks.py"
+
+  - id: check_ohlcv_row
+    description: "Validate OHLCV row data structure"
+    impl: "apps.algo-trade-pipeline.checks.feature_checks:check_ohlcv_row"
+    file_path: "checks/feature_checks.py"
+
+  - id: check_trading_cost_config
+    description: "Validate trading cost configuration"
+    impl: "apps.algo-trade-pipeline.checks.backtest_checks:check_trading_cost_config"
+    file_path: "checks/backtest_checks.py"
+
+  - id: check_simple_lgbm_params
+    description: "Validate LightGBM parameters dictionary"
+    impl: "apps.algo-trade-pipeline.checks.model_checks:check_simple_lgbm_params"
+    file_path: "checks/model_checks.py"
+
 examples:
   - id: ex_ingestion_config
     description: "Market data ingestion config example"
+    datatype_ref: MarketDataIngestionConfig
     input:
       symbols: ["USDJPY", "EURUSD"]
       start_date: "2024-01-01"
@@ -106,6 +133,7 @@ examples:
 
   - id: ex_ohlcv_row
     description: "OHLCV row example"
+    datatype_ref: OHLCVRow
     input:
       timestamp: "2024-01-01T00:00:00"
       open: 145.50
@@ -118,6 +146,7 @@ examples:
 
   - id: ex_cv_config
     description: "CV configuration example"
+    datatype_ref: SimpleCVConfig
     input:
       method: "TIME_SERIES"
       n_splits: 5
@@ -128,6 +157,7 @@ examples:
 
   - id: ex_prediction_data
     description: "Single prediction data example"
+    datatype_ref: PredictionData
     input:
       timestamp: "2024-01-01T00:00:00"
       symbol: "USDJPY"
@@ -138,6 +168,7 @@ examples:
 
   - id: ex_performance_metrics
     description: "Performance metrics example"
+    datatype_ref: PerformanceMetrics
     input:
       annual_return: 0.15
       annual_volatility: 0.12
@@ -152,115 +183,139 @@ generators:
     description: "Synthesize provider batch payloads"
     impl: "apps.algo-trade-pipeline.generators.market_data:generate_provider_batches"
     file_path: "generators/market_data.py"
+    return_type_ref: ProviderBatchCollection
 
   - id: gen_normalized_bundle
     description: "Create a normalized OHLCV bundle"
     impl: "apps.algo-trade-pipeline.generators.market_data:generate_normalized_bundle"
     file_path: "generators/market_data.py"
+    return_type_ref: NormalizedOHLCVBundle
 
   - id: gen_multiasset_frame
     description: "Build a sample multi-asset OHLCV frame"
     impl: "apps.algo-trade-pipeline.generators.market_data:generate_multiasset_frame"
     file_path: "generators/market_data.py"
+    return_type_ref: MultiAssetOHLCVFrame
 
   - id: gen_snapshot_meta
     description: "Produce snapshot metadata for persisted market data"
     impl: "apps.algo-trade-pipeline.generators.market_data:generate_snapshot_meta"
     file_path: "generators/market_data.py"
+    return_type_ref: MarketDataSnapshotMeta
 
   - id: gen_ohlcv_frame
     description: "Generate a resampled OHLCV frame"
     impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_ohlcv_frame"
     file_path: "generators/feature_engineering.py"
+    return_type_ref: OHLCVFrame
 
   - id: gen_feature_frame
     description: "Assemble a feature DataFrame"
     impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_feature_frame"
     file_path: "generators/feature_engineering.py"
+    return_type_ref: FeatureFrame
 
   - id: gen_target_frame
     description: "Assemble a target DataFrame"
     impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_target_frame"
     file_path: "generators/feature_engineering.py"
+    return_type_ref: TargetFrame
 
   - id: gen_aligned_feature_target
     description: "Align feature and target frames"
     impl: "apps.algo-trade-pipeline.generators.feature_engineering:generate_aligned_feature_target"
     file_path: "generators/feature_engineering.py"
+    return_type_ref: AlignedFeatureTarget
 
   - id: gen_cv_method
     description: "Select a cross-validation method"
     impl: "apps.algo-trade-pipeline.generators.model:generate_cv_method"
     file_path: "generators/model.py"
+    return_type_ref: CVMethod
 
   - id: gen_simple_lgbm_params
     description: "Provide LightGBM hyperparameter defaults"
     impl: "apps.algo-trade-pipeline.generators.model:generate_simple_lgbm_params"
     file_path: "generators/model.py"
+    return_type_ref: SimpleLGBMParams
 
   - id: gen_cv_result
     description: "Create a minimal CV result payload"
     impl: "apps.algo-trade-pipeline.generators.model:generate_cv_result"
     file_path: "generators/model.py"
+    return_type_ref: CVResult
 
   - id: gen_prediction_data_list
     description: "Build a list of prediction records"
     impl: "apps.algo-trade-pipeline.generators.model:generate_prediction_data_list"
     file_path: "generators/model.py"
+    return_type_ref: PredictionDataList
 
   - id: gen_ranked_prediction_data
     description: "Produce ranked prediction data"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_ranked_prediction_data"
     file_path: "generators/backtest.py"
+    return_type_ref: RankedPredictionData
 
   - id: gen_ranked_prediction_data_list
     description: "Construct a ranked prediction list"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_ranked_prediction_data_list"
     file_path: "generators/backtest.py"
+    return_type_ref: RankedPredictionDataList
 
   - id: gen_position_signal
     description: "Emit a position signal sample"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_position_signal"
     file_path: "generators/backtest.py"
+    return_type_ref: PositionSignal
 
   - id: gen_selected_currency_data
     description: "Create selected currency data entry"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_data"
     file_path: "generators/backtest.py"
+    return_type_ref: SelectedCurrencyData
 
   - id: gen_selected_currency_data_list
     description: "Create selected currency allocation list"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_data_list"
     file_path: "generators/backtest.py"
+    return_type_ref: SelectedCurrencyDataList
 
   - id: gen_trading_cost_config
     description: "Provide trading cost configuration"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_trading_cost_config"
     file_path: "generators/backtest.py"
+    return_type_ref: TradingCostConfig
 
   - id: gen_selected_currency_with_costs
     description: "Produce currency selection with costs"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_with_costs"
     file_path: "generators/backtest.py"
+    return_type_ref: SelectedCurrencyDataWithCosts
 
   - id: gen_selected_currency_with_costs_list
     description: "Produce currency selection list including costs"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_selected_currency_with_costs_list"
     file_path: "generators/backtest.py"
+    return_type_ref: SelectedCurrencyDataWithCostsList
 
   - id: gen_simulation_result
     description: "Create a simulation result payload"
     impl: "apps.algo-trade-pipeline.generators.backtest:generate_simulation_result"
     file_path: "generators/backtest.py"
+    return_type_ref: SimulationResult
 
 datatypes:
   # ===== Phase 1: Market Data Ingestion =====
   - id: MarketDataIngestionConfig
     description: "Configuration for market data ingestion (symbols, date range, provider)"
-    check_ids:
+    check_functions:
       - check_ingestion_config
-    example_ids:
-      - ex_ingestion_config
+    examples:
+      - symbols: ["USDJPY", "EURUSD"]
+        start_date: "2024-01-01"
+        end_date: "2024-01-31"
+        provider: "yahoo"
     pydantic_model:
       fields:
         - name: symbols
@@ -285,51 +340,42 @@ datatypes:
 
   - id: ProviderBatchCollection
     description: "Collection of raw data batches from multiple providers"
-    check_ids:
+    check_functions:
       - check_batch_collection
-    generator_refs:
-      - gen_provider_batches
-    schema:
-      type: object
-      properties:
-        batches:
-          type: array
-          items:
-            type: object
-      required:
-        - batches
+    pydantic_model:
+      fields:
+        - name: batches
+          type:
+            generic:
+              container: list
+              element_type:
+                native: "typing:Any"
+          description: "Raw data batches from providers"
 
   - id: NormalizedOHLCVBundle
     description: "Normalized OHLCV data bundle from multiple providers"
-    check_ids:
+    check_functions:
       - check_normalized_bundle
-    generator_refs:
-      - gen_normalized_bundle
-    schema:
-      type: object
-      properties:
-        data:
-          type: object
-      required:
-        - data
+    pydantic_model:
+      fields:
+        - name: data
+          type:
+            native: "typing:Any"
+          description: "Normalized OHLCV data"
 
   # Using type_alias for MultiIndex DataFrame
   - id: MultiAssetOHLCVFrame
     description: "Multi-asset OHLCV DataFrame with MultiIndex structure (symbol, column)"
-    check_ids:
+    check_functions:
       - check_multiasset_frame
-    generator_refs:
-      - gen_multiasset_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
 
   - id: MarketDataSnapshotMeta
     description: "Metadata for persisted market data snapshot"
-    check_ids:
+    check_functions:
       - check_snapshot_meta
-    generator_refs:
-      - gen_snapshot_meta
     pydantic_model:
       fields:
         - name: snapshot_id
@@ -351,8 +397,15 @@ datatypes:
   # OHLCVRow: 単一行データの構造定義（exampleバリデーション用）
   - id: OHLCVRow
     description: "Single OHLCV row data structure for validation"
-    example_ids:
-      - ex_ohlcv_row
+    check_functions:
+      - check_ohlcv_row
+    examples:
+      - timestamp: "2024-01-01T00:00:00"
+        open: 145.50
+        high: 146.00
+        low: 145.00
+        close: 145.80
+        volume: 1000000
     pydantic_model:
       fields:
         - name: timestamp
@@ -384,10 +437,8 @@ datatypes:
   # ===== Phase 2: Feature Engineering =====
   - id: OHLCVFrame
     description: "OHLCV DataFrame where each row conforms to OHLCVRow structure"
-    check_ids:
+    check_functions:
       - check_ohlcv
-    generator_refs:
-      - gen_ohlcv_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -454,20 +505,16 @@ datatypes:
 
   - id: FeatureFrame
     description: "Feature DataFrame (flattened from MultiIndex)"
-    check_ids:
+    check_functions:
       - check_feature_frame
-    generator_refs:
-      - gen_feature_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
 
   - id: TargetFrame
     description: "Target variable DataFrame (single column)"
-    check_ids:
+    check_functions:
       - check_target
-    generator_refs:
-      - gen_target_frame
     type_alias:
       type: simple
       target: "pandas:DataFrame"
@@ -475,10 +522,8 @@ datatypes:
   # Using type_alias with tuple for aligned data
   - id: AlignedFeatureTarget
     description: "Aligned feature and target DataFrames (cleaned, index-matched)"
-    check_ids:
+    check_functions:
       - check_aligned_data
-    generator_refs:
-      - gen_aligned_feature_target
     type_alias:
       type: tuple
       elements:
@@ -488,8 +533,8 @@ datatypes:
   # ===== Phase 3: Model Training & Prediction =====
   - id: CVMethod
     description: "Cross-validation method types"
-    generator_refs:
-      - gen_cv_method
+    check_functions:
+      - check_cv_method
     enum:
       base_type: str
       members:
@@ -505,10 +550,13 @@ datatypes:
 
   - id: SimpleCVConfig
     description: "Cross-validation configuration (method, splits, test_size, gap)"
-    check_ids:
+    check_functions:
       - check_cv_config
-    example_ids:
-      - ex_cv_config
+    examples:
+      - method: "TIME_SERIES"
+        n_splits: 5
+        test_size: 0.2
+        gap: 0
     pydantic_model:
       fields:
         - name: method
@@ -533,8 +581,8 @@ datatypes:
   # Using generic for dict
   - id: SimpleLGBMParams
     description: "LightGBM hyperparameters dictionary"
-    generator_refs:
-      - gen_simple_lgbm_params
+    check_functions:
+      - check_simple_lgbm_params
     generic:
       container: dict
       key_type:
@@ -544,10 +592,8 @@ datatypes:
 
   - id: CVResult
     description: "Cross-validation training result (models, metrics, OOS predictions)"
-    check_ids:
+    check_functions:
       - check_cv_result
-    generator_refs:
-      - gen_cv_result
     pydantic_model:
       fields:
         - name: fold_results
@@ -565,10 +611,13 @@ datatypes:
 
   - id: PredictionData
     description: "Single prediction data point (timestamp, symbol, prediction, actual)"
-    check_ids:
+    check_functions:
       - check_prediction_data
-    example_ids:
-      - ex_prediction_data
+    examples:
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "USDJPY"
+        prediction: 0.65
+        actual_return: 0.02
     pydantic_model:
       fields:
         - name: timestamp
@@ -592,10 +641,8 @@ datatypes:
   # Using generic for list
   - id: PredictionDataList
     description: "List of prediction data points"
-    check_ids:
+    check_functions:
       - check_prediction_data
-    generator_refs:
-      - gen_prediction_data_list
     generic:
       container: list
       element_type:
@@ -604,10 +651,8 @@ datatypes:
   # ===== Phase 4: Backtest & Evaluation =====
   - id: RankedPredictionData
     description: "Prediction data with ranking percentile"
-    check_ids:
+    check_functions:
       - check_ranked_predictions
-    generator_refs:
-      - gen_ranked_prediction_data
     pydantic_model:
       fields:
         - name: timestamp
@@ -630,10 +675,8 @@ datatypes:
 
   - id: RankedPredictionDataList
     description: "List of ranked prediction data"
-    check_ids:
+    check_functions:
       - check_ranked_predictions
-    generator_refs:
-      - gen_ranked_prediction_data_list
     generic:
       container: list
       element_type:
@@ -642,8 +685,8 @@ datatypes:
   # Using enum for PositionSignal
   - id: PositionSignal
     description: "Trading position signal"
-    generator_refs:
-      - gen_position_signal
+    check_functions:
+      - check_position_signal
     enum:
       base_type: int
       members:
@@ -659,10 +702,8 @@ datatypes:
 
   - id: SelectedCurrencyData
     description: "Selected currency with position signal (BUY/SELL/HOLD)"
-    check_ids:
+    check_functions:
       - check_selected_currencies
-    generator_refs:
-      - gen_selected_currency_data
     pydantic_model:
       fields:
         - name: timestamp
@@ -681,10 +722,8 @@ datatypes:
 
   - id: SelectedCurrencyDataList
     description: "List of selected currency data"
-    check_ids:
+    check_functions:
       - check_selected_currencies
-    generator_refs:
-      - gen_selected_currency_data_list
     generic:
       container: list
       element_type:
@@ -692,8 +731,8 @@ datatypes:
 
   - id: TradingCostConfig
     description: "Trading cost configuration (swap rates, spreads)"
-    generator_refs:
-      - gen_trading_cost_config
+    check_functions:
+      - check_trading_cost_config
     pydantic_model:
       fields:
         - name: swap_rates
@@ -717,10 +756,8 @@ datatypes:
 
   - id: SelectedCurrencyDataWithCosts
     description: "Selected currency data with adjusted returns (swap & spread)"
-    check_ids:
+    check_functions:
       - check_selected_currencies_with_costs
-    generator_refs:
-      - gen_selected_currency_with_costs
     pydantic_model:
       fields:
         - name: timestamp
@@ -742,10 +779,8 @@ datatypes:
 
   - id: SelectedCurrencyDataWithCostsList
     description: "List of selected currency data with costs"
-    check_ids:
+    check_functions:
       - check_selected_currencies_with_costs
-    generator_refs:
-      - gen_selected_currency_with_costs_list
     generic:
       container: list
       element_type:
@@ -753,10 +788,8 @@ datatypes:
 
   - id: SimulationResult
     description: "Portfolio simulation result (returns, positions, equity curve)"
-    check_ids:
+    check_functions:
       - check_simulation_result
-    generator_refs:
-      - gen_simulation_result
     pydantic_model:
       fields:
         - name: portfolio_returns
@@ -774,10 +807,14 @@ datatypes:
 
   - id: PerformanceMetrics
     description: "Performance metrics (annual return, Sharpe, max drawdown, etc.)"
-    check_ids:
+    check_functions:
       - check_performance_metrics
-    example_ids:
-      - ex_performance_metrics
+    examples:
+      - annual_return: 0.15
+        annual_volatility: 0.12
+        sharpe_ratio: 1.25
+        max_drawdown: -0.08
+        calmar_ratio: 1.875
     pydantic_model:
       fields:
         - name: annual_return
@@ -812,7 +849,7 @@ transforms:
     parameters:
       - name: config
         datatype_ref: MarketDataIngestionConfig
-    return_datatype_ref: ProviderBatchCollection
+    return_type_ref: ProviderBatchCollection
 
   - id: normalize_multi_provider
     description: "Normalize data from multiple providers to unified format"
@@ -821,7 +858,7 @@ transforms:
     parameters:
       - name: batches
         datatype_ref: ProviderBatchCollection
-    return_datatype_ref: NormalizedOHLCVBundle
+    return_type_ref: NormalizedOHLCVBundle
 
   - id: merge_market_data_bundle
     description: "Merge normalized bundle into MultiIndex DataFrame"
@@ -830,7 +867,7 @@ transforms:
     parameters:
       - name: bundle
         datatype_ref: NormalizedOHLCVBundle
-    return_datatype_ref: MultiAssetOHLCVFrame
+    return_type_ref: MultiAssetOHLCVFrame
 
   - id: persist_market_data_snapshot
     description: "Persist market data to storage and return metadata"
@@ -841,7 +878,7 @@ transforms:
         datatype_ref: MultiAssetOHLCVFrame
       - name: config
         datatype_ref: MarketDataIngestionConfig
-    return_datatype_ref: MarketDataSnapshotMeta
+    return_type_ref: MarketDataSnapshotMeta
 
   # ===== Phase 2: Feature Engineering =====
   - id: resample_ohlcv
@@ -854,7 +891,7 @@ transforms:
       - name: freq
         native: "builtins:str"
         default: "1h"
-    return_datatype_ref: OHLCVFrame
+    return_type_ref: OHLCVFrame
 
   - id: calculate_rsi
     description: "Calculate RSI indicator and add rsi_{period} column"
@@ -866,7 +903,7 @@ transforms:
       - name: period
         native: "builtins:int"
         default: 14
-    return_datatype_ref: FeatureFrame
+    return_type_ref: FeatureFrame
 
   - id: calculate_adx
     description: "Calculate ADX indicator and add adx_{period} column"
@@ -878,7 +915,7 @@ transforms:
       - name: period
         native: "builtins:int"
         default: 14
-    return_datatype_ref: FeatureFrame
+    return_type_ref: FeatureFrame
 
   - id: calculate_recent_return
     description: "Calculate recent return and add recent_return_{lookback} column"
@@ -890,7 +927,7 @@ transforms:
       - name: lookback
         native: "builtins:int"
         default: 5
-    return_datatype_ref: FeatureFrame
+    return_type_ref: FeatureFrame
 
   - id: calculate_volatility
     description: "Calculate volatility and add volatility_{window} column"
@@ -902,7 +939,7 @@ transforms:
       - name: window
         native: "builtins:int"
         default: 20
-    return_datatype_ref: FeatureFrame
+    return_type_ref: FeatureFrame
 
   - id: calculate_future_return
     description: "Calculate future return as target variable (add target column)"
@@ -915,12 +952,13 @@ transforms:
         native: "builtins:int"
         default: 5
       - name: convert_type
+        native: "builtins:str"
         literal:
           - "RETURN"
           - "DIRECTION"
           - "LOG_RETURN"
         default: "RETURN"
-    return_datatype_ref: TargetFrame
+    return_type_ref: TargetFrame
 
   - id: clean_and_align_feature_target
     description: "Clean and align feature and target frames to ensure matching indexes"
@@ -931,7 +969,7 @@ transforms:
         datatype_ref: TargetFrame
       - name: features
         datatype_ref: FeatureFrame
-    return_datatype_ref: AlignedFeatureTarget
+    return_type_ref: AlignedFeatureTarget
 
   # ===== Phase 3: Model Training & Prediction =====
   - id: train_lightgbm_cv
@@ -947,7 +985,7 @@ transforms:
       - name: lgbm_params
         datatype_ref: SimpleLGBMParams
         optional: true
-    return_datatype_ref: CVResult
+    return_type_ref: CVResult
 
   - id: generate_predictions
     description: "Generate prediction data list from CV OOS predictions"
@@ -958,7 +996,7 @@ transforms:
         datatype_ref: CVResult
       - name: aligned_data
         datatype_ref: AlignedFeatureTarget
-    return_datatype_ref: PredictionDataList
+    return_type_ref: PredictionDataList
 
   # ===== Phase 4: Backtest & Evaluation =====
   - id: rank_predictions
@@ -968,7 +1006,7 @@ transforms:
     parameters:
       - name: predictions
         datatype_ref: PredictionDataList
-    return_datatype_ref: RankedPredictionDataList
+    return_type_ref: RankedPredictionDataList
 
   - id: filter_top_predictions
     description: "Filter top N predictions and assign position signals"
@@ -983,7 +1021,7 @@ transforms:
       - name: threshold
         native: "builtins:float"
         default: 0.7
-    return_datatype_ref: SelectedCurrencyDataList
+    return_type_ref: SelectedCurrencyDataList
 
   - id: apply_trading_costs
     description: "Apply swap rates and spread costs to calculate adjusted returns"
@@ -995,7 +1033,7 @@ transforms:
       - name: cost_config
         datatype_ref: TradingCostConfig
         optional: true
-    return_datatype_ref: SelectedCurrencyDataWithCostsList
+    return_type_ref: SelectedCurrencyDataWithCostsList
 
   - id: simulate_buy_scenario
     description: "Run portfolio simulation with specified allocation method"
@@ -1005,12 +1043,13 @@ transforms:
       - name: selected_currencies
         datatype_ref: SelectedCurrencyDataWithCostsList
       - name: allocation_method
+        native: "builtins:str"
         literal:
           - "equal"
           - "weighted"
           - "risk_parity"
         default: "equal"
-    return_datatype_ref: SimulationResult
+    return_type_ref: SimulationResult
 
   - id: calculate_performance_metrics
     description: "Calculate performance metrics (Sharpe, max drawdown, Calmar, etc.)"
@@ -1022,7 +1061,7 @@ transforms:
       - name: risk_free_rate
         native: "builtins:float"
         default: 0.0
-    return_datatype_ref: PerformanceMetrics
+    return_type_ref: PerformanceMetrics
 
 # DAG stages with type-based auto-generation
 dag_stages:
@@ -1032,18 +1071,24 @@ dag_stages:
     selection_mode: "single"
     input_type: MarketDataIngestionConfig
     output_type: ProviderBatchCollection
+    candidates:
+      - fetch_yahoo_finance_ohlcv
 
   - stage_id: "normalization"
     description: "Normalize multi-provider data"
     selection_mode: "single"
     input_type: ProviderBatchCollection
     output_type: NormalizedOHLCVBundle
+    candidates:
+      - normalize_multi_provider
 
   - stage_id: "merge"
     description: "Merge into MultiIndex DataFrame"
     selection_mode: "single"
     input_type: NormalizedOHLCVBundle
     output_type: MultiAssetOHLCVFrame
+    candidates:
+      - merge_market_data_bundle
 
   - stage_id: "persist"
     description: "Persist market data snapshot"
@@ -1051,6 +1096,8 @@ dag_stages:
     input_type: MultiAssetOHLCVFrame
     output_type: MarketDataSnapshotMeta
     collect_output: true
+    candidates:
+      - persist_market_data_snapshot
 
   # Phase 2: Feature Engineering
   # NOTE: resample output uses pandas DataFrame (OHLCVFrame type_alias)
@@ -1059,6 +1106,8 @@ dag_stages:
     selection_mode: "single"
     input_type: MultiAssetOHLCVFrame
     output_type: OHLCVFrame
+    candidates:
+      - resample_ohlcv
 
   # Indicator calculation stage allows multiple selections
   - stage_id: "indicator_calculation"
@@ -1067,19 +1116,27 @@ dag_stages:
     max_select: null  # unlimited - can use all indicators
     input_type: OHLCVFrame
     output_type: FeatureFrame  # Feature engineering outputs
-    # Candidates auto-collected: calculate_rsi, calculate_adx, calculate_recent_return, calculate_volatility
+    candidates:
+      - calculate_rsi
+      - calculate_adx
+      - calculate_recent_return
+      - calculate_volatility
 
   - stage_id: "target_generation"
     description: "Generate target variable (future return)"
     selection_mode: "single"
     input_type: FeatureFrame
     output_type: TargetFrame
+    candidates:
+      - calculate_future_return
 
   - stage_id: "feature_target_alignment"
     description: "Clean and align feature/target frames for model training"
     selection_mode: "single"
     input_type: TargetFrame
     output_type: AlignedFeatureTarget
+    candidates:
+      - clean_and_align_feature_target
 
   # Phase 3: Model Training & Prediction
   - stage_id: "model_training"
@@ -1087,12 +1144,16 @@ dag_stages:
     selection_mode: "single"
     input_type: AlignedFeatureTarget
     output_type: CVResult
+    candidates:
+      - train_lightgbm_cv
 
   - stage_id: "prediction_generation"
     description: "Generate OOS predictions from CV result"
     selection_mode: "single"
     input_type: CVResult
     output_type: PredictionDataList
+    candidates:
+      - generate_predictions
 
   # Phase 4: Backtest & Evaluation
   - stage_id: "ranking"
@@ -1100,24 +1161,32 @@ dag_stages:
     selection_mode: "single"
     input_type: PredictionDataList
     output_type: RankedPredictionDataList
+    candidates:
+      - rank_predictions
 
   - stage_id: "filtering"
     description: "Filter top predictions and assign signals"
     selection_mode: "single"
     input_type: RankedPredictionDataList
     output_type: SelectedCurrencyDataList
+    candidates:
+      - filter_top_predictions
 
   - stage_id: "cost_application"
     description: "Apply trading costs (swap + spread)"
     selection_mode: "single"
     input_type: SelectedCurrencyDataList
     output_type: SelectedCurrencyDataWithCostsList
+    candidates:
+      - apply_trading_costs
 
   - stage_id: "simulation"
     description: "Run portfolio simulation"
     selection_mode: "single"
     input_type: SelectedCurrencyDataWithCostsList
     output_type: SimulationResult
+    candidates:
+      - simulate_buy_scenario
 
   - stage_id: "performance_evaluation"
     description: "Calculate performance metrics"
@@ -1125,3 +1194,5 @@ dag_stages:
     input_type: SimulationResult
     output_type: PerformanceMetrics
     collect_output: true
+    candidates:
+      - calculate_performance_metrics
