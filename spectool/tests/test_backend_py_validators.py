@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import pytest
 
-from spectool.core.base.ir import (
+from spectool.spectool.core.base.ir import (
     ColumnRule,
     FrameSpec,
     IndexRule,
@@ -12,7 +12,7 @@ from spectool.core.base.ir import (
     MultiIndexLevel,
     SpecIR,
 )
-from spectool.backends.py_validators import generate_pandera_schemas
+from spectool.spectool.backends.py_validators import generate_pandera_schemas
 
 
 def test_generate_pandera_schemas_basic():

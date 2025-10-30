@@ -8,8 +8,8 @@ import tempfile
 import pytest
 import yaml
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.engine.validate import validate_spec
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.validate import validate_spec
 
 
 @pytest.fixture

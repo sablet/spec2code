@@ -1,7 +1,7 @@
 """IRデータクラスの単体テスト"""
 
 import pytest
-from spectool.core.base import (
+from spectool.spectool.core.base import (
     CheckSpec,
     ColumnRule,
     DAGStageSpec,

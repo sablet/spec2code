@@ -1130,7 +1130,7 @@ def _generate_type_aliases(spec: Spec, datatypes: list[DataType], app_root: Path
     file_path.parent.mkdir(parents=True, exist_ok=True)
     imports: set[str] = {"from typing import TypeAlias"}
     schema_blocks: list[str] = []  # DataFrame schema definitions
-    alias_blocks: list[str] = []    # TypeAlias definitions
+    alias_blocks: list[str] = []  # TypeAlias definitions
     has_annotated = False
     has_pandera = False
 

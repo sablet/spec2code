@@ -8,14 +8,14 @@ from pathlib import Path
 import tempfile
 import pytest
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.base.ir import SpecIR
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.base.ir import SpecIR
 
 
 # スケルトン生成機能（未実装）をインポート
 # TODO: この機能を実装する必要がある
 try:
-    from spectool.backends.py_skeleton import generate_skeleton
+    from spectool.spectool.backends.py_skeleton import generate_skeleton
 except ImportError:
     # 未実装の場合、プレースホルダー関数を定義
     def generate_skeleton(ir: SpecIR, output_dir: Path) -> None:

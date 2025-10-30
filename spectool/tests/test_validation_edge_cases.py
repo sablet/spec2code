@@ -8,8 +8,8 @@ import tempfile
 import pytest
 import yaml
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.engine.validate import validate_spec
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.validate import validate_spec
 
 
 @pytest.fixture
@@ -358,7 +358,9 @@ def test_datatype_completeness_all_three_checks(temp_spec_dir):
         all_error_messages.extend(category_warnings)
 
     combined_errors = " ".join(all_error_messages).lower()
-    assert "incompleteframe" in combined_errors, f"Expected errors/warnings about IncompleteFrame, but got: {combined_errors}"
+    assert "incompleteframe" in combined_errors, (
+        f"Expected errors/warnings about IncompleteFrame, but got: {combined_errors}"
+    )
 
 
 def test_validation_reports_all_incomplete_datatypes(temp_spec_dir):

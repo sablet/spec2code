@@ -7,8 +7,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.engine.normalizer import (
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.normalizer import (
     MetaHandlerRegistry,
     normalize_ir,
     pydantic_row_handler,
@@ -149,7 +149,7 @@ def test_no_row_model_no_change():
 
 def test_invalid_row_model_reference():
     """不正なrow_model参照の場合はスキップされるテスト"""
-    from spectool.core.base.ir import FrameSpec, MetaSpec, SpecIR
+    from spectool.spectool.core.base.ir import FrameSpec, MetaSpec, SpecIR
 
     # 不正なrow_model参照を持つIRを作成
     ir = SpecIR(

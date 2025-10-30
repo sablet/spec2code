@@ -8,7 +8,7 @@ import tempfile
 import pytest
 import yaml
 
-from spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.loader import load_spec
 
 
 @pytest.fixture
@@ -120,7 +120,7 @@ def test_example_references_nonexistent_datatype(temp_spec_dir):
         yaml.dump(spec_data, f)
 
     # バリデーションでエラーが検出されることを期待
-    from spectool.core.engine.validate import validate_spec
+    from spectool.spectool.core.engine.validate import validate_spec
 
     result = validate_spec(str(spec_path))
     errors = result["errors"]
@@ -169,7 +169,7 @@ def test_example_input_matches_datatype_schema(temp_spec_dir):
     ir = load_spec(spec_path)
 
     # バリデーションが成功することを確認
-    from spectool.core.engine.validate import validate_spec
+    from spectool.spectool.core.engine.validate import validate_spec
 
     result = validate_spec(str(spec_path))
     errors = result["errors"]
@@ -207,7 +207,7 @@ def test_example_input_violates_datatype_schema(temp_spec_dir):
     with open(spec_path, "w") as f:
         yaml.dump(spec_data, f)
 
-    from spectool.core.engine.validate import validate_spec
+    from spectool.spectool.core.engine.validate import validate_spec
 
     result = validate_spec(str(spec_path))
     errors = result["errors"]

@@ -8,7 +8,7 @@ import tempfile
 import pytest
 import yaml
 
-from spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.loader import load_spec
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ def test_full_workflow_with_existing_config(sample_spec_with_config, temp_projec
     assert ir is not None
 
     # 2. スケルトン生成
-    from spectool.backends.py_skeleton import generate_skeleton
+    from spectool.spectool.backends.py_skeleton import generate_skeleton
 
     generate_skeleton(ir, temp_project_dir)
 
@@ -111,7 +111,7 @@ def test_full_workflow_with_existing_config(sample_spec_with_config, temp_projec
     assert (app_root / "transforms" / "process.py").exists()
 
     # 4. バリデーション実行
-    from spectool.core.engine.validate import validate_spec
+    from spectool.spectool.core.engine.validate import validate_spec
 
     result = validate_spec(str(spec_path))
     errors = result["errors"]
@@ -127,8 +127,8 @@ def test_full_workflow_with_existing_config(sample_spec_with_config, temp_projec
     assert total_errors == 0, "Validation should pass after skeleton generation"
 
     # 5. Config検証
-    from spectool.core.engine.config_validator import validate_config
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config
+    from spectool.spectool.core.engine.config_model import load_config
 
     config = load_config(str(config_path))
     config_validation = validate_config(config, ir, check_implementations=False)
@@ -142,8 +142,8 @@ def test_config_validation_before_implementation(sample_spec_with_config, temp_p
 
     ir = load_spec(spec_path)
 
-    from spectool.core.engine.config_validator import validate_config
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config
+    from spectool.spectool.core.engine.config_model import load_config
 
     config = load_config(str(config_path))
 
@@ -160,7 +160,7 @@ def test_config_validation_after_implementation(sample_spec_with_config, temp_pr
     ir = load_spec(spec_path)
 
     # スケルトン生成
-    from spectool.backends.py_skeleton import generate_skeleton
+    from spectool.spectool.backends.py_skeleton import generate_skeleton
 
     generate_skeleton(ir, temp_project_dir)
 
@@ -180,8 +180,8 @@ def process(data: pd.DataFrame, factor: float = 1.0) -> pd.DataFrame:
     transform_file.write_text(implementation)
 
     # 実装チェックありでConfig検証
-    from spectool.core.engine.config_validator import validate_config
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config
+    from spectool.spectool.core.engine.config_model import load_config
 
     config = load_config(str(config_path))
     config_validation = validate_config(config, ir, check_implementations=True, project_root=temp_project_dir)
@@ -189,21 +189,27 @@ def process(data: pd.DataFrame, factor: float = 1.0) -> pd.DataFrame:
     assert config_validation["valid"] is True
 
 
-@pytest.mark.skip(reason="実装の中身（TODO）のチェックは現在未対応")
 def test_workflow_detects_missing_implementation(sample_spec_with_config, temp_project_dir):
     """実装が不足している場合、check_implementations=Trueで検出されることを確認"""
+    import sys
+
     spec_path, config_path = sample_spec_with_config
 
     ir = load_spec(spec_path)
 
+    # モジュールキャッシュをクリア（前のテストの影響を除去）
+    modules_to_clear = [key for key in sys.modules.keys() if key.startswith("apps")]
+    for module in modules_to_clear:
+        del sys.modules[module]
+
     # スケルトン生成のみ（実装なし）
-    from spectool.backends.py_skeleton import generate_skeleton
+    from spectool.spectool.backends.py_skeleton import generate_skeleton
 
     generate_skeleton(ir, temp_project_dir)
 
     # 実装チェックありでConfig検証（実装がTODOのままなので失敗するはず）
-    from spectool.core.engine.config_validator import validate_config, ConfigValidationError
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config, ConfigValidationError
+    from spectool.spectool.core.engine.config_model import load_config
 
     config = load_config(str(config_path))
 
@@ -219,7 +225,7 @@ def test_workflow_regeneration_is_safe(sample_spec_with_config, temp_project_dir
     ir = load_spec(spec_path)
 
     # 1回目のスケルトン生成
-    from spectool.backends.py_skeleton import generate_skeleton
+    from spectool.spectool.backends.py_skeleton import generate_skeleton
 
     generate_skeleton(ir, temp_project_dir)
 
@@ -308,8 +314,8 @@ def test_config_with_invalid_stage_fails_validation(temp_project_dir):
 
     ir = load_spec(spec_path)
 
-    from spectool.core.engine.config_validator import validate_config, ConfigValidationError
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config, ConfigValidationError
+    from spectool.spectool.core.engine.config_model import load_config
 
     config = load_config(str(config_path))
 

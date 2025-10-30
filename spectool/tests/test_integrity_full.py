@@ -8,15 +8,15 @@ from pathlib import Path
 import tempfile
 import pytest
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.base.ir import SpecIR
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.base.ir import SpecIR
 
 
 # Integrity検証エンジンをインポート
-from spectool.core.engine.integrity import IntegrityValidator
+from spectool.spectool.core.engine.integrity import IntegrityValidator
 
 # スケルトン生成機能をインポート
-from spectool.backends.py_skeleton import generate_skeleton
+from spectool.spectool.backends.py_skeleton import generate_skeleton
 
 
 @pytest.fixture

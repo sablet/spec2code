@@ -9,16 +9,16 @@ import tempfile
 import pytest
 import yaml
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.base.ir import SpecIR
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.base.ir import SpecIR
 
 
 # Config関連のモジュール（未実装）をインポート
 # TODO: これらの機能を実装する必要がある
 try:
-    from spectool.core.engine.config_model import ConfigSpec, load_config
-    from spectool.core.engine.config_runner import ConfigRunner
-    from spectool.core.engine.config_validator import validate_config, ConfigValidationError
+    from spectool.spectool.core.engine.config_model import ConfigSpec, load_config
+    from spectool.spectool.core.engine.config_runner import ConfigRunner
+    from spectool.spectool.core.engine.config_validator import validate_config, ConfigValidationError
 except ImportError:
     # 未実装の場合、プレースホルダークラスを定義
 
@@ -286,14 +286,16 @@ def test_validate_config_invalid_parameter_type(temp_config_dir, sample_spec_pat
 
 def test_config_runner_execution(sample_config_yaml, setup_transform_implementation, sample_spec_path):
     """ConfigRunnerがDAGを実行できることを確認"""
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_model import load_config
 
     # Configとspecをロード
     config = load_config(str(sample_config_yaml))
     spec = load_spec(sample_spec_path)
 
     # project_rootを明示的に渡して検証
-    validation_result = validate_config(config, spec, check_implementations=True, project_root=setup_transform_implementation)
+    validation_result = validate_config(
+        config, spec, check_implementations=True, project_root=setup_transform_implementation
+    )
 
     # 検証が成功することを確認
     assert validation_result["valid"] is True
@@ -308,7 +310,8 @@ def test_config_runner_execution(sample_config_yaml, setup_transform_implementat
     assert transform_def is not None, f"Transform {transform_id} not found"
 
     # implパスを解決
-    from spectool.core.engine.config_validator import _resolve_impl_path
+    from spectool.spectool.core.engine.config_validator import _resolve_impl_path
+
     resolved_impl = _resolve_impl_path(transform_def.impl, spec)
 
     # Transform関数をインポート
@@ -384,14 +387,16 @@ def test_config_runner_multiple_stages(temp_config_dir, sample_spec_path):
 
 def test_config_runner_collects_output(sample_config_yaml, setup_transform_implementation, sample_spec_path):
     """collect_output=Trueのステージの結果が収集されることを確認"""
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_model import load_config
 
     # Configとspecをロード
     config = load_config(str(sample_config_yaml))
     spec = load_spec(sample_spec_path)
 
     # project_rootを明示的に渡して検証
-    validation_result = validate_config(config, spec, check_implementations=True, project_root=setup_transform_implementation)
+    validation_result = validate_config(
+        config, spec, check_implementations=True, project_root=setup_transform_implementation
+    )
 
     # 検証が成功することを確認
     assert validation_result["valid"] is True
@@ -405,7 +410,8 @@ def test_config_runner_collects_output(sample_config_yaml, setup_transform_imple
     assert transform_def is not None, f"Transform {transform_id} not found"
 
     # implパスを解決
-    from spectool.core.engine.config_validator import _resolve_impl_path
+    from spectool.spectool.core.engine.config_validator import _resolve_impl_path
+
     resolved_impl = _resolve_impl_path(transform_def.impl, spec)
 
     # Transform関数をインポート

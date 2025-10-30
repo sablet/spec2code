@@ -8,7 +8,7 @@ import tempfile
 import pytest
 import yaml
 
-from spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.loader import load_spec
 
 
 @pytest.fixture
@@ -255,8 +255,8 @@ def test_config_invalid_transform_rejected_in_validation(temp_spec_dir):
     with open(config_path, "w") as f:
         yaml.dump(config_data, f)
 
-    from spectool.core.engine.config_validator import validate_config, ConfigValidationError
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config, ConfigValidationError
+    from spectool.spectool.core.engine.config_model import load_config
 
     ir = load_spec(spec_path)
     config = load_config(str(config_path))
@@ -326,8 +326,8 @@ def test_config_undefined_transform_rejected_in_validation(temp_spec_dir):
     with open(config_path, "w") as f:
         yaml.dump(config_data, f)
 
-    from spectool.core.engine.config_validator import validate_config, ConfigValidationError
-    from spectool.core.engine.config_model import load_config
+    from spectool.spectool.core.engine.config_validator import validate_config, ConfigValidationError
+    from spectool.spectool.core.engine.config_model import load_config
 
     ir = load_spec(spec_path)
     config = load_config(str(config_path))

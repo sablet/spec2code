@@ -8,14 +8,14 @@ from pathlib import Path
 import tempfile
 import pytest
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.base.ir import SpecIR
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.base.ir import SpecIR
 
 
 # DAG実行エンジン（未実装）をインポート
 # TODO: この機能を実装する必要がある
 try:
-    from spectool.core.engine.dag_runner import DAGRunner
+    from spectool.spectool.core.engine.dag_runner import DAGRunner
 except ImportError:
     # 未実装の場合、プレースホルダークラスを定義
     class DAGRunner:
@@ -294,7 +294,7 @@ def test_dag_execution_validates_output_types(sample_spec_path, setup_transform_
 
 def test_dag_runner_detects_cycles():
     """DAGに循環依存がある場合、エラーを検出することを確認"""
-    from spectool.core.base.ir import (
+    from spectool.spectool.core.base.ir import (
         SpecIR,
         MetaSpec,
         FrameSpec,
@@ -373,7 +373,7 @@ def test_dag_runner_detects_cycles():
 
 def test_dag_runner_handles_missing_implementations(sample_spec_path):
     """Transform関数の実装が存在しない場合、エラーを検出することを確認"""
-    from spectool.core.base.ir import TransformSpec, ParameterSpec, DAGStageSpec
+    from spectool.spectool.core.base.ir import TransformSpec, ParameterSpec, DAGStageSpec
 
     # 存在しないモジュールを参照するTransformを作成
     ir = load_spec(sample_spec_path)

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.loader import load_spec
 
 
 def test_load_minimal_spec():

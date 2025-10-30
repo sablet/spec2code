@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from spectool.core.engine.loader import load_spec
-from spectool.core.engine.normalizer import normalize_ir
-from spectool.core.engine.validate import (
+from spectool.spectool.core.engine.loader import load_spec
+from spectool.spectool.core.engine.normalizer import normalize_ir
+from spectool.spectool.core.engine.validate import (
     validate_ir,
 )
 
@@ -47,7 +47,7 @@ def test_validate_missing_dtype():
 
 def test_validate_invalid_transform_type_ref():
     """Transform parametersの不正な型参照エラー検出テスト"""
-    from spectool.core.base.ir import MetaSpec, ParameterSpec, SpecIR, TransformSpec
+    from spectool.spectool.core.base.ir import MetaSpec, ParameterSpec, SpecIR, TransformSpec
 
     ir = SpecIR(
         meta=MetaSpec(name="test"),
@@ -72,7 +72,7 @@ def test_validate_invalid_transform_type_ref():
 
 def test_validate_invalid_dag_stage_candidate():
     """DAG Stageの不正なcandidate参照エラー検出テスト"""
-    from spectool.core.base.ir import DAGStageSpec, MetaSpec, SpecIR
+    from spectool.spectool.core.base.ir import DAGStageSpec, MetaSpec, SpecIR
 
     ir = SpecIR(
         meta=MetaSpec(name="test"),
@@ -91,7 +91,7 @@ def test_validate_invalid_dag_stage_candidate():
 
 def test_validate_invalid_selection_mode():
     """DAG Stageの不正なselection_modeエラー検出テスト"""
-    from spectool.core.base.ir import DAGStageSpec, MetaSpec, SpecIR
+    from spectool.spectool.core.base.ir import DAGStageSpec, MetaSpec, SpecIR
 
     ir = SpecIR(
         meta=MetaSpec(name="test"),
@@ -110,7 +110,7 @@ def test_validate_invalid_selection_mode():
 
 def test_validate_python_type_reference():
     """Python型参照の検証テスト"""
-    from spectool.core.base.ir import FrameSpec, MetaSpec, SpecIR
+    from spectool.spectool.core.base.ir import FrameSpec, MetaSpec, SpecIR
 
     # 不正なrow_model参照
     ir = SpecIR(
@@ -131,7 +131,7 @@ def test_validate_python_type_reference():
 
 def test_validate_check_function_reference():
     """Check関数参照の検証テスト"""
-    from spectool.core.base.ir import FrameSpec, MetaSpec, SpecIR
+    from spectool.spectool.core.base.ir import FrameSpec, MetaSpec, SpecIR
 
     ir = SpecIR(
         meta=MetaSpec(name="test"),
@@ -151,7 +151,7 @@ def test_validate_check_function_reference():
 
 def test_validate_transform_impl_format():
     """Transform implの形式チェックテスト"""
-    from spectool.core.base.ir import MetaSpec, SpecIR, TransformSpec
+    from spectool.spectool.core.base.ir import MetaSpec, SpecIR, TransformSpec
 
     ir = SpecIR(
         meta=MetaSpec(name="test"),
@@ -170,7 +170,7 @@ def test_validate_transform_impl_format():
 
 def test_validate_multiple_errors():
     """複数のエラーが同時に検出されるテスト"""
-    from spectool.core.base.ir import (
+    from spectool.spectool.core.base.ir import (
         ColumnRule,
         DAGStageSpec,
         FrameSpec,
@@ -215,7 +215,7 @@ def test_validate_multiple_errors():
 
 def test_validate_native_type_ref():
     """native型参照の検証テスト（正常系）"""
-    from spectool.core.base.ir import MetaSpec, ParameterSpec, SpecIR, TransformSpec
+    from spectool.spectool.core.base.ir import MetaSpec, ParameterSpec, SpecIR, TransformSpec
 
     ir = SpecIR(
         meta=MetaSpec(name="test"),

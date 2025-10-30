@@ -1,5 +1,7 @@
 frontend/public/cards/
 
+apps # mean while
+
 .coverage
 algo_trade_v3
 CLAUDE.md

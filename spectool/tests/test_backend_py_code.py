@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import pytest
 
-from spectool.core.base.ir import (
+from spectool.spectool.core.base.ir import (
     EnumMemberSpec,
     EnumSpec,
     FrameSpec,
@@ -14,7 +14,7 @@ from spectool.core.base.ir import (
     PydanticModelSpec,
     SpecIR,
 )
-from spectool.backends.py_code import (
+from spectool.spectool.backends.py_code import (
     generate_dataframe_aliases,
     generate_enum_aliases,
     generate_pydantic_aliases,

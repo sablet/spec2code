@@ -1,7 +1,7 @@
 """メタ型の単体テスト"""
 
 import pytest
-from spectool.core.base import (
+from spectool.spectool.core.base import (
     CheckedSpec,
     ExampleSpec,
     GeneratorSpec,
