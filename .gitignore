@@ -1,6 +1,6 @@
 frontend/public/cards/
 
-apps/* # mean while
+apps/
 
 .coverage
 algo_trade_v3

@@ -56,11 +56,11 @@ def generate_transform_function(transform: TransformSpec, ir: SpecIR, imports: s
         関数定義文字列
     """
     func_name = extract_function_name(transform.impl)
-    params = [render_parameter_signature(p, ir) for p in transform.parameters]
+    # パラメータ生成時にimportsを渡す
+    params = [render_parameter_signature(p, ir, imports) for p in transform.parameters]
     param_str = ", ".join(params)
-    return_type = resolve_transform_return_type(transform, ir)
-
-    update_imports_for_transform(imports, return_type, params)
+    # 戻り値型解決時にimportsを渡す
+    return_type = resolve_transform_return_type(transform, ir, imports)
 
     lines = build_transform_function_signature(func_name, param_str, return_type, transform.description)
     lines.extend(build_function_body_placeholder(return_type))

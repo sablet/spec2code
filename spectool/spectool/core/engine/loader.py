@@ -304,7 +304,11 @@ def _load_transform_specs(transforms_data: list[dict[str, Any]]) -> list[Transfo
             impl=transform_data.get("impl", ""),
             file_path=transform_data.get("file_path", ""),
             parameters=parameters,
-            return_type_ref=transform_data.get("return_datatype_ref") or transform_data.get("return_native"),
+            return_type_ref=(
+                transform_data.get("return_type_ref")
+                or transform_data.get("return_datatype_ref")
+                or transform_data.get("return_native")
+            ),
             default_args=transform_data.get("default_args", {}),
         )
         transforms.append(transform)
