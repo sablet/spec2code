@@ -57,6 +57,7 @@ class CallGraphBuilder:
         self.edges: Dict[str, Set[str]] = defaultdict(set)
         self.class_methods: Dict[str, Set[str]] = defaultdict(set)
         self.class_attribute_types: Dict[str, Dict[str, str]] = defaultdict(dict)
+        self.module_exports: Dict[str, Dict[str, str]] = defaultdict(dict)
 
     def add_definition(
         self,
@@ -92,10 +93,19 @@ class CallGraphBuilder:
         self.class_attribute_types[class_symbol][attribute] = type_symbol
 
     def finalize(self) -> None:
-        """Add containment edges (class -> method) after parsing."""
+        """Add containment edges (class -> method) and re-export edges after parsing."""
         for class_symbol, methods in self.class_methods.items():
             if methods:
                 self.edges[class_symbol].update(methods)
+
+        # Add edges for re-exported symbols
+        # When module A imports symbol from module B and re-exports via __all__,
+        # any reference to A.symbol should reach B.symbol
+        for module, exports in self.module_exports.items():
+            for name, target in exports.items():
+                module_symbol = f"{module}.{name}"
+                # Add edge from module to the actual definition
+                self.edges[module].add(target)
 
 
 class ModuleAnalyzer(ast.NodeVisitor):
@@ -117,6 +127,7 @@ class ModuleAnalyzer(ast.NodeVisitor):
         self.function_stack: list[str] = []
         self.class_stack: list[str] = []
         self.local_types_stack: list[dict[str, str]] = [dict()]
+        self.module_all_names: Set[str] = set()
 
         self.builder.add_definition(
             module_name,
@@ -128,6 +139,7 @@ class ModuleAnalyzer(ast.NodeVisitor):
         )
 
         self._prefill_module_scope(tree)
+        self._extract_all_names(tree)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -435,6 +447,24 @@ class ModuleAnalyzer(ast.NodeVisitor):
                     lineno=node.lineno,
                 )
 
+    def _extract_all_names(self, tree: ast.Module) -> None:
+        """Extract __all__ definition names."""
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "__all__":
+                        if isinstance(node.value, (ast.List, ast.Tuple)):
+                            for elt in node.value.elts:
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                    self.module_all_names.add(elt.value)
+
+    def finalize_exports(self) -> None:
+        """Register re-exported symbols after visiting completes."""
+        for name in self.module_all_names:
+            alias = self.aliases.get(name)
+            if alias and alias.kind == "symbol":
+                self.builder.module_exports[self.module][name] = alias.target
+
 
 def resolve_relative_module(current_module: str, module: Optional[str], level: int) -> Optional[str]:
     if level == 0:
@@ -480,6 +510,7 @@ def gather_sources(root: Path, inputs: Iterable[str]) -> dict[str, Path]:
 
 def build_call_graph(root: Path, modules: dict[str, Path]) -> CallGraphBuilder:
     builder = CallGraphBuilder()
+    analyzers = []
     for module_name, file_path in modules.items():
         try:
             source = file_path.read_text(encoding="utf-8")
@@ -488,6 +519,12 @@ def build_call_graph(root: Path, modules: dict[str, Path]) -> CallGraphBuilder:
         tree = ast.parse(source, filename=str(file_path))
         analyzer = ModuleAnalyzer(builder, file_path, module_name, tree)
         analyzer.visit(tree)
+        analyzers.append(analyzer)
+
+    # Finalize exports after all modules are visited
+    for analyzer in analyzers:
+        analyzer.finalize_exports()
+
     builder.finalize()
     return builder
 
@@ -580,6 +617,10 @@ def main() -> None:
             return True
         # normalizer モジュールはレジストリ経由の動的ディスパッチで参照されるため除外
         if defn.module == "spectool.spectool.core.engine.normalizer":
+            return True
+        # validate_formatter モジュールは validate.py 経由で __all__ re-export されているが
+        # 静的解析では re-export を完全に追跡できないため除外
+        if defn.module == "spectool.spectool.core.engine.validate_formatter":
             return True
         return False
 

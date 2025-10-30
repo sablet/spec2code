@@ -6,12 +6,21 @@ Config YAMLがSpec定義に適合しているかを検証する。
 from __future__ import annotations
 
 import importlib
-import inspect
+import sys
 from pathlib import Path
 from typing import Any
 
 from spectool.spectool.core.base.ir import SpecIR
 from spectool.spectool.core.engine.config_model import ConfigSpec, StageExecution
+from spectool.spectool.core.engine.config_validator_impl import (
+    check_function_implementation,
+    load_transform_signature,
+    resolve_impl_path,
+)
+from spectool.spectool.core.engine.config_validator_types import (
+    validate_param_type_from_spec,
+    validate_parameter_type,
+)
 
 
 class ConfigValidationError(Exception):
@@ -20,239 +29,11 @@ class ConfigValidationError(Exception):
     pass
 
 
-def _resolve_impl_path(impl: str, spec: "SpecIR") -> str:
-    """implパスを解決（apps. プレフィックスをプロジェクト名を含む形に変換）
-
-    Args:
-        impl: 元のimplパス (例: "apps.transforms:func")
-        spec: SpecIR（プロジェクト名取得用）
-
-    Returns:
-        解決されたimplパス (例: "apps.sample-project.transforms:func")
-    """
-    if not impl.startswith("apps."):
-        return impl
-
-    # プロジェクト名を取得（ハイフンをアンダースコアに変換）
-    app_name = spec.meta.name if spec.meta else "app"
-    app_name = app_name.replace("-", "_")  # Pythonモジュール名としてハイフンは無効
-
-    # "apps." の後の部分を取得
-    rest = impl[5:]  # "apps." を除去
-
-    # "apps.<project-name>." + 残りの部分
-    return f"apps.{app_name}.{rest}"
-
-
-def _load_transform_signature(
-    transform_id: str, impl: str, spec: "SpecIR"
-) -> tuple[inspect.Signature | None, list[str]]:
-    """Transform関数をインポートしてシグネチャを取得
-
-    Args:
-        transform_id: Transform ID
-        impl: 実装パス (module:function形式)
-        spec: SpecIR（implパス解決用）
-
-    Returns:
-        (signature, errors): シグネチャとエラーリスト
-    """
-    if not impl:
-        return None, [f"Transform '{transform_id}': missing implementation"]
-
-    # implパスを解決
-    resolved_impl = _resolve_impl_path(impl, spec)
-
-    try:
-        module_path, func_name = resolved_impl.rsplit(":", 1)
-    except ValueError as exc:
-        return None, [f"Transform '{transform_id}': invalid impl '{impl}': {exc}"]
-
-    try:
-        module = importlib.import_module(module_path)
-        func = getattr(module, func_name)
-    except ImportError as exc:
-        return None, [f"Transform '{transform_id}': import failed - {exc}"]
-    except AttributeError as exc:
-        return None, [f"Transform '{transform_id}': function not found - {exc}"]
-
-    try:
-        return inspect.signature(func), []
-    except (TypeError, ValueError) as exc:
-        return None, [f"Transform '{transform_id}': signature error - {exc}"]
-
-
-def _check_function_implementation(func: Any, transform_id: str) -> list[str]:  # noqa: ANN401
-    """関数が実装されているかをチェック（TODOのままではないか）
-
-    Args:
-        func: チェックする関数
-        transform_id: Transform ID
-
-    Returns:
-        エラーメッセージリスト（実装されていれば空リスト）
-    """
-    try:
-        source = inspect.getsource(func)
-    except (OSError, TypeError):
-        # ソースコードが取得できない場合（ビルトイン関数など）は実装されているとみなす
-        return []
-
-    # docstringとコメントからTODOパターンを検出
-    if "TODO: Implement" in source or "# TODO: Implement" in source:
-        return [f"Transform '{transform_id}': implementation incomplete (TODO markers found)"]
-
-    # 関数本体が単純なプレースホルダーのみかチェック
-    # 簡易的なチェック：return文が単純な値のみの場合
-    lines = source.split("\n")
-    code_lines = []
-    for line in lines:
-        stripped = line.strip()
-        # docstring、コメント、空行、関数定義行を除外
-        if (
-            stripped
-            and not stripped.startswith("#")
-            and not stripped.startswith('"""')
-            and not stripped.startswith("'''")
-            and not stripped.startswith("def ")
-        ):
-            code_lines.append(stripped)
-
-    # docstringを除外（複数行）
-    filtered_lines = []
-    in_docstring = False
-    for line in code_lines:
-        if '"""' in line or "'''" in line:
-            if in_docstring:
-                in_docstring = False
-                continue
-            in_docstring = True
-            continue
-        if not in_docstring:
-            filtered_lines.append(line)
-
-    # 実質的なコード行が1行以下（returnのみなど）の場合は未実装とみなす
-    if (
-        len(filtered_lines) <= 1
-        and filtered_lines
-        and any(
-            keyword in filtered_lines[0]
-            for keyword in ["return True", "return pd.DataFrame()", "return None", "return {}"]
-        )
-    ):
-        return [f"Transform '{transform_id}': implementation incomplete (placeholder return value only)"]
-
-    return []
-
-
-def _expected_basic_type(annotation: object) -> type | None:
-    """型アノテーションから基本型を抽出
-
-    Args:
-        annotation: 型アノテーション
-
-    Returns:
-        基本型 (int, float, str, bool) またはNone
-    """
-    basic_types: dict[str, type] = {
-        "int": int,
-        "float": float,
-        "str": str,
-        "bool": bool,
-        "builtins.int": int,
-        "builtins.float": float,
-        "builtins.str": str,
-        "builtins.bool": bool,
-    }
-
-    if annotation in {int, float, str, bool}:
-        return annotation  # type: ignore
-
-    as_str = str(annotation)
-    if as_str.startswith("<class '") and as_str.endswith("'>"):
-        return basic_types.get(as_str[8:-2])
-
-    return basic_types.get(as_str)
-
-
-def _validate_parameter_type(
-    transform_id: str,
-    param_name: str,
-    param_value: Any,  # noqa: ANN401
-    param_spec: inspect.Parameter,
-) -> list[str]:
-    """パラメータ型を検証
-
-    Args:
-        transform_id: Transform ID
-        param_name: パラメータ名
-        param_value: パラメータ値
-        param_spec: パラメータ仕様
-
-    Returns:
-        エラーメッセージリスト
-    """
-    if param_spec.annotation == inspect.Parameter.empty:
-        return []
-
-    expected_type = _expected_basic_type(param_spec.annotation)
-    if expected_type and not isinstance(param_value, expected_type):
-        return [
-            f"Transform '{transform_id}': parameter '{param_name}' expected type "
-            f"{expected_type.__name__}, got {type(param_value).__name__}"
-        ]
-
-    return []
-
-
-def _validate_param_type_from_spec(
-    transform_id: str,
-    param_name: str,
-    param_value: Any,  # noqa: ANN401
-    param_def: Any,  # noqa: ANN401
-) -> list[str]:
-    """Spec定義からパラメータ型を検証
-
-    Args:
-        transform_id: Transform ID
-        param_name: パラメータ名
-        param_value: パラメータ値
-        param_def: パラメータ定義
-
-    Returns:
-        エラーメッセージリスト
-    """
-    # nativeフィールドから型を取得
-    native_type = getattr(param_def, "type_ref", None)
-    if not native_type:
-        return []
-
-    # "builtins:type"形式から型名を抽出
-    type_name = native_type.split(":")[-1] if ":" in native_type else native_type
-
-    # 基本型のマッピング
-    type_mapping = {
-        "int": int,
-        "float": float,
-        "str": str,
-        "bool": bool,
-    }
-
-    expected_type = type_mapping.get(type_name)
-    if expected_type and not isinstance(param_value, expected_type):
-        return [
-            f"Transform '{transform_id}': parameter '{param_name}' expected type "
-            f"{expected_type.__name__}, got {type(param_value).__name__}"
-        ]
-
-    return []
-
-
 def _validate_transform_parameters(
     transform_id: str,
     impl: str,
     params: dict[str, Any],
-    spec: "SpecIR",
+    spec: SpecIR,
     transform_def: Any | None = None,  # noqa: ANN401
 ) -> list[str]:
     """Transform関数のパラメータを検証
@@ -268,7 +49,7 @@ def _validate_transform_parameters(
         エラーメッセージリスト
     """
     # 実装からシグネチャを取得（可能な場合のみ）
-    signature, load_errors = _load_transform_signature(transform_id, impl, spec)
+    signature, load_errors = load_transform_signature(transform_id, impl, spec)
 
     # 実装が存在する場合はシグネチャベースで検証
     if signature is not None:
@@ -276,14 +57,14 @@ def _validate_transform_parameters(
 
         # 実装の完全性をチェック（TODOのままではないか）
         # 関数を再度インポートして実装をチェック
-        resolved_impl = _resolve_impl_path(impl, spec)
+        resolved_impl = resolve_impl_path(impl, spec)
         try:
             module_path, func_name = resolved_impl.rsplit(":", 1)
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
-            errors.extend(_check_function_implementation(func, transform_id))
+            errors.extend(check_function_implementation(func, transform_id))
         except (ImportError, AttributeError, ValueError):
-            # インポートエラーは既に_load_transform_signatureで報告されているのでスキップ
+            # インポートエラーは既にload_transform_signatureで報告されているのでスキップ
             pass
 
         # 未知のパラメータをチェック
@@ -296,7 +77,7 @@ def _validate_transform_parameters(
             if param_name not in signature.parameters:
                 continue
             param_spec = signature.parameters[param_name]
-            errors.extend(_validate_parameter_type(transform_id, param_name, param_value, param_spec))
+            errors.extend(validate_parameter_type(transform_id, param_name, param_value, param_spec))
 
         return errors
 
@@ -310,7 +91,7 @@ def _validate_transform_parameters(
                 errors.append(f"Transform '{transform_id}': unknown parameter '{param_name}'")
                 continue
             # Spec定義から型を検証
-            errors.extend(_validate_param_type_from_spec(transform_id, param_name, param_value, param_def))
+            errors.extend(validate_param_type_from_spec(transform_id, param_name, param_value, param_def))
         # パラメータ型エラーがあればそれを返す、なければインポートエラーを返す
         return errors if errors else load_errors
 
@@ -508,8 +289,6 @@ def validate_config(
     Raises:
         ConfigValidationError: 検証エラー
     """
-    import sys
-
     # sys.pathにproject_rootを追加（apps.XXX形式のimportのため）
     if project_root is not None:
         project_root_str = str(project_root.resolve())

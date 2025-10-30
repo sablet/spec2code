@@ -8,9 +8,9 @@ SPEC ?= specs/spec.yaml
 # デフォルトのconfig
 CONFIG ?= configs/pipeline-config-minmax.yaml
 # チェック対象ディレクトリ（spectool追加）
-CHECK_DIRS ?= packages apps main.py tools spectool
+CHECK_DIRS ?= apps main.py tools spectool
 # Lint/Type/Complexity/Dead-codeチェック対象（spectool追加）
-LINT_DIRS ?= packages/spec2code spectool main.py
+LINT_DIRS ?= spectool/spectool main.py
 
 help: ## ヘルプを表示
 	@echo "Spec2Code - スケルトンコード生成・検証システム"
@@ -124,7 +124,7 @@ deps: ## 依存関係チェック
 module-lines: ## モジュール行数チェック（max-module-lines=500）
 	uv run pylint $(LINT_DIRS) --rcfile=pyproject.toml
 
-check: format duplication dead-code callgraph deps lint typecheck complexity ## module-linesは現在通らないので別
+check: format duplication dead-code callgraph deps module-lines lint typecheck complexity ## は現在通らないので別
 
 test:
 	uv run python -m pytest -v
