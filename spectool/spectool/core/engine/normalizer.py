@@ -9,11 +9,14 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from spectool.spectool.core.base.ir import ColumnRule, SpecIR
+
+logger = logging.getLogger(__name__)
 
 
 class MetaHandler(Protocol):
@@ -100,8 +103,9 @@ def pydantic_row_handler(ir: SpecIR) -> SpecIR:
         # Python型参照を解決
         try:
             model_class = _import_python_type(frame.row_model)
-        except Exception:
+        except Exception as exc:
             # インポート失敗時は警告のみ（Validator側で検出）
+            logger.warning(f"Failed to import row_model '{frame.row_model}': {exc}")
             continue
 
         # Pydanticモデルのmodel_fieldsを取得
@@ -136,7 +140,7 @@ def pydantic_row_handler(ir: SpecIR) -> SpecIR:
     return ir_copy
 
 
-def _import_python_type(type_ref: str) -> Any:
+def _import_python_type(type_ref: str) -> type[Any]:
     """Python型参照をインポート
 
     Args:
@@ -157,7 +161,7 @@ def _import_python_type(type_ref: str) -> Any:
     return getattr(module, class_name)
 
 
-def _infer_dtype_from_pydantic_field(field_info: Any) -> str:
+def _infer_dtype_from_pydantic_field(field_info: object) -> str:
     """Pydanticフィールドからdtypeを推論
 
     Args:
@@ -170,10 +174,7 @@ def _infer_dtype_from_pydantic_field(field_info: Any) -> str:
     annotation = field_info.annotation
 
     # 型名を文字列に変換
-    if hasattr(annotation, "__name__"):
-        type_name = annotation.__name__
-    else:
-        type_name = str(annotation)
+    type_name = annotation.__name__ if hasattr(annotation, "__name__") else str(annotation)
 
     # Pandera互換のdtype文字列にマッピング
     type_mapping = {

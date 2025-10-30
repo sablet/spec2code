@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -277,11 +278,11 @@ class IntegrityValidator:
             errors["generator_functions"].append(message)
             print(f"  ❌ {message}")
 
+    @staticmethod
     def _check_function_location(
-        self,
         entity_id: str,
         entity_type: str,
-        func: Any,
+        func: Callable[..., Any],
         expected_file: Path,
         errors: dict[str, list[str]],
         error_category: str,
@@ -312,7 +313,10 @@ class IntegrityValidator:
             errors[error_category].append(message)
             print(f"  ⚠️  {message}")
 
-    def _check_transform_signature(self, transform: TransformSpec, func: Any, errors: dict[str, list[str]]) -> None:
+    @staticmethod
+    def _check_transform_signature(
+        transform: TransformSpec, func: Callable[..., Any], errors: dict[str, list[str]]
+    ) -> None:
         """Transform関数のシグネチャを検証
 
         Args:
@@ -333,7 +337,10 @@ class IntegrityValidator:
             errors["transform_signatures"].append(message)
             print(f"  ⚠️  {message}")
 
-    def _check_generator_signature(self, generator: GeneratorDef, func: Any, errors: dict[str, list[str]]) -> None:
+    @staticmethod
+    def _check_generator_signature(
+        generator: GeneratorDef, func: Callable[..., Any], errors: dict[str, list[str]]
+    ) -> None:
         """Generator関数のシグネチャを検証
 
         Args:
@@ -368,7 +375,8 @@ class IntegrityValidator:
         for module_name in modules_to_remove:
             del sys.modules[module_name]
 
-    def _summarize_integrity(self, errors: dict[str, list[str]]) -> None:
+    @staticmethod
+    def _summarize_integrity(errors: dict[str, list[str]]) -> None:
         """Integrity検証結果のサマリーを表示
 
         Args:

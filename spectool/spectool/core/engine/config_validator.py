@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from pathlib import Path
 from typing import Any
 
 from spectool.spectool.core.base.ir import SpecIR
@@ -125,20 +126,21 @@ def _check_function_implementation(func: Any, transform_id: str) -> list[str]:  
             if in_docstring:
                 in_docstring = False
                 continue
-            else:
-                in_docstring = True
-                continue
+            in_docstring = True
+            continue
         if not in_docstring:
             filtered_lines.append(line)
 
     # 実質的なコード行が1行以下（returnのみなど）の場合は未実装とみなす
-    if len(filtered_lines) <= 1:
-        # ただし、単純なreturn文のみの場合はチェック
-        if filtered_lines and any(
+    if (
+        len(filtered_lines) <= 1
+        and filtered_lines
+        and any(
             keyword in filtered_lines[0]
             for keyword in ["return True", "return pd.DataFrame()", "return None", "return {}"]
-        ):
-            return [f"Transform '{transform_id}': implementation incomplete (placeholder return value only)"]
+        )
+    ):
+        return [f"Transform '{transform_id}': implementation incomplete (placeholder return value only)"]
 
     return []
 
@@ -490,7 +492,7 @@ def validate_config(
     config: ConfigSpec,
     spec: SpecIR,
     check_implementations: bool = False,
-    project_root: "Path | None" = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     """Configを検証して実行計画を生成
 

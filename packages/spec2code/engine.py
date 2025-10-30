@@ -1120,6 +1120,108 @@ def _type_alias_target_string(spec: Spec, datatype: DataType, app_root: Path) ->
     return builder()
 
 
+def _build_pandera_index_lines(schema_config: DataFrameSchema) -> list[str]:
+    """Build Pandera index definition lines."""
+    lines = []
+    if schema_config.index:
+        indexes = schema_config.index if isinstance(schema_config.index, list) else [schema_config.index]
+        for idx_config in indexes:
+            pandera_dtype = _pandera_dtype_string(idx_config.dtype)
+            lines.append(f"    {idx_config.name}: Index[{pandera_dtype}] = pa.Field(nullable={idx_config.nullable})")
+    return lines
+
+
+def _build_pandera_column_lines(schema_config: DataFrameSchema) -> list[str]:
+    """Build Pandera column definition lines."""
+    lines = []
+    for col in schema_config.columns:
+        pandera_dtype = _pandera_dtype_string(col.dtype)
+        if col.nullable:
+            pandera_dtype = f"{pandera_dtype} | None"
+        col_desc = f"  # {col.description}" if col.description else ""
+        lines.append(f"    {col.name}: Series[{pandera_dtype}] = pa.Field(nullable={col.nullable}){col_desc}")
+    return lines
+
+
+def _build_pandera_column_checks(schema_config: DataFrameSchema) -> list[str]:
+    """Build Pandera column check method lines."""
+    lines = []
+    for col in schema_config.columns:
+        if not col.checks:
+            continue
+        lines.append("")
+        for check in col.checks:
+            func_name = f"_check_{col.name}_{check.type}"
+            lines.append(f'    @pa.check("{col.name}")')
+            lines.append(f"    def {func_name}(cls, s: pd.Series) -> pd.Series:")
+            check_desc = f"  # {check.description}" if check.description else ""
+            if check.type in {"ge", "le", "gt", "lt"}:
+                lines.append(f"        return s.{check.type}({check.value}){check_desc}")
+            elif check.type == "isin":
+                lines.append(f"        return s.isin({check.value}){check_desc}")
+            else:
+                lines.append(f"        # TODO: Implement custom check: {check.type}")
+                lines.append("        return s")
+    return lines
+
+
+def _build_pandera_schema_model(datatype: DataType) -> list[str]:
+    """Build complete Pandera SchemaModel definition."""
+    schema_config = datatype.dataframe_schema
+    if not schema_config:
+        return []
+
+    schema_lines = []
+    schema_lines.append(f"# ===== {datatype.id}: DataFrame Schema =====")
+    if datatype.description:
+        schema_lines.append(f"# {datatype.description}")
+    schema_lines.append(f"class _{datatype.id}SchemaModel(pa.SchemaModel):")
+    schema_lines.append(f'    """{datatype.description}"""')
+    schema_lines.append("")
+
+    # Add index, columns, and checks
+    schema_lines.extend(_build_pandera_index_lines(schema_config))
+    schema_lines.extend(_build_pandera_column_lines(schema_config))
+    schema_lines.extend(_build_pandera_column_checks(schema_config))
+
+    # Config
+    schema_lines.append("")
+    schema_lines.append("    class Config:")
+    schema_lines.append(f"        coerce = {schema_config.coerce}")
+    schema_lines.append(f"        ordered = {schema_config.ordered}")
+    schema_lines.append(f"        strict = {schema_config.strict}")
+
+    # Schema and validator function
+    schema_lines.append("")
+    schema_lines.append("")
+    schema_lines.append(f"{datatype.id}Schema = _{datatype.id}SchemaModel.to_schema()")
+    schema_lines.append("")
+    schema_lines.append("")
+    snake_name = _to_snake_case(datatype.id)
+    validator_func = f"validate_{snake_name}"
+    schema_lines.append(f"def {validator_func}(df: pd.DataFrame) -> pd.DataFrame:")
+    schema_lines.append(f'    """{datatype.description} - Runtime validation"""')
+    schema_lines.append(f"    return {datatype.id}Schema.validate(df)")
+
+    return schema_lines
+
+
+def _build_type_alias_block(datatype: DataType, alias_type: str, has_schema: bool) -> list[str]:
+    """Build TypeAlias definition block."""
+    block_lines = []
+    if datatype.description:
+        block_lines.append(f"# {datatype.description}")
+
+    if has_schema:
+        snake_name = _to_snake_case(datatype.id)
+        validator_func = f"validate_{snake_name}"
+        block_lines.append(f"{datatype.id}: TypeAlias = Annotated[{alias_type}, {validator_func}]")
+    else:
+        block_lines.append(f"{datatype.id}: TypeAlias = {alias_type}")
+
+    return block_lines
+
+
 def _generate_type_aliases(spec: Spec, datatypes: list[DataType], app_root: Path) -> None:
     """Generate type alias definitions file with integrated DataFrame schemas."""
     file_path = app_root / "datatypes" / "type_aliases.py"
@@ -1137,93 +1239,18 @@ def _generate_type_aliases(spec: Spec, datatypes: list[DataType], app_root: Path
     for datatype in datatypes:
         alias_type, alias_imports = _type_alias_target_string(spec, datatype, app_root)
         imports.update(alias_imports)
-        description_comment = f"# {datatype.description}" if datatype.description else ""
 
-        # If dataframe_schema exists, generate Pandera schema inline
+        # Generate Pandera schema if dataframe_schema exists
         if datatype.dataframe_schema:
             has_annotated = True
             has_pandera = True
-            snake_name = _to_snake_case(datatype.id)
-            validator_func = f"validate_{snake_name}"
-            schema_config = datatype.dataframe_schema
-
-            # Build Pandera SchemaModel
-            schema_lines = []
-            schema_lines.append(f"# ===== {datatype.id}: DataFrame Schema =====")
-            if description_comment:
-                schema_lines.append(description_comment)
-            schema_lines.append(f"class _{datatype.id}SchemaModel(pa.SchemaModel):")
-            schema_lines.append(f'    """{datatype.description}"""')
-            schema_lines.append("")
-
-            # Index definition
-            if schema_config.index:
-                indexes = schema_config.index if isinstance(schema_config.index, list) else [schema_config.index]
-                for idx_config in indexes:
-                    pandera_dtype = _pandera_dtype_string(idx_config.dtype)
-                    schema_lines.append(
-                        f"    {idx_config.name}: Index[{pandera_dtype}] = pa.Field(nullable={idx_config.nullable})"
-                    )
-
-            # Column definitions
-            for col in schema_config.columns:
-                pandera_dtype = _pandera_dtype_string(col.dtype)
-                if col.nullable:
-                    pandera_dtype = f"{pandera_dtype} | None"
-                col_desc = f"  # {col.description}" if col.description else ""
-                schema_lines.append(
-                    f"    {col.name}: Series[{pandera_dtype}] = pa.Field(nullable={col.nullable}){col_desc}"
-                )
-
-            # Column checks
-            for col in schema_config.columns:
-                if not col.checks:
-                    continue
-                schema_lines.append("")
-                for check in col.checks:
-                    func_name = f"_check_{col.name}_{check.type}"
-                    schema_lines.append(f'    @pa.check("{col.name}")')
-                    schema_lines.append(f"    def {func_name}(cls, s: pd.Series) -> pd.Series:")
-                    check_desc = f"  # {check.description}" if check.description else ""
-                    if check.type in ("ge", "le", "gt", "lt"):
-                        schema_lines.append(f"        return s.{check.type}({check.value}){check_desc}")
-                    elif check.type == "isin":
-                        schema_lines.append(f"        return s.isin({check.value}){check_desc}")
-                    else:
-                        schema_lines.append(f"        # TODO: Implement custom check: {check.type}")
-                        schema_lines.append("        return s")
-
-            # Config
-            schema_lines.append("")
-            schema_lines.append("    class Config:")
-            schema_lines.append(f"        coerce = {schema_config.coerce}")
-            schema_lines.append(f"        ordered = {schema_config.ordered}")
-            schema_lines.append(f"        strict = {schema_config.strict}")
-
-            schema_lines.append("")
-            schema_lines.append("")
-            schema_lines.append(f"{datatype.id}Schema = _{datatype.id}SchemaModel.to_schema()")
-            schema_lines.append("")
-            schema_lines.append("")
-            schema_lines.append(f"def {validator_func}(df: pd.DataFrame) -> pd.DataFrame:")
-            schema_lines.append(f'    """{datatype.description} - Runtime validation"""')
-            schema_lines.append(f"    return {datatype.id}Schema.validate(df)")
-
+            schema_lines = _build_pandera_schema_model(datatype)
             schema_blocks.append("\n".join(schema_lines))
 
-            # TypeAlias with Annotated
-            alias_block_lines = []
-            if description_comment:
-                alias_block_lines.append(description_comment)
-            alias_block_lines.append(f"{datatype.id}: TypeAlias = Annotated[{alias_type}, {validator_func}]")
-            alias_blocks.append("\n".join(alias_block_lines))
-        else:
-            # Regular TypeAlias without schema
-            block_lines = []
-            if description_comment:
-                block_lines.append(description_comment)
-            block_lines.append(f"{datatype.id}: TypeAlias = {alias_type}")
-            alias_blocks.append("\n".join(block_lines))
+        # Generate TypeAlias block
+        has_schema = datatype.dataframe_schema is not None
+        alias_block_lines = _build_type_alias_block(datatype, alias_type, has_schema)
+        alias_blocks.append("\n".join(alias_block_lines))
 
     if has_annotated:
         imports.add("from typing import Annotated")
@@ -1794,6 +1821,111 @@ def _pandera_dtype_string(dtype: str) -> str:
     return mapping.get(dtype.lower(), "typing.Any")
 
 
+def _build_dataframe_checks(schema_config: DataFrameSchema) -> list[str]:
+    """Build DataFrame-level check methods."""
+    lines = []
+    for df_check in schema_config.dataframe_checks:
+        lines.append("")
+        lines.append("    @pa.dataframe_check")
+        lines.append(f"    def _{df_check.name}(cls, df: pd.DataFrame) -> bool:")
+        if df_check.description:
+            lines.append(f'        """{df_check.description}"""')
+        lines.append(f"        {df_check.expression}")
+    return lines
+
+
+def _build_schema_config_lines(schema_config: DataFrameSchema) -> list[str]:
+    """Build Config class lines for Pandera schema."""
+    return [
+        "",
+        "    class Config:",
+        f"        coerce = {schema_config.coerce}",
+        f"        ordered = {schema_config.ordered}",
+        f"        strict = {schema_config.strict}",
+    ]
+
+
+def _build_pydantic_model_lines(datatype: DataType) -> list[str]:
+    """Build Pydantic RootModel wrapper for DataFrame."""
+    return [
+        f"class {datatype.id}Model(RootModel[pd.DataFrame]):",
+        f'    """{datatype.description} with Pandera validation"""',
+        "",
+        "    root: pd.DataFrame",
+        "",
+        '    @field_validator("root", mode="before")',
+        "    @classmethod",
+        "    def _to_df(cls, v: Any) -> pd.DataFrame:",
+        "        return v if isinstance(v, pd.DataFrame) else pd.DataFrame(v)",
+        "",
+        '    @field_validator("root", mode="after")',
+        "    @classmethod",
+        "    def _validate_with_pandera(cls, df: pd.DataFrame) -> pd.DataFrame:",
+        f"        return {datatype.id}Schema.validate(df)",
+    ]
+
+
+def _generate_single_dataframe_schema(datatype: DataType, auto_dir: Path) -> None:
+    """Generate a single Pandera schema file for a datatype."""
+    schema_config = datatype.dataframe_schema
+    if not schema_config:
+        return
+
+    file_path = auto_dir / f"schemas_{datatype.id.lower()}.py"
+    if file_path.exists():
+        print(f"  ⏭️  Skip (exists): {file_path}")
+        return
+
+    snake_name = _to_snake_case(datatype.id)
+    lines = [
+        "# Auto-generated Pandera DataFrame Schema",
+        "from __future__ import annotations",
+        "",
+        "from typing import Any, Callable",
+        "import pandas as pd",
+        "import pandera as pa",
+        "from pandera.typing import DataFrame, Index, Series",
+        "from pydantic import RootModel, field_validator",
+        "",
+        "",
+    ]
+
+    # 1. Pandera SchemaModel class
+    class_lines = [f"class _{datatype.id}SchemaModel(pa.SchemaModel):"]
+    class_lines.append(f'    """{datatype.description}"""')
+    class_lines.append("")
+
+    # Add schema components
+    class_lines.extend(_build_pandera_index_lines(schema_config))
+    class_lines.extend(_build_pandera_column_lines(schema_config))
+    class_lines.extend(_build_pandera_column_checks(schema_config))
+    class_lines.extend(_build_dataframe_checks(schema_config))
+    class_lines.extend(_build_schema_config_lines(schema_config))
+
+    lines.extend(class_lines)
+    lines.append("")
+    lines.append("")
+
+    # 2. Schema instance
+    lines.append(f"{datatype.id}Schema: pa.DataFrameSchema = _{datatype.id}SchemaModel.to_schema()")
+    lines.append("")
+    lines.append("")
+
+    # 3. Pydantic RootModel
+    lines.extend(_build_pydantic_model_lines(datatype))
+    lines.append("")
+    lines.append("")
+
+    # 4. Helper function
+    lines.append(f"def validate_{snake_name}(df: pd.DataFrame) -> pd.DataFrame:")
+    lines.append(f'    """Validate DataFrame against {datatype.id} schema."""')
+    lines.append(f"    return {datatype.id}Model(root=df).root")
+    lines.append("")
+
+    file_path.write_text("\n".join(lines))
+    print(f"  ✅ Generated: {file_path}")
+
+
 def _generate_dataframe_schemas(spec: Spec, app_root: Path) -> None:
     """Generate Pandera schema files for datatypes with dataframe_schema."""
     schema_datatypes = [dt for dt in spec.datatypes if dt.dataframe_schema]
@@ -1804,121 +1936,7 @@ def _generate_dataframe_schemas(spec: Spec, app_root: Path) -> None:
     auto_dir.mkdir(parents=True, exist_ok=True)
 
     for datatype in schema_datatypes:
-        schema_config = datatype.dataframe_schema
-        if not schema_config:
-            continue
-
-        file_path = auto_dir / f"schemas_{datatype.id.lower()}.py"
-        if file_path.exists():
-            print(f"  ⏭️  Skip (exists): {file_path}")
-            continue
-
-        snake_name = _to_snake_case(datatype.id)
-        lines = [
-            "# Auto-generated Pandera DataFrame Schema",
-            "from __future__ import annotations",
-            "",
-            "from typing import Any, Callable",
-            "import pandas as pd",
-            "import pandera as pa",
-            "from pandera.typing import DataFrame, Index, Series",
-            "from pydantic import RootModel, field_validator",
-            "",
-            "",
-        ]
-
-        # 1. Pandera SchemaModel class
-        class_lines = [f"class _{datatype.id}SchemaModel(pa.SchemaModel):"]
-        class_lines.append(f'    """{datatype.description}"""')
-        class_lines.append("")
-
-        # Index definition
-        if schema_config.index:
-            indexes = schema_config.index if isinstance(schema_config.index, list) else [schema_config.index]
-            for idx_config in indexes:
-                pandera_dtype = _pandera_dtype_string(idx_config.dtype)
-                class_lines.append(
-                    f"    {idx_config.name}: Index[{pandera_dtype}] = pa.Field(nullable={idx_config.nullable})"
-                )
-
-        # Column definitions
-        for col in schema_config.columns:
-            pandera_dtype = _pandera_dtype_string(col.dtype)
-            if col.nullable:
-                pandera_dtype = f"{pandera_dtype} | None"
-
-            col_desc = f"  # {col.description}" if col.description else ""
-            class_lines.append(f"    {col.name}: Series[{pandera_dtype}] = pa.Field(nullable={col.nullable}){col_desc}")
-
-        # Column checks
-        for col in schema_config.columns:
-            if not col.checks:
-                continue
-            class_lines.append("")
-            for check in col.checks:
-                func_name = f"_check_{col.name}_{check.type}"
-                class_lines.append(f'    @pa.check("{col.name}")')
-                class_lines.append(f"    def {func_name}(cls, s: pd.Series) -> pd.Series:")
-                check_desc = f"  # {check.description}" if check.description else ""
-                if check.type in ("ge", "le", "gt", "lt"):
-                    class_lines.append(f"        return s.{check.type}({check.value}){check_desc}")
-                elif check.type == "isin":
-                    class_lines.append(f"        return s.isin({check.value}){check_desc}")
-                else:
-                    class_lines.append(f"        # TODO: Implement custom check: {check.type}")
-                    class_lines.append("        return s")
-
-        # DataFrame checks
-        for df_check in schema_config.dataframe_checks:
-            class_lines.append("")
-            class_lines.append("    @pa.dataframe_check")
-            class_lines.append(f"    def _{df_check.name}(cls, df: pd.DataFrame) -> bool:")
-            if df_check.description:
-                class_lines.append(f'        """{df_check.description}"""')
-            class_lines.append(f"        {df_check.expression}")
-
-        # Config
-        class_lines.append("")
-        class_lines.append("    class Config:")
-        class_lines.append(f"        coerce = {schema_config.coerce}")
-        class_lines.append(f"        ordered = {schema_config.ordered}")
-        class_lines.append(f"        strict = {schema_config.strict}")
-
-        lines.extend(class_lines)
-        lines.append("")
-        lines.append("")
-
-        # 2. Schema instance
-        lines.append(f"{datatype.id}Schema: pa.DataFrameSchema = _{datatype.id}SchemaModel.to_schema()")
-        lines.append("")
-        lines.append("")
-
-        # 3. Pydantic RootModel
-        lines.append(f"class {datatype.id}Model(RootModel[pd.DataFrame]):")
-        lines.append(f'    """{datatype.description} with Pandera validation"""')
-        lines.append("")
-        lines.append("    root: pd.DataFrame")
-        lines.append("")
-        lines.append('    @field_validator("root", mode="before")')
-        lines.append("    @classmethod")
-        lines.append("    def _to_df(cls, v: Any) -> pd.DataFrame:")
-        lines.append("        return v if isinstance(v, pd.DataFrame) else pd.DataFrame(v)")
-        lines.append("")
-        lines.append('    @field_validator("root", mode="after")')
-        lines.append("    @classmethod")
-        lines.append("    def _validate_with_pandera(cls, df: pd.DataFrame) -> pd.DataFrame:")
-        lines.append(f"        return {datatype.id}Schema.validate(df)")
-        lines.append("")
-        lines.append("")
-
-        # 4. Helper function
-        lines.append(f"def validate_{snake_name}(df: pd.DataFrame) -> pd.DataFrame:")
-        lines.append(f'    """Validate DataFrame against {datatype.id} schema."""')
-        lines.append(f"    return {datatype.id}Model(root=df).root")
-        lines.append("")
-
-        file_path.write_text("\n".join(lines))
-        print(f"  ✅ Generated: {file_path}")
+        _generate_single_dataframe_schema(datatype, auto_dir)
 
     # Generate runtime_guards.py with enforce_schema decorator
     guards_file = auto_dir / "runtime_guards.py"

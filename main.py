@@ -14,6 +14,7 @@ from pathlib import Path
 
 import fire
 
+from spectool.spectool.core.base.ir import SpecIR
 from spectool.spectool.core.engine.loader import load_spec
 from spectool.spectool.core.engine.normalizer import normalize_ir
 from spectool.spectool.core.engine.validate import validate_spec, format_validation_result
@@ -21,7 +22,6 @@ from spectool.spectool.core.engine.integrity import IntegrityValidator
 from spectool.spectool.core.engine.dag_runner import DAGRunner
 from spectool.spectool.core.engine.config_runner import ConfigRunner
 from spectool.spectool.backends.py_skeleton import generate_skeleton
-from spectool.spectool.backends.py_validators import generate_pandera_schemas
 
 __version__ = "2.0.0-alpha"
 
@@ -105,11 +105,7 @@ class SpectoolCLI:
                 print("✅ Validation passed\n")
 
             # Determine output directory
-            if output_dir:
-                out_path = Path(output_dir)
-            else:
-                # Default: current directory (will generate apps/<project-name>/)
-                out_path = Path(".")
+            out_path = Path(output_dir) if output_dir else Path(".")
 
             print(f"📁 Output directory: {out_path}")
 
@@ -120,14 +116,14 @@ class SpectoolCLI:
             project_name = normalized.meta.name if normalized.meta else "generated-project"
             app_root = out_path / "apps" / project_name
 
-            print(f"\n✅ Skeleton generation complete!")
+            print("\n✅ Skeleton generation complete!")
             print(f"   Generated project in: {app_root}")
-            print(f"   Structure:")
-            print(f"     - checks/     (validation functions)")
-            print(f"     - transforms/ (processing functions)")
-            print(f"     - generators/ (data generator functions)")
-            print(f"     - models/     (Pydantic models)")
-            print(f"     - schemas/    (Pandera validation schemas)")
+            print("   Structure:")
+            print("     - checks/     (validation functions)")
+            print("     - transforms/ (processing functions)")
+            print("     - generators/ (data generator functions)")
+            print("     - models/     (Pydantic models)")
+            print("     - schemas/    (Pandera validation schemas)")
 
         except Exception as e:
             print(f"❌ Error: {e}")
@@ -150,64 +146,10 @@ class SpectoolCLI:
             sys.exit(1)
 
         try:
-            # Load spec
-            print(f"📖 Loading spec: {spec_path}")
-            ir = load_spec(str(spec_path))
-            print(f"✅ Loaded {len(ir.frames)} DataFrames, {len(ir.transforms)} Transforms")
-
-            # Normalize
-            print("🔄 Normalizing IR...")
-            normalized = normalize_ir(ir)
-            print("✅ Normalization complete")
-
-            # Check if generated directory exists
-            project_name = normalized.meta.name if normalized.meta else "generated-project"
-            app_root = Path("apps") / project_name
-
-            print("🔍 Checking generated code...")
-            print(f"  📁 Expected directory: {app_root}")
-
-            if not app_root.exists():
-                print(f"    ❌ Directory not found")
-                print("\n❌ Error: Generated code directory not found")
-                print("   Run 'spectool gen' first to generate code.")
-                sys.exit(1)
-            print(f"    ✅ Directory exists")
-
-            # Check for required directories
-            print("  🔍 Checking generated structure...")
-            required_dirs = ["checks", "transforms", "generators", "models", "schemas"]
-            missing_dirs = []
-
-            for dirname in required_dirs:
-                dir_path = app_root / dirname
-                if dir_path.exists():
-                    print(f"    ✅ {dirname}/")
-                else:
-                    print(f"    ⚠️  {dirname}/ (missing, may not be needed)")
-
-            if missing_dirs:
-                print(f"\n⚠️  Warning: Some directories are missing: {', '.join(missing_dirs)}")
-                print("   This may be expected if your spec doesn't use all features.")
-
-            # Validate against spec using IntegrityValidator
-            print("  🔍 Validating implementation integrity...")
-            validator = IntegrityValidator(normalized)
-            result = validator.validate_integrity()
-
-            total_errors = sum(len(errors) for errors in result.values())
-            if total_errors > 0:
-                print(f"\n❌ Integrity validation failed with {total_errors} error(s)")
-                for category, errors in result.items():
-                    if errors:
-                        print(f"\n  {category}:")
-                        for error in errors:
-                            print(f"    ⚠️  {error}")
-                sys.exit(1)
-
-            print("\n✅ All integrity checks passed")
-            print("   All required files exist and match spec")
-
+            normalized = self._load_and_normalize_spec(spec_path)
+            app_root = self._check_generated_directory(normalized)
+            self._check_directory_structure(app_root)
+            self._run_integrity_validation(normalized)
         except Exception as e:
             print(f"❌ Error: {e}")
             if debug:
@@ -215,6 +157,64 @@ class SpectoolCLI:
 
                 traceback.print_exc()
             sys.exit(1)
+
+    def _load_and_normalize_spec(self, spec_path: Path) -> SpecIR:
+        """Load and normalize spec file."""
+        print(f"📖 Loading spec: {spec_path}")
+        ir = load_spec(str(spec_path))
+        print(f"✅ Loaded {len(ir.frames)} DataFrames, {len(ir.transforms)} Transforms")
+
+        print("🔄 Normalizing IR...")
+        normalized = normalize_ir(ir)
+        print("✅ Normalization complete")
+        return normalized
+
+    def _check_generated_directory(self, normalized: SpecIR) -> Path:
+        """Check if generated directory exists."""
+        project_name = normalized.meta.name if normalized.meta else "generated-project"
+        app_root = Path("apps") / project_name
+
+        print("🔍 Checking generated code...")
+        print(f"  📁 Expected directory: {app_root}")
+
+        if not app_root.exists():
+            print("    ❌ Directory not found")
+            print("\n❌ Error: Generated code directory not found")
+            print("   Run 'spectool gen' first to generate code.")
+            sys.exit(1)
+        print("    ✅ Directory exists")
+        return app_root
+
+    def _check_directory_structure(self, app_root: Path) -> None:
+        """Check for required directories."""
+        print("  🔍 Checking generated structure...")
+        required_dirs = ["checks", "transforms", "generators", "models", "schemas"]
+
+        for dirname in required_dirs:
+            dir_path = app_root / dirname
+            if dir_path.exists():
+                print(f"    ✅ {dirname}/")
+            else:
+                print(f"    ⚠️  {dirname}/ (missing, may not be needed)")
+
+    def _run_integrity_validation(self, normalized: SpecIR) -> None:
+        """Run integrity validation."""
+        print("  🔍 Validating implementation integrity...")
+        validator = IntegrityValidator(normalized)
+        result = validator.validate_integrity()
+
+        total_errors = sum(len(errors) for errors in result.values())
+        if total_errors > 0:
+            print(f"\n❌ Integrity validation failed with {total_errors} error(s)")
+            for category, errors in result.items():
+                if errors:
+                    print(f"\n  {category}:")
+                    for error in errors:
+                        print(f"    ⚠️  {error}")
+            sys.exit(1)
+
+        print("\n✅ All integrity checks passed")
+        print("   All required files exist and match spec")
 
     def run(
         self,
@@ -238,100 +238,9 @@ class SpectoolCLI:
 
         try:
             if config:
-                # Config-driven execution
-                config_path = Path(config)
-                if not config_path.exists():
-                    print(f"❌ Error: Config file not found: {config_path}")
-                    sys.exit(1)
-
-                print(f"📖 Loading config: {config_path}")
-                print(f"📖 Base spec: {spec_path}")
-
-                runner = ConfigRunner(str(config_path))
-                print(f"✅ Loaded config: {runner.config.meta.config_name}")
-
-                # Validate config
-                print("🔍 Validating config...")
-                validation_result = runner.validate(check_implementations=True)
-                print("✅ Config validation passed")
-
-                # Show execution plan
-                execution_plan = validation_result["execution_plan"]
-                print(f"\n📋 Execution plan ({len(execution_plan)} step(s)):")
-                for idx, step in enumerate(execution_plan, start=1):
-                    print(f"  {idx}. Stage: {step['stage_id']}")
-                    print(f"     Transform: {step['transform_id']}")
-                    if step["params"]:
-                        print(f"     Params: {step['params']}")
-
-                # Load initial data
-                if initial_data:
-                    import json
-
-                    initial_data_path = Path(initial_data)
-                    if not initial_data_path.exists():
-                        print(f"❌ Error: Initial data file not found: {initial_data_path}")
-                        sys.exit(1)
-
-                    with open(initial_data_path) as f:
-                        data = json.load(f)
-                    print(f"\n📊 Loaded initial data from: {initial_data_path}")
-                else:
-                    print("\n⚠️  No initial data provided (use --initial-data to specify)")
-                    print("   Using empty dict as initial data")
-                    data = {}
-
-                # Execute
-                print("\n🚀 Executing DAG pipeline...")
-                result = runner.run(data)
-                print("\n✅ Execution complete!")
-                print(f"📊 Result: {result}")
-
+                self._run_with_config(spec_path, config, initial_data)
             else:
-                # Spec-driven execution (using default_transform_id in dag_stages)
-                print(f"📖 Loading spec: {spec_path}")
-                ir = load_spec(str(spec_path))
-                print(f"✅ Loaded {len(ir.transforms)} Transforms, {len(ir.dag_stages)} DAG stages")
-
-                # Normalize
-                print("🔄 Normalizing IR...")
-                normalized = normalize_ir(ir)
-                print("✅ Normalization complete")
-
-                if not normalized.dag_stages:
-                    print("\n❌ Error: No dag_stages defined in spec")
-                    print("   Either define dag_stages in spec or use --config to specify execution")
-                    sys.exit(1)
-
-                # Build DAG runner
-                print("🔍 Building DAG execution plan...")
-                runner = DAGRunner(normalized)
-                execution_order = runner.get_execution_order()
-                print(f"✅ Execution order: {[s.stage_id for s in execution_order]}")
-
-                # Load initial data
-                if initial_data:
-                    import json
-
-                    initial_data_path = Path(initial_data)
-                    if not initial_data_path.exists():
-                        print(f"❌ Error: Initial data file not found: {initial_data_path}")
-                        sys.exit(1)
-
-                    with open(initial_data_path) as f:
-                        data = json.load(f)
-                    print(f"\n📊 Loaded initial data from: {initial_data_path}")
-                else:
-                    print("\n⚠️  No initial data provided (use --initial-data to specify)")
-                    print("   Using empty dict as initial data")
-                    data = {}
-
-                # Execute
-                print("\n🚀 Executing DAG pipeline...")
-                result = runner.run_dag(data)
-                print("\n✅ Execution complete!")
-                print(f"📊 Result: {result}")
-
+                self._run_with_spec(spec_path, initial_data)
         except Exception as e:
             print(f"❌ Error: {e}")
             if debug:
@@ -339,6 +248,90 @@ class SpectoolCLI:
 
                 traceback.print_exc()
             sys.exit(1)
+
+    def _run_with_config(self, spec_path: Path, config: str, initial_data: str | None) -> None:
+        """Execute DAG with config-driven approach."""
+        config_path = Path(config)
+        if not config_path.exists():
+            print(f"❌ Error: Config file not found: {config_path}")
+            sys.exit(1)
+
+        print(f"📖 Loading config: {config_path}")
+        print(f"📖 Base spec: {spec_path}")
+
+        runner = ConfigRunner(str(config_path))
+        print(f"✅ Loaded config: {runner.config.meta.config_name}")
+
+        # Validate config
+        print("🔍 Validating config...")
+        validation_result = runner.validate(check_implementations=True)
+        print("✅ Config validation passed")
+
+        # Show execution plan
+        self._show_execution_plan(validation_result["execution_plan"])
+
+        # Load and execute
+        data = self._load_initial_data(initial_data)
+        print("\n🚀 Executing DAG pipeline...")
+        result = runner.run(data)
+        print("\n✅ Execution complete!")
+        print(f"📊 Result: {result}")
+
+    def _run_with_spec(self, spec_path: Path, initial_data: str | None) -> None:
+        """Execute DAG with spec-driven approach."""
+        print(f"📖 Loading spec: {spec_path}")
+        ir = load_spec(str(spec_path))
+        print(f"✅ Loaded {len(ir.transforms)} Transforms, {len(ir.dag_stages)} DAG stages")
+
+        print("🔄 Normalizing IR...")
+        normalized = normalize_ir(ir)
+        print("✅ Normalization complete")
+
+        if not normalized.dag_stages:
+            print("\n❌ Error: No dag_stages defined in spec")
+            print("   Either define dag_stages in spec or use --config to specify execution")
+            sys.exit(1)
+
+        # Build DAG runner
+        print("🔍 Building DAG execution plan...")
+        runner = DAGRunner(normalized)
+        execution_order = runner.get_execution_order()
+        print(f"✅ Execution order: {[s.stage_id for s in execution_order]}")
+
+        # Load and execute
+        data = self._load_initial_data(initial_data)
+        print("\n🚀 Executing DAG pipeline...")
+        result = runner.run_dag(data)
+        print("\n✅ Execution complete!")
+        print(f"📊 Result: {result}")
+
+    def _show_execution_plan(self, execution_plan: list) -> None:
+        """Display execution plan."""
+        print(f"\n📋 Execution plan ({len(execution_plan)} step(s)):")
+        for idx, step in enumerate(execution_plan, start=1):
+            print(f"  {idx}. Stage: {step['stage_id']}")
+            print(f"     Transform: {step['transform_id']}")
+            if step["params"]:
+                print(f"     Params: {step['params']}")
+
+    def _load_initial_data(self, initial_data: str | None) -> dict:
+        """Load initial data from file or return empty dict."""
+        if initial_data:
+            import json
+
+            initial_data_path = Path(initial_data)
+            if not initial_data_path.exists():
+                print(f"❌ Error: Initial data file not found: {initial_data_path}")
+                sys.exit(1)
+
+            with open(initial_data_path) as f:
+                data = json.load(f)
+            print(f"\n📊 Loaded initial data from: {initial_data_path}")
+            return data
+
+        print("\n⚠️  No initial data provided (use --initial-data to specify)")
+        print("   Using empty dict as initial data")
+        return {}
 
     def version(self) -> None:
         """Show version information."""

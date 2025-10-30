@@ -138,28 +138,35 @@ def _generate_transform_function(transform: TransformSpec, ir: SpecIR, imports: 
         関数定義文字列
     """
     func_name = _extract_function_name(transform.impl)
-
-    # パラメータリストを生成
     params = [_render_parameter_signature(p, ir) for p in transform.parameters]
     param_str = ", ".join(params)
+    return_type = _resolve_transform_return_type(transform, ir)
 
-    # 戻り値型を解決
-    return_type = "Any"
-    if transform.return_type_ref:
-        # DataFrame型の場合
-        for frame in ir.frames:
-            if frame.id == transform.return_type_ref:
-                if frame.check_functions:
-                    check_refs = ", ".join(f'Check["{cf}"]' for cf in frame.check_functions)
-                    return_type = f"Annotated[pd.DataFrame, {check_refs}]"
-                else:
-                    return_type = "pd.DataFrame"
-                break
-        else:
-            # Enum/Pydantic/その他の型
-            return_type = transform.return_type_ref
+    _update_imports_for_transform(imports, return_type, params)
 
-    # インポートを追加
+    lines = _build_transform_function_signature(func_name, param_str, return_type, transform.description)
+    lines.extend(_build_function_body_placeholder(return_type))
+
+    return "\n".join(lines)
+
+
+def _resolve_transform_return_type(transform: TransformSpec, ir: SpecIR) -> str:
+    """Resolve return type for transform function."""
+    if not transform.return_type_ref:
+        return "Any"
+
+    for frame in ir.frames:
+        if frame.id == transform.return_type_ref:
+            if frame.check_functions:
+                check_refs = ", ".join(f'Check["{cf}"]' for cf in frame.check_functions)
+                return f"Annotated[pd.DataFrame, {check_refs}]"
+            return "pd.DataFrame"
+
+    return transform.return_type_ref
+
+
+def _update_imports_for_transform(imports: set[str], return_type: str, params: list[str]) -> None:
+    """Update imports based on return type and parameters."""
     if "Annotated" in return_type or any("Annotated" in p for p in params):
         imports.add("from typing import Annotated")
     if "pd.DataFrame" in return_type or any("pd.DataFrame" in p for p in params):
@@ -167,25 +174,31 @@ def _generate_transform_function(transform: TransformSpec, ir: SpecIR, imports: 
     if "Check" in return_type or any("Check" in p for p in params):
         imports.add("from spectool.spectool.core.base.meta_types import Check")
 
+
+def _build_transform_function_signature(
+    func_name: str, param_str: str, return_type: str, description: str | None
+) -> list[str]:
+    """Build function signature lines."""
     lines = []
-    if transform.description:
-        lines.append(f"# {transform.description}")
+    if description:
+        lines.append(f"# {description}")
 
     lines.append(f"def {func_name}({param_str}) -> {return_type}:")
     lines.append(f'    """TODO: Implement {func_name}')
     lines.append("    ")
-    if transform.description:
-        lines.append(f"    {transform.description}")
+    if description:
+        lines.append(f"    {description}")
     lines.append('    """')
     lines.append("    # TODO: Implement transformation logic")
 
-    # 戻り値のプレースホルダー
-    if "pd.DataFrame" in return_type:
-        lines.append("    return pd.DataFrame()")
-    else:
-        lines.append("    raise NotImplementedError()")
+    return lines
 
-    return "\n".join(lines)
+
+def _build_function_body_placeholder(return_type: str) -> list[str]:
+    """Build placeholder return statement."""
+    if "pd.DataFrame" in return_type:
+        return ["    return pd.DataFrame()"]
+    return ["    raise NotImplementedError()"]
 
 
 def _generate_generator_function(generator: GeneratorDef, ir: SpecIR, imports: set[str]) -> str:
@@ -346,10 +359,21 @@ def generate_skeleton(ir: SpecIR, output_dir: Path) -> None:
         output_dir: 出力ディレクトリ
     """
     app_name = ir.meta.name if ir.meta else "app"
-    app_name = app_name.replace("-", "_")  # Pythonモジュール名としてハイフンは無効
+    app_name = app_name.replace("-", "_")
     app_root = output_dir / "apps" / app_name
 
-    # ディレクトリ構造を作成
+    _create_directory_structure(app_root)
+    _generate_check_modules(ir, app_root)
+    _generate_transform_modules(ir, app_root)
+    _generate_generator_modules(ir, app_root)
+    _generate_enum_module(ir, app_root)
+    _generate_pydantic_model_module(ir, app_root)
+    _generate_pandera_schemas(ir, app_root)
+    _generate_type_aliases(ir, app_root)
+
+
+def _create_directory_structure(app_root: Path) -> None:
+    """Create directory structure for the generated app."""
     directories = [
         app_root / "checks",
         app_root / "transforms",
@@ -364,138 +388,162 @@ def generate_skeleton(ir: SpecIR, output_dir: Path) -> None:
         if not init_file.exists():
             init_file.write_text('"""Auto-generated module"""\n')
 
-    # Check関数を生成
-    if ir.checks:
-        check_functions_by_file: dict[str, list[str]] = {}
-        for check in ir.checks:
-            file_path = check.file_path or "checks/validators.py"
-            imports_check: set[str] = set()
-            func_code = _generate_check_function(check, imports_check)
 
-            if file_path not in check_functions_by_file:
-                check_functions_by_file[file_path] = []
-            check_functions_by_file[file_path].append(func_code)
+def _generate_check_modules(ir: SpecIR, app_root: Path) -> None:
+    """Generate check function modules."""
+    if not ir.checks:
+        return
 
-        for file_path, functions in check_functions_by_file.items():
-            # file_pathから "apps/" プレフィックスを除去
-            relative_path = Path(file_path)
-            if relative_path.parts and relative_path.parts[0] == "apps":
-                relative_path = Path(*relative_path.parts[1:])
-            output_path = app_root / relative_path
+    check_functions_by_file: dict[str, list[str]] = {}
+    for check in ir.checks:
+        file_path = check.file_path or "checks/validators.py"
+        imports_check: set[str] = set()
+        func_code = _generate_check_function(check, imports_check)
 
-            imports_check_global: set[str] = set()
-            _write_module_file(
-                output_path,
-                "Check functions\n\nこのファイルは spectool が自動生成しました。",
-                imports_check_global,
-                functions,
-            )
+        if file_path not in check_functions_by_file:
+            check_functions_by_file[file_path] = []
+        check_functions_by_file[file_path].append(func_code)
 
-    # Transform関数を生成
-    if ir.transforms:
-        transform_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
-        for transform in ir.transforms:
-            file_path = transform.file_path or "transforms/processors.py"
-            imports_transform: set[str] = set()
-            func_code = _generate_transform_function(transform, ir, imports_transform)
-
-            if file_path not in transform_functions_by_file:
-                transform_functions_by_file[file_path] = []
-            transform_functions_by_file[file_path].append((func_code, imports_transform))
-
-        for file_path, functions_with_imports in transform_functions_by_file.items():
-            # file_pathから "apps/" プレフィックスを除去
-            relative_path = Path(file_path)
-            if relative_path.parts and relative_path.parts[0] == "apps":
-                relative_path = Path(*relative_path.parts[1:])
-            output_path = app_root / relative_path
-
-            # 全てのインポートを統合
-            imports_transform_global: set[str] = set()
-            function_codes = []
-            for func_code, imports_local in functions_with_imports:
-                imports_transform_global.update(imports_local)
-                function_codes.append(func_code)
-
-            _write_module_file(
-                output_path,
-                "Transform functions\n\nこのファイルは spectool が自動生成しました。",
-                imports_transform_global,
-                function_codes,
-            )
-
-    # Generator関数を生成
-    if ir.generators:
-        generator_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
-        for generator in ir.generators:
-            file_path = generator.file_path or "generators/data_generators.py"
-            imports_generator: set[str] = set()
-            func_code = _generate_generator_function(generator, ir, imports_generator)
-
-            if file_path not in generator_functions_by_file:
-                generator_functions_by_file[file_path] = []
-            generator_functions_by_file[file_path].append((func_code, imports_generator))
-
-        for file_path, functions_with_imports in generator_functions_by_file.items():
-            # file_pathから "apps/" プレフィックスを除去
-            relative_path = Path(file_path)
-            if relative_path.parts and relative_path.parts[0] == "apps":
-                relative_path = Path(*relative_path.parts[1:])
-            output_path = app_root / relative_path
-
-            imports_generator_global: set[str] = set()
-            function_codes = []
-            for func_code, imports_local in functions_with_imports:
-                imports_generator_global.update(imports_local)
-                function_codes.append(func_code)
-
-            _write_module_file(
-                output_path,
-                "Generator functions\n\nこのファイルは spectool が自動生成しました。",
-                imports_generator_global,
-                function_codes,
-            )
-
-    # Enumを生成（enums.py）
-    if ir.enums:
-        imports_enums: set[str] = {"from enum import Enum"}
-        enum_sections = []
-
-        for enum in ir.enums:
-            enum_code = _generate_enum_class(enum)
-            enum_sections.append(enum_code)
-
-        enums_path = app_root / "models" / "enums.py"
+    for file_path, functions in check_functions_by_file.items():
+        relative_path = _strip_apps_prefix(Path(file_path))
+        output_path = app_root / relative_path
+        imports_check_global: set[str] = set()
         _write_module_file(
-            enums_path,
-            "Enum definitions\n\nこのファイルは spectool が自動生成しました。",
-            imports_enums,
-            enum_sections,
+            output_path,
+            "Check functions\n\nこのファイルは spectool が自動生成しました。",
+            imports_check_global,
+            functions,
         )
 
-    # Pydanticモデルを生成（models.py）
-    if ir.pydantic_models:
-        imports_models: set[str] = {"from pydantic import BaseModel"}
-        model_sections = []
 
-        for model in ir.pydantic_models:
-            model_code = _generate_pydantic_model(model)
-            model_sections.append(model_code)
+def _generate_transform_modules(ir: SpecIR, app_root: Path) -> None:
+    """Generate transform function modules."""
+    if not ir.transforms:
+        return
 
-        models_path = app_root / "models" / "models.py"
+    transform_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
+    for transform in ir.transforms:
+        file_path = transform.file_path or "transforms/processors.py"
+        imports_transform: set[str] = set()
+        func_code = _generate_transform_function(transform, ir, imports_transform)
+
+        if file_path not in transform_functions_by_file:
+            transform_functions_by_file[file_path] = []
+        transform_functions_by_file[file_path].append((func_code, imports_transform))
+
+    for file_path, functions_with_imports in transform_functions_by_file.items():
+        relative_path = _strip_apps_prefix(Path(file_path))
+        output_path = app_root / relative_path
+
+        imports_transform_global: set[str] = set()
+        function_codes = []
+        for func_code, imports_local in functions_with_imports:
+            imports_transform_global.update(imports_local)
+            function_codes.append(func_code)
+
         _write_module_file(
-            models_path,
-            "Pydantic Model definitions\n\nこのファイルは spectool が自動生成しました。",
-            imports_models,
-            model_sections,
+            output_path,
+            "Transform functions\n\nこのファイルは spectool が自動生成しました。",
+            imports_transform_global,
+            function_codes,
         )
 
-    # Pandera Schemaを生成（既存の py_validators を活用）
-    if ir.frames:
-        schema_path = app_root / "schemas" / "dataframe_schemas.py"
-        generate_pandera_schemas(ir, schema_path)
 
-    # TypeAlias生成（Annotatedメタデータ付き）
-    if ir.frames or ir.enums or ir.pydantic_models:
-        type_aliases_path = app_root / "types.py"
-        generate_all_type_aliases(ir, type_aliases_path)
+def _generate_generator_modules(ir: SpecIR, app_root: Path) -> None:
+    """Generate generator function modules."""
+    if not ir.generators:
+        return
+
+    generator_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
+    for generator in ir.generators:
+        file_path = generator.file_path or "generators/data_generators.py"
+        imports_generator: set[str] = set()
+        func_code = _generate_generator_function(generator, ir, imports_generator)
+
+        if file_path not in generator_functions_by_file:
+            generator_functions_by_file[file_path] = []
+        generator_functions_by_file[file_path].append((func_code, imports_generator))
+
+    for file_path, functions_with_imports in generator_functions_by_file.items():
+        relative_path = _strip_apps_prefix(Path(file_path))
+        output_path = app_root / relative_path
+
+        imports_generator_global: set[str] = set()
+        function_codes = []
+        for func_code, imports_local in functions_with_imports:
+            imports_generator_global.update(imports_local)
+            function_codes.append(func_code)
+
+        _write_module_file(
+            output_path,
+            "Generator functions\n\nこのファイルは spectool が自動生成しました。",
+            imports_generator_global,
+            function_codes,
+        )
+
+
+def _generate_enum_module(ir: SpecIR, app_root: Path) -> None:
+    """Generate enum module."""
+    if not ir.enums:
+        return
+
+    imports_enums: set[str] = {"from enum import Enum"}
+    enum_sections = []
+
+    for enum in ir.enums:
+        enum_code = _generate_enum_class(enum)
+        enum_sections.append(enum_code)
+
+    enums_path = app_root / "models" / "enums.py"
+    _write_module_file(
+        enums_path,
+        "Enum definitions\n\nこのファイルは spectool が自動生成しました。",
+        imports_enums,
+        enum_sections,
+    )
+
+
+def _generate_pydantic_model_module(ir: SpecIR, app_root: Path) -> None:
+    """Generate Pydantic model module."""
+    if not ir.pydantic_models:
+        return
+
+    imports_models: set[str] = {"from pydantic import BaseModel"}
+    model_sections = []
+
+    for model in ir.pydantic_models:
+        model_code = _generate_pydantic_model(model)
+        model_sections.append(model_code)
+
+    models_path = app_root / "models" / "models.py"
+    _write_module_file(
+        models_path,
+        "Pydantic Model definitions\n\nこのファイルは spectool が自動生成しました。",
+        imports_models,
+        model_sections,
+    )
+
+
+def _generate_pandera_schemas(ir: SpecIR, app_root: Path) -> None:
+    """Generate Pandera schema module."""
+    if not ir.frames:
+        return
+
+    schema_path = app_root / "schemas" / "dataframe_schemas.py"
+    generate_pandera_schemas(ir, schema_path)
+
+
+def _generate_type_aliases(ir: SpecIR, app_root: Path) -> None:
+    """Generate TypeAlias module with Annotated metadata."""
+    if not (ir.frames or ir.enums or ir.pydantic_models):
+        return
+
+    type_aliases_path = app_root / "types.py"
+    generate_all_type_aliases(ir, type_aliases_path)
+
+
+def _strip_apps_prefix(file_path: Path) -> Path:
+    """Remove 'apps/' prefix from file path if present."""
+    if file_path.parts and file_path.parts[0] == "apps":
+        return Path(*file_path.parts[1:])
+    return file_path

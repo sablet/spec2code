@@ -75,7 +75,7 @@ def _render_column_field(col: ColumnRule) -> str:
         check_type = check.get("type")
         check_value = check.get("value")
 
-        if check_type in ("ge", "le", "gt", "lt"):
+        if check_type in {"ge", "le", "gt", "lt"}:
             field_args.append(f"{check_type}={check_value}")
         elif check_type == "isin":
             field_args.append(f"isin={check_value}")
@@ -183,7 +183,8 @@ if __name__ == "__main__":
     import sys
     from spectool.spectool.core.engine.loader import load_spec
 
-    if len(sys.argv) < 3:
+    MIN_ARGS = 3
+    if len(sys.argv) < MIN_ARGS:
         print("Usage: python -m spectool.backends.py_validators <spec.yaml> -o <output.py>")
         sys.exit(1)
 

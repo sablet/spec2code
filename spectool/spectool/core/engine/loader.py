@@ -366,10 +366,7 @@ def _load_generator_specs(generators_data: dict[str, Any] | list[dict[str, Any]]
     generators = []
 
     # dictまたはlistの両方をサポート
-    if isinstance(generators_data, dict):
-        items = generators_data.values()
-    else:
-        items = generators_data
+    items = generators_data.values() if isinstance(generators_data, dict) else generators_data
 
     for gen_data in items:
         if not isinstance(gen_data, dict):
