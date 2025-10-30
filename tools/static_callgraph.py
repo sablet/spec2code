@@ -526,8 +526,16 @@ def main() -> None:
     parser.add_argument(
         "--entry",
         action="append",
-        default=["main"],
-        help="Entry symbol(s) for reachability (default: module 'main'). Use fully qualified names, e.g. 'main.main'.",
+        default=[
+            "main",
+            "main.spectool_main",
+            "main.SpectoolCLI.validate",
+            "main.SpectoolCLI.gen",
+            "main.SpectoolCLI.validate_integrity",
+            "main.SpectoolCLI.run",
+            "main.SpectoolCLI.version",
+        ],
+        help="Entry symbol(s) for reachability (default: module 'main' and SpectoolCLI methods). Use fully qualified names, e.g. 'main.main'.",
     )
     parser.add_argument(
         "--include-kinds",

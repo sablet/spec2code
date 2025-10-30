@@ -16,7 +16,11 @@ import fire
 
 from spectool.spectool.core.engine.loader import load_spec
 from spectool.spectool.core.engine.normalizer import normalize_ir
-from spectool.spectool.core.engine.validate import validate_ir
+from spectool.spectool.core.engine.validate import validate_ir, validate_spec
+from spectool.spectool.core.engine.integrity import IntegrityValidator
+from spectool.spectool.core.engine.dag_runner import DAGRunner
+from spectool.spectool.core.engine.config_runner import ConfigRunner
+from spectool.spectool.backends.py_skeleton import generate_skeleton
 from spectool.spectool.backends.py_code import (
     generate_dataframe_aliases,
     generate_models_file,
@@ -28,130 +32,6 @@ __version__ = "2.0.0-alpha"
 
 class SpectoolCLI:
     """Spectool - Spec2Code Next Generation CLI"""
-
-    def _validate_ir_with_details(self, ir, skip_impl_check: bool = False):
-        """Validate IR with detailed step-by-step output.
-
-        Returns:
-            List of all errors collected
-        """
-        from spectool.spectool.core.engine.validate import (
-            _validate_dataframe_specs,
-            _validate_check_specs,
-            _validate_transform_specs,
-            _validate_dag_stage_specs,
-            _validate_type_references,
-        )
-
-        all_errors = []
-
-        # 1. DataFrame definitions
-        print("  🔍 Validating DataFrame definitions...")
-        errors = _validate_dataframe_specs(ir)
-        error_messages = set(errors)
-        for frame in ir.frames:
-            # Check if this frame has any errors
-            has_error = any(f"DataFrame '{frame.id}'" in err for err in error_messages)
-            if has_error:
-                # Display errors for this frame
-                for error in errors:
-                    if f"DataFrame '{frame.id}'" in error:
-                        print(f"    ⚠️  {error}")
-            else:
-                print(f"    ✅ DataFrame '{frame.id}': schema is valid")
-        all_errors.extend(errors)
-        success_count = len(ir.frames) - len([e for e in errors if "DataFrame" in e])
-        print(f"    📊 {success_count} of {len(ir.frames)} DataFrame(s) validated")
-
-        # 2. Check definitions
-        print("  🔍 Validating Check definitions...")
-        errors = _validate_check_specs(ir)
-        error_messages = set(errors)
-        for check in ir.checks:
-            has_error = any(f"Check '{check.id}'" in err for err in error_messages)
-            if has_error:
-                for error in errors:
-                    if f"Check '{check.id}'" in error:
-                        print(f"    ⚠️  {error}")
-            else:
-                print(f"    ✅ Check '{check.id}': definition is valid")
-        all_errors.extend(errors)
-        success_count = len(ir.checks) - len(errors)
-        print(f"    📊 {success_count} of {len(ir.checks)} Check(s) validated")
-
-        # 3. Transform definitions
-        print("  🔍 Validating Transform definitions...")
-        errors = _validate_transform_specs(ir)
-        error_messages = set(errors)
-        for transform in ir.transforms:
-            has_error = any(f"Transform '{transform.id}'" in err for err in error_messages)
-            if has_error:
-                for error in errors:
-                    if f"Transform '{transform.id}'" in error:
-                        print(f"    ⚠️  {error}")
-            else:
-                print(f"    ✅ Transform '{transform.id}': definition is valid")
-        all_errors.extend(errors)
-        success_count = len(ir.transforms) - len(
-            [
-                f"Transform '{t.id}'"
-                for t in ir.transforms
-                if any(f"Transform '{t.id}'" in err for err in error_messages)
-            ]
-        )
-        print(f"    📊 {success_count} of {len(ir.transforms)} Transform(s) validated")
-
-        # 4. DAG Stage definitions
-        if ir.dag_stages:
-            print("  🔍 Validating DAG Stage definitions...")
-            errors = _validate_dag_stage_specs(ir)
-            error_messages = set(errors)
-            for stage in ir.dag_stages:
-                has_error = any(f"DAG Stage '{stage.stage_id}'" in err for err in error_messages)
-                if has_error:
-                    for error in errors:
-                        if f"DAG Stage '{stage.stage_id}'" in error:
-                            print(f"    ⚠️  {error}")
-                else:
-                    print(f"    ✅ DAG Stage '{stage.stage_id}': configuration is valid")
-            all_errors.extend(errors)
-            success_count = len(ir.dag_stages) - len(errors)
-            print(f"    📊 {success_count} of {len(ir.dag_stages)} DAG Stage(s) validated")
-
-        # 5. Type references (skip implementation checks if requested)
-        if not skip_impl_check:
-            print("  🔍 Validating implementation imports...")
-            errors = _validate_type_references(ir, skip_impl_check=False)
-            error_messages = set(errors)
-
-            # Check implementations
-            for check in ir.checks:
-                if check.impl:
-                    has_error = any(f"Check '{check.id}'" in err for err in error_messages)
-                    if has_error:
-                        for error in errors:
-                            if f"Check '{check.id}'" in error:
-                                print(f"    ⚠️  {error}")
-                    else:
-                        print(f"    ✅ Check '{check.id}': implementation found")
-
-            # Transform implementations
-            for transform in ir.transforms:
-                if transform.impl:
-                    has_error = any(f"Transform '{transform.id}'" in err for err in error_messages)
-                    if has_error:
-                        for error in errors:
-                            if f"Transform '{transform.id}'" in error:
-                                print(f"    ⚠️  {error}")
-                    else:
-                        print(f"    ✅ Transform '{transform.id}': implementation found")
-
-            all_errors.extend(errors)
-            total_impls = len([c for c in ir.checks if c.impl]) + len([t for t in ir.transforms if t.impl])
-            success_count = total_impls - len(errors)
-            print(f"    📊 {success_count} of {total_impls} implementation(s) found")
-
-        return all_errors
 
     def validate(self, spec_file: str, debug: bool = False) -> None:
         """Validate spec file for correctness.
@@ -176,15 +56,17 @@ class SpectoolCLI:
             normalized = normalize_ir(ir)
             print("✅ Normalization complete")
 
-            # Validate with detailed output (skip implementation checks)
+            # Validate IR
             print("🔍 Validating IR...")
-            errors = self._validate_ir_with_details(normalized, skip_impl_check=True)
+            errors = validate_ir(normalized, skip_impl_check=True)
 
             if errors:
-                print(f"\n❌ Validation failed with {len(errors)} error(s)")
+                print(f"\n❌ Validation failed with {len(errors)} error(s):")
+                for error in errors:
+                    print(f"  ⚠️  {error}")
                 sys.exit(1)
 
-            print("\n✅ All validations passed")
+            print("✅ All validations passed")
 
         except Exception as e:
             print(f"❌ Error: {e}")
@@ -195,11 +77,11 @@ class SpectoolCLI:
             sys.exit(1)
 
     def gen(self, spec_file: str, output_dir: str | None = None, debug: bool = False) -> None:
-        """Generate code from spec file.
+        """Generate skeleton code from spec file.
 
         Args:
             spec_file: Path to spec YAML file
-            output_dir: Output directory (default: apps/<project-name>/datatypes/)
+            output_dir: Output directory (default: current directory, generates apps/<project-name>/)
             debug: Enable debug output
         """
         spec_path = Path(spec_file)
@@ -211,18 +93,21 @@ class SpectoolCLI:
             # Load spec
             print(f"📖 Loading spec: {spec_path}")
             ir = load_spec(str(spec_path))
-            print(f"✅ Loaded {len(ir.frames)} DataFrames, {len(ir.transforms)} Transforms")
+            print(f"✅ Loaded {len(ir.frames)} DataFrames, {len(ir.transforms)} Transforms, {len(ir.checks)} Checks")
 
             # Normalize
             print("🔄 Normalizing IR...")
             normalized = normalize_ir(ir)
             print("✅ Normalization complete")
 
-            # Validate with detailed output (skip implementation checks for gen)
+            # Validate IR (skip implementation checks for gen)
             print("🔍 Validating IR...")
-            errors = self._validate_ir_with_details(normalized, skip_impl_check=True)
+            errors = validate_ir(normalized, skip_impl_check=True)
             if errors:
-                print(f"\n⚠️  Found {len(errors)} validation warnings (continuing with code generation...)\n")
+                print(f"\n⚠️  Found {len(errors)} validation warnings:")
+                for error in errors:
+                    print(f"  ⚠️  {error}")
+                print("Continuing with code generation...\n")
             else:
                 print("✅ All validations passed")
 
@@ -230,33 +115,26 @@ class SpectoolCLI:
             if output_dir:
                 out_path = Path(output_dir)
             else:
-                # Default: apps/<project-name>/datatypes/
-                project_name = normalized.meta.name if normalized.meta else "generated-project"
-                out_path = Path("apps") / project_name / "datatypes"
+                # Default: current directory (will generate apps/<project-name>/)
+                out_path = Path(".")
 
-            out_path.mkdir(parents=True, exist_ok=True)
             print(f"📁 Output directory: {out_path}")
 
-            # Generate models.py
-            print("🔨 Generating models.py...")
-            models_path = out_path / "models.py"
-            generate_models_file(normalized, models_path)
-            print(f"  ✅ {models_path}")
+            # Generate complete skeleton using generate_skeleton
+            print("🔨 Generating skeleton code...")
+            generate_skeleton(normalized, out_path)
 
-            # Generate type_aliases.py
-            print("🔨 Generating type_aliases.py...")
-            aliases_path = out_path / "type_aliases.py"
-            generate_dataframe_aliases(normalized, aliases_path)
-            print(f"  ✅ {aliases_path}")
+            project_name = normalized.meta.name if normalized.meta else "generated-project"
+            app_root = out_path / "apps" / project_name
 
-            # Generate schemas.py
-            print("🔨 Generating schemas.py...")
-            schemas_path = out_path / "schemas.py"
-            generate_pandera_schemas(normalized, schemas_path)
-            print(f"  ✅ {schemas_path}")
-
-            print("\n✅ Code generation complete!")
-            print(f"   Generated files in: {out_path}")
+            print(f"\n✅ Skeleton generation complete!")
+            print(f"   Generated project in: {app_root}")
+            print(f"   Structure:")
+            print(f"     - checks/     (validation functions)")
+            print(f"     - transforms/ (processing functions)")
+            print(f"     - generators/ (data generator functions)")
+            print(f"     - models/     (Pydantic models)")
+            print(f"     - schemas/    (Pandera validation schemas)")
 
         except Exception as e:
             print(f"❌ Error: {e}")
@@ -291,45 +169,175 @@ class SpectoolCLI:
 
             # Check if generated directory exists
             project_name = normalized.meta.name if normalized.meta else "generated-project"
-            datatypes_dir = Path("apps") / project_name / "datatypes"
+            app_root = Path("apps") / project_name
 
             print("🔍 Checking generated code...")
-            print(f"  📁 Expected directory: {datatypes_dir}")
+            print(f"  📁 Expected directory: {app_root}")
 
-            if not datatypes_dir.exists():
+            if not app_root.exists():
                 print(f"    ❌ Directory not found")
                 print("\n❌ Error: Generated code directory not found")
                 print("   Run 'spectool gen' first to generate code.")
                 sys.exit(1)
             print(f"    ✅ Directory exists")
 
-            # Check for required files
-            print("  🔍 Checking generated files...")
-            required_files = ["models.py", "type_aliases.py", "schemas.py"]
-            missing_files = []
+            # Check for required directories
+            print("  🔍 Checking generated structure...")
+            required_dirs = ["checks", "transforms", "generators", "models", "schemas"]
+            missing_dirs = []
 
-            for filename in required_files:
-                file_path = datatypes_dir / filename
-                if file_path.exists():
-                    print(f"    ✅ {filename}")
+            for dirname in required_dirs:
+                dir_path = app_root / dirname
+                if dir_path.exists():
+                    print(f"    ✅ {dirname}/")
                 else:
-                    print(f"    ❌ {filename} (missing)")
-                    missing_files.append(filename)
+                    print(f"    ⚠️  {dirname}/ (missing, may not be needed)")
 
-            if missing_files:
-                print(f"\n❌ Error: Missing generated files: {', '.join(missing_files)}")
-                sys.exit(1)
+            if missing_dirs:
+                print(f"\n⚠️  Warning: Some directories are missing: {', '.join(missing_dirs)}")
+                print("   This may be expected if your spec doesn't use all features.")
 
-            # Validate against spec
+            # Validate against spec using IntegrityValidator
             print("  🔍 Validating implementation integrity...")
-            errors = self._validate_ir_with_details(normalized, skip_impl_check=False)
+            validator = IntegrityValidator(normalized)
+            result = validator.validate_integrity()
 
-            if errors:
-                print(f"\n❌ Integrity validation failed with {len(errors)} error(s)")
+            total_errors = sum(len(errors) for errors in result.values())
+            if total_errors > 0:
+                print(f"\n❌ Integrity validation failed with {total_errors} error(s)")
+                for category, errors in result.items():
+                    if errors:
+                        print(f"\n  {category}:")
+                        for error in errors:
+                            print(f"    ⚠️  {error}")
                 sys.exit(1)
 
             print("\n✅ All integrity checks passed")
             print("   All required files exist and match spec")
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            if debug:
+                import traceback
+
+                traceback.print_exc()
+            sys.exit(1)
+
+    def run(
+        self,
+        spec_file: str,
+        config: str | None = None,
+        initial_data: str | None = None,
+        debug: bool = False,
+    ) -> None:
+        """Execute DAG pipeline defined in spec.
+
+        Args:
+            spec_file: Path to spec YAML file (required)
+            config: Path to config YAML file (optional, for parameter override)
+            initial_data: Path to initial data file (JSON format, optional)
+            debug: Enable debug output
+        """
+        spec_path = Path(spec_file)
+        if not spec_path.exists():
+            print(f"❌ Error: Spec file not found: {spec_path}")
+            sys.exit(1)
+
+        try:
+            if config:
+                # Config-driven execution
+                config_path = Path(config)
+                if not config_path.exists():
+                    print(f"❌ Error: Config file not found: {config_path}")
+                    sys.exit(1)
+
+                print(f"📖 Loading config: {config_path}")
+                print(f"📖 Base spec: {spec_path}")
+
+                runner = ConfigRunner(str(config_path))
+                print(f"✅ Loaded config: {runner.config.meta.config_name}")
+
+                # Validate config
+                print("🔍 Validating config...")
+                validation_result = runner.validate(check_implementations=True)
+                print("✅ Config validation passed")
+
+                # Show execution plan
+                execution_plan = validation_result["execution_plan"]
+                print(f"\n📋 Execution plan ({len(execution_plan)} step(s)):")
+                for idx, step in enumerate(execution_plan, start=1):
+                    print(f"  {idx}. Stage: {step['stage_id']}")
+                    print(f"     Transform: {step['transform_id']}")
+                    if step["params"]:
+                        print(f"     Params: {step['params']}")
+
+                # Load initial data
+                if initial_data:
+                    import json
+
+                    initial_data_path = Path(initial_data)
+                    if not initial_data_path.exists():
+                        print(f"❌ Error: Initial data file not found: {initial_data_path}")
+                        sys.exit(1)
+
+                    with open(initial_data_path) as f:
+                        data = json.load(f)
+                    print(f"\n📊 Loaded initial data from: {initial_data_path}")
+                else:
+                    print("\n⚠️  No initial data provided (use --initial-data to specify)")
+                    print("   Using empty dict as initial data")
+                    data = {}
+
+                # Execute
+                print("\n🚀 Executing DAG pipeline...")
+                result = runner.run(data)
+                print("\n✅ Execution complete!")
+                print(f"📊 Result: {result}")
+
+            else:
+                # Spec-driven execution (using default_transform_id in dag_stages)
+                print(f"📖 Loading spec: {spec_path}")
+                ir = load_spec(str(spec_path))
+                print(f"✅ Loaded {len(ir.transforms)} Transforms, {len(ir.dag_stages)} DAG stages")
+
+                # Normalize
+                print("🔄 Normalizing IR...")
+                normalized = normalize_ir(ir)
+                print("✅ Normalization complete")
+
+                if not normalized.dag_stages:
+                    print("\n❌ Error: No dag_stages defined in spec")
+                    print("   Either define dag_stages in spec or use --config to specify execution")
+                    sys.exit(1)
+
+                # Build DAG runner
+                print("🔍 Building DAG execution plan...")
+                runner = DAGRunner(normalized)
+                execution_order = runner.get_execution_order()
+                print(f"✅ Execution order: {[s.stage_id for s in execution_order]}")
+
+                # Load initial data
+                if initial_data:
+                    import json
+
+                    initial_data_path = Path(initial_data)
+                    if not initial_data_path.exists():
+                        print(f"❌ Error: Initial data file not found: {initial_data_path}")
+                        sys.exit(1)
+
+                    with open(initial_data_path) as f:
+                        data = json.load(f)
+                    print(f"\n📊 Loaded initial data from: {initial_data_path}")
+                else:
+                    print("\n⚠️  No initial data provided (use --initial-data to specify)")
+                    print("   Using empty dict as initial data")
+                    data = {}
+
+                # Execute
+                print("\n🚀 Executing DAG pipeline...")
+                result = runner.run_dag(data)
+                print("\n✅ Execution complete!")
+                print(f"📊 Result: {result}")
 
         except Exception as e:
             print(f"❌ Error: {e}")
