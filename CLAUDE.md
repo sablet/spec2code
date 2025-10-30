@@ -12,6 +12,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Core principle: **Specification as Source of Truth**
 
+## Migration Notes
+
+**🚧 Current Status: Migrating from spec2code to spectool**
+
+This project is in a transitional phase. If you need to review the original implementation:
+
+```bash
+git diff spec2code_v1 -- packages/spec2code/
+```
+
+Tag reference: `spec2code_v1` (commit: e3015d1)
+
 ## Development Commands
 
 ### Package Management

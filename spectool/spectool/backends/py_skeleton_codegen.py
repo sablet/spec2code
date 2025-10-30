@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from spectool.spectool.core.base.ir import ParameterSpec, SpecIR, TransformSpec
+from spectool.spectool.core.base.ir import FrameSpec, ParameterSpec, SpecIR, TransformSpec
 
 
 def extract_function_name(impl: str) -> str:
@@ -22,6 +22,134 @@ def extract_function_name(impl: str) -> str:
     return impl
 
 
+def _add_type_alias_imports(imports: set[str] | None, app_name: str, type_alias_id: str, target: str) -> None:
+    """TypeAlias用のインポートを追加"""
+    if imports is None:
+        return
+    imports.add(f"from apps.{app_name}.types import {type_alias_id}")
+    if target and "pandas:" in target:
+        imports.add("import pandas as pd")
+
+
+def _add_generic_imports(imports: set[str] | None, app_name: str, generic_id: str) -> None:
+    """Generic用のインポートを追加"""
+    if imports is not None:
+        imports.add(f"from apps.{app_name}.types import {generic_id}")
+
+
+def _add_enum_imports(imports: set[str] | None, app_name: str, enum_id: str) -> None:
+    """Enum用のインポートを追加"""
+    if imports is not None:
+        imports.add(f"from apps.{app_name}.models.enums import {enum_id}")
+
+
+def _add_model_imports(imports: set[str] | None, app_name: str, model_id: str) -> None:
+    """Pydanticモデル用のインポートを追加"""
+    if imports is not None:
+        imports.add(f"from apps.{app_name}.models.models import {model_id}")
+
+
+def _resolve_dataframe_fallback(frame: FrameSpec, imports: set[str] | None) -> str:
+    """DataFrame型のフォールバック解決（TypeAliasが定義されていない場合）"""
+    if imports is not None:
+        imports.add("import pandas as pd")
+
+    if frame.check_functions:
+        if imports is not None:
+            imports.add("from typing import Annotated")
+            imports.add("from spectool.spectool.core.base.meta_types import Check")
+        check_refs = ", ".join(f'Check["{cf}"]' for cf in frame.check_functions)
+        return f"Annotated[pd.DataFrame, {check_refs}]"
+    return "pd.DataFrame"
+
+
+def _search_in_type_aliases(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
+    """TypeAliasコレクションから検索"""
+    for type_alias in ir.type_aliases:
+        if type_alias.id == type_ref:
+            target = type_alias.type_def.get("target", "")
+            _add_type_alias_imports(imports, app_name, type_alias.id, target)
+            return type_alias.id
+    return None
+
+
+def _search_in_generics(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
+    """Genericコレクションから検索"""
+    for generic in ir.generics:
+        if generic.id == type_ref:
+            _add_generic_imports(imports, app_name, generic.id)
+            return generic.id
+    return None
+
+
+def _search_in_enums(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
+    """Enumコレクションから検索"""
+    for enum in ir.enums:
+        if enum.id == type_ref:
+            _add_enum_imports(imports, app_name, enum.id)
+            return enum.id
+    return None
+
+
+def _search_in_models(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
+    """Pydanticモデルコレクションから検索"""
+    for model in ir.pydantic_models:
+        if model.id == type_ref:
+            _add_model_imports(imports, app_name, model.id)
+            return model.id
+    return None
+
+
+def _search_in_frames(type_ref: str, ir: SpecIR, imports: set[str] | None) -> str | None:
+    """DataFrameコレクションから検索"""
+    for frame in ir.frames:
+        if frame.id == type_ref:
+            return _resolve_dataframe_fallback(frame, imports)
+    return None
+
+
+def _find_type_in_collections(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
+    """型参照をコレクション内で検索して解決
+
+    Returns:
+        解決された型文字列、または見つからない場合はNone
+    """
+    # 優先順位に従って検索
+    return (
+        _search_in_type_aliases(type_ref, ir, app_name, imports)
+        or _search_in_generics(type_ref, ir, app_name, imports)
+        or _search_in_enums(type_ref, ir, app_name, imports)
+        or _search_in_models(type_ref, ir, app_name, imports)
+        or _search_in_frames(type_ref, ir, imports)
+    )
+
+
+def _resolve_type_ref(type_ref: str, ir: SpecIR, imports: set[str] | None = None) -> str:
+    """型参照を解決して型アノテーション文字列を生成
+
+    Args:
+        type_ref: 型参照（datatype_ref または native）
+        ir: SpecIR（型参照解決用）
+        imports: インポート文を蓄積するセット（指定時のみimportを追加）
+
+    Returns:
+        型アノテーション文字列
+    """
+    # ネイティブ型の場合
+    if "builtins:" in type_ref:
+        return type_ref.split(":")[-1]
+
+    app_name = ir.meta.name.replace("-", "_") if ir.meta else "app"
+
+    # 各種型コレクションから検索
+    resolved = _find_type_in_collections(type_ref, ir, app_name, imports)
+    if resolved:
+        return resolved
+
+    # 型が見つからない場合はそのまま返す
+    return type_ref
+
+
 def resolve_type_annotation(param: ParameterSpec, ir: SpecIR, imports: set[str] | None = None) -> str:
     """パラメータから型アノテーション文字列を生成
 
@@ -33,61 +161,7 @@ def resolve_type_annotation(param: ParameterSpec, ir: SpecIR, imports: set[str] 
     Returns:
         型アノテーション文字列（例: "Annotated[pd.DataFrame, Check[...]]"）
     """
-    type_ref = param.type_ref
-    app_name = ir.meta.name.replace("-", "_") if ir.meta else "app"
-
-    # ネイティブ型の場合
-    if "builtins:" in type_ref:
-        return type_ref.split(":")[-1]
-
-    # TypeAliasの場合（最優先：types.pyで定義されたAnnotated型を使用）
-    for type_alias in ir.type_aliases:
-        if type_alias.id == type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.types import {type_alias.id}")
-                # TypeAliasがpandas:DataFrameを参照している場合、pandasもimport
-                target = type_alias.type_def.get("target", "")
-                if target and "pandas:" in target:
-                    imports.add("import pandas as pd")
-            return type_alias.id
-
-    # Genericの場合（types.pyで定義されたGeneric型）
-    for generic in ir.generics:
-        if generic.id == type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.types import {generic.id}")
-            return generic.id
-
-    # Enum型の場合
-    for enum in ir.enums:
-        if enum.id == type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.models.enums import {enum.id}")
-            return enum.id
-
-    # Pydanticモデルの場合
-    for model in ir.pydantic_models:
-        if model.id == type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.models.models import {model.id}")
-            return model.id
-
-    # DataFrame型の場合（TypeAliasが定義されていない場合のフォールバック）
-    for frame in ir.frames:
-        if frame.id == type_ref:
-            if imports is not None:
-                imports.add("import pandas as pd")
-            # Check関数があればAnnotatedで包む
-            if frame.check_functions:
-                if imports is not None:
-                    imports.add("from typing import Annotated")
-                    imports.add("from spectool.spectool.core.base.meta_types import Check")
-                check_refs = ", ".join(f'Check["{cf}"]' for cf in frame.check_functions)
-                return f"Annotated[pd.DataFrame, {check_refs}]"
-            return "pd.DataFrame"
-
-    # 型が見つからない場合はそのまま返す
-    return type_ref
+    return _resolve_type_ref(param.type_ref, ir, imports)
 
 
 def render_parameter_signature(param: ParameterSpec, ir: SpecIR, imports: set[str] | None = None) -> str:
@@ -131,66 +205,7 @@ def resolve_transform_return_type(transform: TransformSpec, ir: SpecIR, imports:
             imports.add("from typing import Any")
         return "Any"
 
-    return_type_ref = transform.return_type_ref
-    app_name = ir.meta.name.replace("-", "_") if ir.meta else "app"
-
-    # TypeAliasの場合（最優先：types.pyで定義されたAnnotated型を使用）
-    for type_alias in ir.type_aliases:
-        if type_alias.id == return_type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.types import {type_alias.id}")
-                # TypeAliasがpandas:DataFrameを参照している場合、pandasもimport
-                target = type_alias.type_def.get("target", "")
-                if target and "pandas:" in target:
-                    imports.add("import pandas as pd")
-            return type_alias.id
-
-    # Genericの場合（types.pyで定義されたGeneric型）
-    for generic in ir.generics:
-        if generic.id == return_type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.types import {generic.id}")
-            return generic.id
-
-    # Enum型の場合
-    for enum in ir.enums:
-        if enum.id == return_type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.models.enums import {enum.id}")
-            return enum.id
-
-    # Pydanticモデルの場合
-    for model in ir.pydantic_models:
-        if model.id == return_type_ref:
-            if imports is not None:
-                imports.add(f"from apps.{app_name}.models.models import {model.id}")
-            return model.id
-
-    # DataFrame型の場合（TypeAliasが定義されていない場合のフォールバック）
-    for frame in ir.frames:
-        if frame.id == return_type_ref:
-            if imports is not None:
-                imports.add("import pandas as pd")
-            if frame.check_functions:
-                if imports is not None:
-                    imports.add("from typing import Annotated")
-                    imports.add("from spectool.spectool.core.base.meta_types import Check")
-                check_refs = ", ".join(f'Check["{cf}"]' for cf in frame.check_functions)
-                return f"Annotated[pd.DataFrame, {check_refs}]"
-            return "pd.DataFrame"
-
-    # 型が見つからない場合はそのまま返す
-    return return_type_ref
-
-
-def update_imports_for_transform(imports: set[str], return_type: str, params: list[str]) -> None:
-    """Update imports based on return type and parameters."""
-    if "Annotated" in return_type or any("Annotated" in p for p in params):
-        imports.add("from typing import Annotated")
-    if "pd.DataFrame" in return_type or any("pd.DataFrame" in p for p in params):
-        imports.add("import pandas as pd")
-    if "Check" in return_type or any("Check" in p for p in params):
-        imports.add("from spectool.spectool.core.base.meta_types import Check")
+    return _resolve_type_ref(transform.return_type_ref, ir, imports)
 
 
 def build_transform_function_signature(

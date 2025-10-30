@@ -5,7 +5,6 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "fire>=0.7.1",
-    "jsonschema>=4.25.1",
     "networkx>=3.5",
     "pandas>=2.3.3",
     "pandera>=0.26.1",
@@ -22,7 +21,6 @@ dev = [
     "pylint>=4.0.2",
     "pytest>=8.4.2",
     "ruff>=0.9.0",
-    "types-jsonschema>=4.25.1.20251009",
     "types-networkx>=3.5.0.20251001",
     "types-pyyaml>=6.0.12.20250915",
     "vulture>=2.14",

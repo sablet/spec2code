@@ -12,7 +12,6 @@ from spectool.spectool.backends.py_skeleton_codegen import (
     extract_function_name,
     render_parameter_signature,
     resolve_transform_return_type,
-    update_imports_for_transform,
 )
 
 

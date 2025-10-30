@@ -24,19 +24,19 @@ def _resolve_generic_type(generic_def: dict) -> str:
         element_str = _resolve_type_from_def(element_type)
         return f"list[{element_str}]"
 
-    elif container == "dict":
+    if container == "dict":
         key_type = generic_def.get("key_type", {})
         value_type = generic_def.get("value_type", {})
         key_str = _resolve_type_from_def(key_type)
         value_str = _resolve_type_from_def(value_type)
         return f"dict[{key_str}, {value_str}]"
 
-    elif container == "set":
+    if container == "set":
         element_type = generic_def.get("element_type", {})
         element_str = _resolve_type_from_def(element_type)
         return f"set[{element_str}]"
 
-    elif container == "tuple":
+    if container == "tuple":
         elements = generic_def.get("elements", [])
         if elements:
             element_strs = [_resolve_type_from_def(elem) for elem in elements]
@@ -57,9 +57,9 @@ def _resolve_type_from_def(type_def: dict) -> str:
     """
     if "native" in type_def:
         return type_def["native"].split(":")[-1]
-    elif "datatype_ref" in type_def:
+    if "datatype_ref" in type_def:
         return type_def["datatype_ref"]
-    elif "generic" in type_def:
+    if "generic" in type_def:
         return _resolve_generic_type(type_def["generic"])
     return "Any"
 
