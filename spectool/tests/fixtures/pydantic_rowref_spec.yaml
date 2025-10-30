@@ -17,7 +17,7 @@ datatypes:
           nullable: false
         # timestampとstatusはPydanticモデルから推論される
         # metadataはオプショナルなので推論される
-    row_model: "apps.test-project.datatypes.models:TimeSeriesRow"
+    row_model: "spectool.tests.fixtures.test_models:TimeSeriesRow"
     generator_factory: "apps.generators:generate_timeseries"
     check_functions:
       - "apps.checks:validate_timeseries"
@@ -30,4 +30,4 @@ datatypes:
         dtype: datetime
         nullable: false
       columns: []  # 全てPydanticモデルから推論
-    row_model: "apps.test-project.datatypes.models:SensorDataRow"
+    row_model: "spectool.tests.fixtures.test_models:SensorDataRow"

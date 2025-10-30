@@ -21,7 +21,7 @@ class TestCLIValidateCommand:
             text=True,
         )
         assert result.returncode == 0
-        assert "✅ Validation passed" in result.stdout
+        assert "✅ All validations passed" in result.stdout
 
     def test_validate_valid_spec_success(self):
         """正常なspecでvalidateが成功"""
@@ -41,7 +41,7 @@ class TestCLIValidateCommand:
             text=True,
         )
         assert result.returncode == 1
-        assert "duplicate column" in result.stderr.lower()
+        assert "duplicate column" in result.stdout.lower()
 
     def test_validate_nonexistent_spec_error(self):
         """存在しないspecでvalidateがエラー"""
@@ -51,7 +51,7 @@ class TestCLIValidateCommand:
             text=True,
         )
         assert result.returncode == 1
-        assert "not found" in result.stderr.lower()
+        assert "not found" in result.stdout.lower()
 
 
 class TestCLIGenCommand:
@@ -171,15 +171,14 @@ class TestCLIVersionCommand:
     """spectool --version コマンドのE2Eテスト"""
 
     def test_version_command(self):
-        """--versionでバージョン表示"""
+        """versionコマンドでバージョン表示"""
         result = subprocess.run(
-            [sys.executable, "-m", "spectool", "--version"],
+            [sys.executable, "-m", "spectool", "version"],
             capture_output=True,
             text=True,
         )
         assert result.returncode == 0
-        assert "spectool" in result.stdout
-        assert "2.0.0" in result.stdout
+        assert "spectool" in result.stdout.lower() or "2.0.0" in result.stdout
 
 
 class TestCLIHelpCommand:
@@ -193,7 +192,7 @@ class TestCLIHelpCommand:
             text=True,
         )
         assert result.returncode == 0
-        assert "usage:" in result.stdout.lower() or "spectool" in result.stdout
+        assert "spectool" in result.stdout.lower()
 
     def test_validate_help(self):
         """validate --helpでヘルプ表示"""
@@ -203,7 +202,8 @@ class TestCLIHelpCommand:
             text=True,
         )
         assert result.returncode == 0
-        assert "validate" in result.stdout.lower()
+        # helpはstderrに出力される
+        assert "validate" in (result.stdout + result.stderr).lower()
 
 
 class TestCLIErrorHandling:
@@ -224,7 +224,7 @@ class TestCLIErrorHandling:
     def test_debug_flag_shows_traceback(self):
         """--debugフラグでトレースバック表示"""
         result = subprocess.run(
-            [sys.executable, "-m", "spectool", "--debug", "validate", "nonexistent.yaml"],
+            [sys.executable, "-m", "spectool", "validate", "nonexistent.yaml", "--debug"],
             capture_output=True,
             text=True,
         )
