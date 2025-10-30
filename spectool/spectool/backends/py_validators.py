@@ -25,7 +25,7 @@ def _pandera_dtype_string(dtype: str) -> str:
 def _render_imports() -> str:
     """必要なインポート文を返す"""
     imports = [
-        "import pandera as pa",
+        "import pandera.pandas as pa",
         "from pandera.typing import Index, Series",
         "import pandas as pd",
         "from typing import Any",

@@ -41,7 +41,7 @@ def test_generate_pandera_schemas_basic():
 
         # 基本的な構造の確認
         assert "class TestFrameSchema(pa.DataFrameModel):" in content
-        assert "import pandera as pa" in content
+        assert "import pandera.pandas as pa" in content
         assert "idx: Index[int]" in content
         assert "col1: Series[float]" in content
         assert "col2: Series[str]" in content

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from spectool.spectool.core.base.ir import (
     EnumSpec,
     FrameSpec,

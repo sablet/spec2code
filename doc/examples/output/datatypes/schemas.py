@@ -5,7 +5,7 @@
 FrameSpec（YAML内のdataframes定義）からPandera SchemaModelを生成します。
 """
 
-import pandera as pa
+import pandera.pandas as pa
 from pandera.typing import Index, Series
 import pandas as pd
 

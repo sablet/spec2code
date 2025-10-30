@@ -5,10 +5,13 @@ Exampleデータがschemaに適合しているかをPanderaを使って検証す
 
 from __future__ import annotations
 
-from spectool.spectool.core.base.ir import SpecIR
+from types import ModuleType
+from typing import Any
+
+from spectool.spectool.core.base.ir import FrameSpec, SpecIR
 
 
-def _build_pandera_schema(frame: Any, pa: Any) -> Any:  # noqa: ANN401
+def _build_pandera_schema(frame: FrameSpec, pa: ModuleType) -> Any:  # noqa: ANN401
     """FrameSpecからPanderaスキーマを構築
 
     Args:
@@ -38,7 +41,11 @@ def _build_pandera_schema(frame: Any, pa: Any) -> Any:  # noqa: ANN401
 
 
 def _validate_dataframe_against_schema(
-    example_id: str, input_data: dict, frame: Any, pd: Any, pa: Any  # noqa: ANN401
+    example_id: str,
+    input_data: dict,
+    frame: FrameSpec,
+    pd: ModuleType,
+    pa: ModuleType,
 ) -> str | None:
     """DataFrameをスキーマに対して検証
 
@@ -84,7 +91,7 @@ def validate_example_data(ir: SpecIR) -> list[str]:
 
     try:
         import pandas as pd
-        import pandera as pa
+        import pandera.pandas as pa
     except ImportError:
         # pandera/pandasがインストールされていない場合はスキップ
         return errors

@@ -6,12 +6,17 @@ Config YAMLがSpec定義に適合しているかを検証する。
 from __future__ import annotations
 
 import importlib
+import inspect
 import sys
 from pathlib import Path
 from typing import Any
 
-from spectool.spectool.core.base.ir import SpecIR
-from spectool.spectool.core.engine.config_model import ConfigSpec, StageExecution
+from spectool.spectool.core.base.ir import DAGStageSpec, SpecIR, TransformSpec
+from spectool.spectool.core.engine.config_model import (
+    ConfigSpec,
+    StageExecution,
+    TransformSelection,
+)
 from spectool.spectool.core.engine.config_validator_impl import (
     check_function_implementation,
     load_transform_signature,
@@ -30,7 +35,11 @@ class ConfigValidationError(Exception):
 
 
 def _validate_params_with_signature(
-    transform_id: str, impl: str, params: dict[str, Any], signature: Any, spec: SpecIR  # noqa: ANN401
+    transform_id: str,
+    impl: str,
+    params: dict[str, Any],
+    signature: inspect.Signature,
+    spec: SpecIR,
 ) -> list[str]:
     """シグネチャを使ってパラメータを検証
 
@@ -73,7 +82,10 @@ def _validate_params_with_signature(
 
 
 def _validate_params_with_spec(
-    transform_id: str, params: dict[str, Any], transform_def: Any, load_errors: list[str]  # noqa: ANN401
+    transform_id: str,
+    params: dict[str, Any],
+    transform_def: TransformSpec,
+    load_errors: list[str],
 ) -> list[str]:
     """Transform定義を使ってパラメータを検証
 
@@ -104,7 +116,7 @@ def _validate_transform_parameters(
     impl: str,
     params: dict[str, Any],
     spec: SpecIR,
-    transform_def: Any | None = None,  # noqa: ANN401
+    transform_def: TransformSpec | None = None,
 ) -> list[str]:
     """Transform関数のパラメータを検証
 
@@ -166,7 +178,7 @@ def _validate_selection_mode(stage_id: str, selection_mode: str, num_selected: i
     return errors
 
 
-def _merge_default_params(transform: Any, params: dict[str, Any]) -> dict[str, Any]:  # noqa: ANN401
+def _merge_default_params(transform: TransformSpec, params: dict[str, Any]) -> dict[str, Any]:
     """Transform定義のデフォルトパラメータをマージ
 
     Args:
@@ -184,8 +196,43 @@ def _merge_default_params(transform: Any, params: dict[str, Any]) -> dict[str, A
     return merged_params
 
 
+def _get_and_validate_transform(
+    transform_id: str,
+    params: dict[str, Any],
+    spec: SpecIR,
+    check_implementations: bool,
+) -> tuple[list[str], TransformSpec | None]:
+    """Transform定義を取得して検証
+
+    Args:
+        transform_id: Transform ID
+        params: パラメータ
+        spec: SpecIR
+        check_implementations: 実装チェック有効化
+
+    Returns:
+        (errors, transform): エラーとTransform定義（エラー時はNone）
+    """
+    errors: list[str] = []
+
+    # Transform定義を取得
+    transform = next((t for t in spec.transforms if t.id == transform_id), None)
+    if not transform:
+        errors.append(f"Transform '{transform_id}' not found in spec")
+        return errors, None
+
+    # パラメータ検証（実装チェック有効時のみ）
+    if check_implementations:
+        param_errors = _validate_transform_parameters(
+            transform_id, transform.impl, params, spec, transform_def=transform
+        )
+        errors.extend(param_errors)
+
+    return errors, transform
+
+
 def _validate_selection(
-    selection: Any,  # noqa: ANN401
+    selection: TransformSelection,
     stage_exec_id: str,
     candidate_ids: set[str],
     spec: SpecIR,
@@ -209,23 +256,17 @@ def _validate_selection(
     # Transform候補に含まれているか
     if transform_id not in candidate_ids:
         errors.append(
-            f"Stage '{stage_exec_id}': transform '{transform_id}' "
-            f"is not in candidates: {sorted(candidate_ids)}"
+            f"Stage '{stage_exec_id}': transform '{transform_id}' is not in candidates: {sorted(candidate_ids)}"
         )
         return errors, None
 
-    # Transform定義を取得
-    transform = next((t for t in spec.transforms if t.id == transform_id), None)
+    # Transform定義を取得して検証
+    validation_errors, transform = _get_and_validate_transform(
+        transform_id, selection.params, spec, check_implementations
+    )
+    errors.extend(validation_errors)
     if not transform:
-        errors.append(f"Transform '{transform_id}' not found in spec")
         return errors, None
-
-    # パラメータ検証（実装チェック有効時のみ）
-    if check_implementations:
-        param_errors = _validate_transform_parameters(
-            transform_id, transform.impl, selection.params, spec, transform_def=transform
-        )
-        errors.extend(param_errors)
 
     # デフォルトパラメータをマージ
     merged_params = _merge_default_params(transform, selection.params)
@@ -282,7 +323,9 @@ def _validate_stage_execution(
 
 
 def _auto_select_single_stage(
-    stage: Any, spec: SpecIR, check_implementations: bool  # noqa: ANN401
+    stage: DAGStageSpec,
+    spec: SpecIR,
+    check_implementations: bool,
 ) -> tuple[list[str], dict[str, Any] | None]:
     """単一ステージを自動選択
 
@@ -305,16 +348,11 @@ def _auto_select_single_stage(
 
     transform_id = stage.candidates[0]
 
-    # Transform定義を取得
-    transform = next((t for t in spec.transforms if t.id == transform_id), None)
+    # Transform定義を取得して検証
+    validation_errors, transform = _get_and_validate_transform(transform_id, {}, spec, check_implementations)
+    errors.extend(validation_errors)
     if not transform:
-        errors.append(f"Transform '{transform_id}' not found in spec")
         return errors, None
-
-    # パラメータ検証（実装チェック有効時のみ）
-    if check_implementations:
-        param_errors = _validate_transform_parameters(transform_id, transform.impl, {}, spec, transform_def=transform)
-        errors.extend(param_errors)
 
     # デフォルトパラメータを収集
     default_params = {}
