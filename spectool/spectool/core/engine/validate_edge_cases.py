@@ -102,6 +102,23 @@ def _validate_dag_stage_candidates(ir: SpecIR, all_datatype_ids: set[str]) -> li
     return errors
 
 
+def _check_datatype_has_check_functions(datatype: Any) -> str | None:  # noqa: ANN401
+    """データタイプにcheck関数が定義されているかチェック
+
+    Args:
+        datatype: データタイプ（Frame/Enum/PydanticModel/TypeAlias/Generic）
+
+    Returns:
+        警告メッセージ、または None
+    """
+    if not datatype.check_functions:
+        return (
+            f"DataType '{datatype.id}': no check functions defined. "
+            f"Consider adding check_functions for data validation."
+        )
+    return None
+
+
 def validate_datatype_checks(ir: SpecIR) -> list[str]:
     """DataTypeのcheck関数がゼロ件でないかチェック（警告）
 
@@ -113,45 +130,19 @@ def validate_datatype_checks(ir: SpecIR) -> list[str]:
     """
     warnings: list[str] = []
 
-    # FrameSpecのcheck_functionsをチェック
-    for frame in ir.frames:
-        if not frame.check_functions:
-            warnings.append(
-                f"DataType '{frame.id}': no check functions defined. "
-                f"Consider adding check_functions for data validation."
-            )
+    # 全てのデータタイプをまとめてチェック
+    all_datatypes = [
+        *ir.frames,
+        *ir.enums,
+        *ir.pydantic_models,
+        *ir.type_aliases,
+        *ir.generics,
+    ]
 
-    # EnumSpecのcheck_functionsをチェック
-    for enum in ir.enums:
-        if not enum.check_functions:
-            warnings.append(
-                f"DataType '{enum.id}': no check functions defined. "
-                f"Consider adding check_functions for data validation."
-            )
-
-    # PydanticModelSpecのcheck_functionsをチェック
-    for model in ir.pydantic_models:
-        if not model.check_functions:
-            warnings.append(
-                f"DataType '{model.id}': no check functions defined. "
-                f"Consider adding check_functions for data validation."
-            )
-
-    # TypeAliasSpecのcheck_functionsをチェック
-    for alias in ir.type_aliases:
-        if not alias.check_functions:
-            warnings.append(
-                f"DataType '{alias.id}': no check functions defined. "
-                f"Consider adding check_functions for data validation."
-            )
-
-    # GenericSpecのcheck_functionsをチェック
-    for generic in ir.generics:
-        if not generic.check_functions:
-            warnings.append(
-                f"DataType '{generic.id}': no check functions defined. "
-                f"Consider adding check_functions for data validation."
-            )
+    for datatype in all_datatypes:
+        warning = _check_datatype_has_check_functions(datatype)
+        if warning:
+            warnings.append(warning)
 
     return warnings
 

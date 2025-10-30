@@ -29,6 +29,76 @@ class ConfigValidationError(Exception):
     pass
 
 
+def _validate_params_with_signature(
+    transform_id: str, impl: str, params: dict[str, Any], signature: Any, spec: SpecIR  # noqa: ANN401
+) -> list[str]:
+    """シグネチャを使ってパラメータを検証
+
+    Args:
+        transform_id: Transform ID
+        impl: 実装パス
+        params: パラメータ
+        signature: 関数シグネチャ
+        spec: SpecIR
+
+    Returns:
+        エラーメッセージリスト
+    """
+    errors = []
+
+    # 実装の完全性をチェック（TODOのままではないか）
+    resolved_impl = resolve_impl_path(impl, spec)
+    try:
+        module_path, func_name = resolved_impl.rsplit(":", 1)
+        module = importlib.import_module(module_path)
+        func = getattr(module, func_name)
+        errors.extend(check_function_implementation(func, transform_id))
+    except (ImportError, AttributeError, ValueError):
+        # インポートエラーは既にload_transform_signatureで報告されているのでスキップ
+        pass
+
+    # 未知のパラメータをチェック
+    for param_name in params:
+        if param_name not in signature.parameters:
+            errors.append(f"Transform '{transform_id}': unknown parameter '{param_name}'")
+
+    # 型チェック
+    for param_name, param_value in params.items():
+        if param_name not in signature.parameters:
+            continue
+        param_spec = signature.parameters[param_name]
+        errors.extend(validate_parameter_type(transform_id, param_name, param_value, param_spec))
+
+    return errors
+
+
+def _validate_params_with_spec(
+    transform_id: str, params: dict[str, Any], transform_def: Any, load_errors: list[str]  # noqa: ANN401
+) -> list[str]:
+    """Transform定義を使ってパラメータを検証
+
+    Args:
+        transform_id: Transform ID
+        params: パラメータ
+        transform_def: Transform定義
+        load_errors: インポートエラー
+
+    Returns:
+        エラーメッセージリスト
+    """
+    errors = []
+    for param_name, param_value in params.items():
+        # パラメータ定義を検索
+        param_def = next((p for p in transform_def.parameters if p.name == param_name), None)
+        if not param_def:
+            errors.append(f"Transform '{transform_id}': unknown parameter '{param_name}'")
+            continue
+        # Spec定義から型を検証
+        errors.extend(validate_param_type_from_spec(transform_id, param_name, param_value, param_def))
+    # パラメータ型エラーがあればそれを返す、なければインポートエラーを返す
+    return errors if errors else load_errors
+
+
 def _validate_transform_parameters(
     transform_id: str,
     impl: str,
@@ -53,47 +123,11 @@ def _validate_transform_parameters(
 
     # 実装が存在する場合はシグネチャベースで検証
     if signature is not None:
-        errors = []
-
-        # 実装の完全性をチェック（TODOのままではないか）
-        # 関数を再度インポートして実装をチェック
-        resolved_impl = resolve_impl_path(impl, spec)
-        try:
-            module_path, func_name = resolved_impl.rsplit(":", 1)
-            module = importlib.import_module(module_path)
-            func = getattr(module, func_name)
-            errors.extend(check_function_implementation(func, transform_id))
-        except (ImportError, AttributeError, ValueError):
-            # インポートエラーは既にload_transform_signatureで報告されているのでスキップ
-            pass
-
-        # 未知のパラメータをチェック
-        for param_name in params:
-            if param_name not in signature.parameters:
-                errors.append(f"Transform '{transform_id}': unknown parameter '{param_name}'")
-
-        # 型チェック
-        for param_name, param_value in params.items():
-            if param_name not in signature.parameters:
-                continue
-            param_spec = signature.parameters[param_name]
-            errors.extend(validate_parameter_type(transform_id, param_name, param_value, param_spec))
-
-        return errors
+        return _validate_params_with_signature(transform_id, impl, params, signature, spec)
 
     # 実装が存在しない場合、Transform定義から検証（可能な場合）
     if transform_def is not None:
-        errors = []
-        for param_name, param_value in params.items():
-            # パラメータ定義を検索
-            param_def = next((p for p in transform_def.parameters if p.name == param_name), None)
-            if not param_def:
-                errors.append(f"Transform '{transform_id}': unknown parameter '{param_name}'")
-                continue
-            # Spec定義から型を検証
-            errors.extend(validate_param_type_from_spec(transform_id, param_name, param_value, param_def))
-        # パラメータ型エラーがあればそれを返す、なければインポートエラーを返す
-        return errors if errors else load_errors
+        return _validate_params_with_spec(transform_id, params, transform_def, load_errors)
 
     # 実装もTransform定義もない場合はインポートエラーを返す
     return load_errors
@@ -132,6 +166,80 @@ def _validate_selection_mode(stage_id: str, selection_mode: str, num_selected: i
     return errors
 
 
+def _merge_default_params(transform: Any, params: dict[str, Any]) -> dict[str, Any]:  # noqa: ANN401
+    """Transform定義のデフォルトパラメータをマージ
+
+    Args:
+        transform: Transform定義
+        params: ユーザー指定パラメータ
+
+    Returns:
+        マージされたパラメータ
+    """
+    merged_params = {}
+    for param_def in transform.parameters:
+        if param_def.default is not None and param_def.name not in params:
+            merged_params[param_def.name] = param_def.default
+    merged_params.update(params)
+    return merged_params
+
+
+def _validate_selection(
+    selection: Any,  # noqa: ANN401
+    stage_exec_id: str,
+    candidate_ids: set[str],
+    spec: SpecIR,
+    check_implementations: bool,
+) -> tuple[list[str], dict[str, Any] | None]:
+    """単一の選択を検証
+
+    Args:
+        selection: 選択設定
+        stage_exec_id: ステージ実行ID
+        candidate_ids: Transform候補IDセット
+        spec: SpecIR
+        check_implementations: 実装チェック有効化
+
+    Returns:
+        (errors, execution_entry): エラーと実行エントリ（エラー時はNone）
+    """
+    errors: list[str] = []
+    transform_id = selection.transform_id
+
+    # Transform候補に含まれているか
+    if transform_id not in candidate_ids:
+        errors.append(
+            f"Stage '{stage_exec_id}': transform '{transform_id}' "
+            f"is not in candidates: {sorted(candidate_ids)}"
+        )
+        return errors, None
+
+    # Transform定義を取得
+    transform = next((t for t in spec.transforms if t.id == transform_id), None)
+    if not transform:
+        errors.append(f"Transform '{transform_id}' not found in spec")
+        return errors, None
+
+    # パラメータ検証（実装チェック有効時のみ）
+    if check_implementations:
+        param_errors = _validate_transform_parameters(
+            transform_id, transform.impl, selection.params, spec, transform_def=transform
+        )
+        errors.extend(param_errors)
+
+    # デフォルトパラメータをマージ
+    merged_params = _merge_default_params(transform, selection.params)
+
+    # 実行計画エントリを作成
+    execution_entry = {
+        "stage_id": stage_exec_id,
+        "transform_id": transform_id,
+        "params": merged_params,
+    }
+
+    return errors, execution_entry
+
+
 def _validate_stage_execution(
     stage_exec: StageExecution,
     spec: SpecIR,
@@ -163,46 +271,65 @@ def _validate_stage_execution(
 
     # 各選択を検証
     for selection in stage_exec.selected:
-        transform_id = selection.transform_id
-
-        # Transform候補に含まれているか
-        if transform_id not in candidate_ids:
-            errors.append(
-                f"Stage '{stage_exec.stage_id}': transform '{transform_id}' "
-                f"is not in candidates: {sorted(candidate_ids)}"
-            )
-            continue
-
-        # Transform定義を取得
-        transform = next((t for t in spec.transforms if t.id == transform_id), None)
-        if not transform:
-            errors.append(f"Transform '{transform_id}' not found in spec")
-            continue
-
-        # パラメータ検証（実装チェック有効時のみ）
-        if check_implementations:
-            param_errors = _validate_transform_parameters(
-                transform_id, transform.impl, selection.params, spec, transform_def=transform
-            )
-            errors.extend(param_errors)
-
-        # デフォルトパラメータをマージ
-        merged_params = {}
-        for param_def in transform.parameters:
-            if param_def.default is not None and param_def.name not in selection.params:
-                merged_params[param_def.name] = param_def.default
-        merged_params.update(selection.params)
-
-        # 実行計画エントリを追加
-        execution_entries.append(
-            {
-                "stage_id": stage_exec.stage_id,
-                "transform_id": transform_id,
-                "params": merged_params,
-            }
+        selection_errors, execution_entry = _validate_selection(
+            selection, stage_exec.stage_id, candidate_ids, spec, check_implementations
         )
+        errors.extend(selection_errors)
+        if execution_entry:
+            execution_entries.append(execution_entry)
 
     return errors, execution_entries
+
+
+def _auto_select_single_stage(
+    stage: Any, spec: SpecIR, check_implementations: bool  # noqa: ANN401
+) -> tuple[list[str], dict[str, Any] | None]:
+    """単一ステージを自動選択
+
+    Args:
+        stage: DAGステージ
+        spec: SpecIR
+        check_implementations: 実装チェック有効化
+
+    Returns:
+        (errors, execution_entry): エラーと実行エントリ（エラー時はNone）
+    """
+    errors: list[str] = []
+
+    # singleモードは候補が1つであるべき
+    if len(stage.candidates) != 1:
+        errors.append(
+            f"Stage '{stage.stage_id}' is single mode but has {len(stage.candidates)} candidates (expected 1)"
+        )
+        return errors, None
+
+    transform_id = stage.candidates[0]
+
+    # Transform定義を取得
+    transform = next((t for t in spec.transforms if t.id == transform_id), None)
+    if not transform:
+        errors.append(f"Transform '{transform_id}' not found in spec")
+        return errors, None
+
+    # パラメータ検証（実装チェック有効時のみ）
+    if check_implementations:
+        param_errors = _validate_transform_parameters(transform_id, transform.impl, {}, spec, transform_def=transform)
+        errors.extend(param_errors)
+
+    # デフォルトパラメータを収集
+    default_params = {}
+    for param_def in transform.parameters:
+        if param_def.default is not None:
+            default_params[param_def.name] = param_def.default
+
+    # 実行計画エントリを作成
+    execution_entry = {
+        "stage_id": stage.stage_id,
+        "transform_id": transform_id,
+        "params": default_params,
+    }
+
+    return errors, execution_entry
 
 
 def _auto_select_single_stages(
@@ -222,6 +349,7 @@ def _auto_select_single_stages(
     execution_entries: list[dict[str, Any]] = []
 
     for stage in spec.dag_stages:
+        # singleモード以外はスキップ
         if stage.selection_mode != "single":
             continue
 
@@ -229,42 +357,11 @@ def _auto_select_single_stages(
         if stage.stage_id in selected_stage_ids:
             continue
 
-        # singleモードは候補が1つであるべき
-        if len(stage.candidates) != 1:
-            errors.append(
-                f"Stage '{stage.stage_id}' is single mode but has {len(stage.candidates)} candidates (expected 1)"
-            )
-            continue
-
-        transform_id = stage.candidates[0]
-
-        # Transform定義を取得
-        transform = next((t for t in spec.transforms if t.id == transform_id), None)
-        if not transform:
-            errors.append(f"Transform '{transform_id}' not found in spec")
-            continue
-
-        # パラメータ検証（実装チェック有効時のみ）
-        if check_implementations:
-            param_errors = _validate_transform_parameters(
-                transform_id, transform.impl, {}, spec, transform_def=transform
-            )
-            errors.extend(param_errors)
-
-        # デフォルトパラメータを収集
-        default_params = {}
-        for param_def in transform.parameters:
-            if param_def.default is not None:
-                default_params[param_def.name] = param_def.default
-
-        # 実行計画エントリを追加（デフォルトパラメータ使用）
-        execution_entries.append(
-            {
-                "stage_id": stage.stage_id,
-                "transform_id": transform_id,
-                "params": default_params,
-            }
-        )
+        # 自動選択を実行
+        stage_errors, execution_entry = _auto_select_single_stage(stage, spec, check_implementations)
+        errors.extend(stage_errors)
+        if execution_entry:
+            execution_entries.append(execution_entry)
 
     return errors, execution_entries
 

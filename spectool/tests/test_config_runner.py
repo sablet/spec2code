@@ -310,9 +310,9 @@ def test_config_runner_execution(sample_config_yaml, setup_transform_implementat
     assert transform_def is not None, f"Transform {transform_id} not found"
 
     # implパスを解決
-    from spectool.spectool.core.engine.config_validator import _resolve_impl_path
+    from spectool.spectool.core.engine.config_validator_impl import resolve_impl_path
 
-    resolved_impl = _resolve_impl_path(transform_def.impl, spec)
+    resolved_impl = resolve_impl_path(transform_def.impl, spec)
 
     # Transform関数をインポート
     module_name, func_name = resolved_impl.split(":")
@@ -410,9 +410,9 @@ def test_config_runner_collects_output(sample_config_yaml, setup_transform_imple
     assert transform_def is not None, f"Transform {transform_id} not found"
 
     # implパスを解決
-    from spectool.spectool.core.engine.config_validator import _resolve_impl_path
+    from spectool.spectool.core.engine.config_validator_impl import resolve_impl_path
 
-    resolved_impl = _resolve_impl_path(transform_def.impl, spec)
+    resolved_impl = resolve_impl_path(transform_def.impl, spec)
 
     # Transform関数をインポート
     module_name, func_name = resolved_impl.split(":")

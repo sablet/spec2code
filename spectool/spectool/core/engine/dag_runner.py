@@ -165,7 +165,155 @@ class DAGRunner:
 
         return params
 
-    def run_dag(  # noqa: C901, PLR0912
+    def _generate_execution_plan(self, execution_order: list[DAGStageSpec]) -> list[dict]:
+        """実行計画を生成（Dry-runモード用）
+
+        Args:
+            execution_order: 実行順序
+
+        Returns:
+            実行計画のリスト
+        """
+        plan = []
+        for stage in execution_order:
+            transform = self._get_transform_by_id(stage.default_transform_id)
+            if transform:
+                plan.append(
+                    {
+                        "stage_id": stage.stage_id,
+                        "transform_id": transform.id,
+                        "impl": transform.impl,
+                    }
+                )
+        return plan
+
+    def _get_transform_by_id(self, transform_id: str | None) -> TransformSpec | None:
+        """Transform IDからTransform定義を取得
+
+        Args:
+            transform_id: Transform ID
+
+        Returns:
+            Transform定義、または None
+        """
+        if not transform_id:
+            return None
+        return next(
+            (t for t in self.ir.transforms if t.id == transform_id),
+            None,
+        )
+
+    def _load_and_validate_transform(
+        self, stage: DAGStageSpec, enable_logging: bool
+    ) -> tuple[TransformSpec | None, Callable[..., Any] | None]:
+        """Transform定義を取得して検証
+
+        Args:
+            stage: 実行するステージ
+            enable_logging: ログを有効化
+
+        Returns:
+            (transform, func): Transform定義と関数、またはNone
+
+        Raises:
+            Exception: 検証エラー
+        """
+        transform_id = stage.default_transform_id
+        if not transform_id:
+            if enable_logging:
+                self.execution_logs.append(f"Stage {stage.stage_id}: No default transform")
+            return None, None
+
+        # Transform定義を取得
+        transform = self._get_transform_by_id(transform_id)
+        if not transform:
+            error_msg = f"Transform {transform_id} not found"
+            if enable_logging:
+                self.execution_logs.append(f"Stage {stage.stage_id}: {error_msg}")
+            raise Exception(error_msg)
+
+        # Transform関数をインポート
+        try:
+            func = self._load_transform_function(transform)
+            return transform, func
+        except ImportError as e:
+            if enable_logging:
+                self.execution_logs.append(f"Stage {stage.stage_id}: Import error - {e}")
+            raise
+
+    def _execute_transform_function(
+        self,
+        stage: DAGStageSpec,
+        transform: TransformSpec,
+        func: Callable[..., Any],
+        merged_params: dict[str, Any],
+        enable_logging: bool,
+    ) -> dict:
+        """Transform関数を実行
+
+        Args:
+            stage: 実行するステージ
+            transform: Transform定義
+            func: Transform関数
+            merged_params: マージされたパラメータ
+            enable_logging: ログを有効化
+
+        Returns:
+            実行結果
+
+        Raises:
+            Exception: 実行エラー
+        """
+        try:
+            if enable_logging:
+                self.execution_logs.append(f"Stage {stage.stage_id}: Executing {transform.id}")
+
+            result = func(**merged_params)
+
+            if enable_logging:
+                self.execution_logs.append(f"Stage {stage.stage_id}: Completed successfully")
+
+            return result
+
+        except Exception as e:
+            error_msg = f"Execution error in {transform.id}: {e}"
+            if enable_logging:
+                self.execution_logs.append(f"Stage {stage.stage_id}: {error_msg}")
+            raise Exception(error_msg) from e
+
+    def _execute_stage(
+        self,
+        stage: DAGStageSpec,
+        current_data: dict,
+        params: dict[str, Any],
+        enable_logging: bool,
+    ) -> dict:
+        """単一ステージを実行
+
+        Args:
+            stage: 実行するステージ
+            current_data: 現在のデータ
+            params: ユーザー指定パラメータ
+            enable_logging: ログを有効化
+
+        Returns:
+            実行結果
+
+        Raises:
+            Exception: 実行エラー
+        """
+        # Transform定義を取得して検証
+        transform, func = self._load_and_validate_transform(stage, enable_logging)
+        if not transform or not func:
+            return current_data
+
+        # パラメータをマージ
+        merged_params = self._merge_parameters(transform, current_data, params)
+
+        # Transform関数を実行
+        return self._execute_transform_function(stage, transform, func, merged_params, enable_logging)
+
+    def run_dag(
         self,
         initial_data: dict,
         params: dict[str, Any] | None = None,
@@ -202,21 +350,7 @@ class DAGRunner:
 
         # Dry-runモードの場合、実行計画を返す
         if dry_run:
-            plan = []
-            for stage in execution_order:
-                transform = next(
-                    (t for t in self.ir.transforms if t.id == stage.default_transform_id),
-                    None,
-                )
-                if transform:
-                    plan.append(
-                        {
-                            "stage_id": stage.stage_id,
-                            "transform_id": transform.id,
-                            "impl": transform.impl,
-                        }
-                    )
-            return plan
+            return self._generate_execution_plan(execution_order)
 
         # 実行ログ初期化
         if enable_logging:
@@ -227,57 +361,14 @@ class DAGRunner:
         intermediate_results = {}
 
         for stage in execution_order:
-            # Transform IDを取得
-            transform_id = stage.default_transform_id
-            if not transform_id:
-                if enable_logging:
-                    self.execution_logs.append(f"Stage {stage.stage_id}: No default transform")
-                continue
+            result = self._execute_stage(stage, current_data, params, enable_logging)
 
-            # Transform定義を取得
-            transform = next(
-                (t for t in self.ir.transforms if t.id == transform_id),
-                None,
-            )
-            if not transform:
-                error_msg = f"Transform {transform_id} not found"
-                if enable_logging:
-                    self.execution_logs.append(f"Stage {stage.stage_id}: {error_msg}")
-                raise Exception(error_msg)
+            # 中間結果を収集
+            if collect_intermediates or stage.collect_output:
+                intermediate_results[stage.stage_id] = result
 
-            # Transform関数をインポート
-            try:
-                func = self._load_transform_function(transform)
-            except ImportError as e:
-                if enable_logging:
-                    self.execution_logs.append(f"Stage {stage.stage_id}: Import error - {e}")
-                raise
-
-            # パラメータをマージ
-            merged_params = self._merge_parameters(transform, current_data, params)
-
-            # Transform関数を実行
-            try:
-                if enable_logging:
-                    self.execution_logs.append(f"Stage {stage.stage_id}: Executing {transform.id}")
-
-                result = func(**merged_params)
-
-                if enable_logging:
-                    self.execution_logs.append(f"Stage {stage.stage_id}: Completed successfully")
-
-                # 中間結果を収集
-                if collect_intermediates or stage.collect_output:
-                    intermediate_results[stage.stage_id] = result
-
-                # 次のステージへデータを渡す
-                current_data = result
-
-            except Exception as e:
-                error_msg = f"Execution error in {transform.id}: {e}"
-                if enable_logging:
-                    self.execution_logs.append(f"Stage {stage.stage_id}: {error_msg}")
-                raise Exception(error_msg) from e
+            # 次のステージへデータを渡す
+            current_data = result
 
         # 結果を返す
         if collect_intermediates:

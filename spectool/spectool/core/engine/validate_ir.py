@@ -279,6 +279,68 @@ def _validate_dag_stage_specs(ir: SpecIR) -> list[str]:
     return errors
 
 
+def _validate_frame_type_references(ir: SpecIR) -> list[str]:
+    """FrameSpecの型参照を検証
+
+    Args:
+        ir: 検証対象のIR
+
+    Returns:
+        エラーメッセージのリスト
+    """
+    errors: list[str] = []
+
+    for frame in ir.frames:
+        if frame.row_model and not _can_import_python_ref(frame.row_model, ir):
+            errors.append(f"DataFrame '{frame.id}': cannot import row_model '{frame.row_model}'")
+
+        if frame.generator_factory and not _can_import_python_ref(frame.generator_factory, ir):
+            errors.append(f"DataFrame '{frame.id}': cannot import generator_factory '{frame.generator_factory}'")
+
+        # check_functionsの検証
+        for check_func in frame.check_functions:
+            if not _can_import_python_ref(check_func, ir):
+                errors.append(f"DataFrame '{frame.id}': cannot import check_function '{check_func}'")
+
+    return errors
+
+
+def _validate_check_type_references(ir: SpecIR) -> list[str]:
+    """CheckSpecの型参照を検証
+
+    Args:
+        ir: 検証対象のIR
+
+    Returns:
+        エラーメッセージのリスト
+    """
+    errors: list[str] = []
+
+    for check in ir.checks:
+        if check.impl and not _can_import_python_ref(check.impl, ir):
+            errors.append(f"Check '{check.id}': cannot import impl '{check.impl}'")
+
+    return errors
+
+
+def _validate_transform_type_references(ir: SpecIR) -> list[str]:
+    """TransformSpecの型参照を検証
+
+    Args:
+        ir: 検証対象のIR
+
+    Returns:
+        エラーメッセージのリスト
+    """
+    errors: list[str] = []
+
+    for transform in ir.transforms:
+        if transform.impl and not _can_import_python_ref(transform.impl, ir):
+            errors.append(f"Transform '{transform.id}': cannot import impl '{transform.impl}'")
+
+    return errors
+
+
 def _validate_type_references(ir: SpecIR, skip_impl_check: bool = False) -> list[str]:
     """Python型参照の解決可能性チェック
 
@@ -295,34 +357,16 @@ def _validate_type_references(ir: SpecIR, skip_impl_check: bool = False) -> list
     Returns:
         エラーメッセージのリスト
     """
-    errors: list[str] = []
-
     # 実装チェックをスキップする場合は空リストを返す
     if skip_impl_check:
-        return errors
+        return []
 
-    # DataFrame row_modelの検証
-    for frame in ir.frames:
-        if frame.row_model and not _can_import_python_ref(frame.row_model, ir):
-            errors.append(f"DataFrame '{frame.id}': cannot import row_model '{frame.row_model}'")
+    errors: list[str] = []
 
-        if frame.generator_factory and not _can_import_python_ref(frame.generator_factory, ir):
-            errors.append(f"DataFrame '{frame.id}': cannot import generator_factory '{frame.generator_factory}'")
-
-        # check_functionsの検証
-        for check_func in frame.check_functions:
-            if not _can_import_python_ref(check_func, ir):
-                errors.append(f"DataFrame '{frame.id}': cannot import check_function '{check_func}'")
-
-    # Check関数の検証
-    for check in ir.checks:
-        if check.impl and not _can_import_python_ref(check.impl, ir):
-            errors.append(f"Check '{check.id}': cannot import impl '{check.impl}'")
-
-    # Transform関数の検証
-    for transform in ir.transforms:
-        if transform.impl and not _can_import_python_ref(transform.impl, ir):
-            errors.append(f"Transform '{transform.id}': cannot import impl '{transform.impl}'")
+    # 各型の検証を実行
+    errors.extend(_validate_frame_type_references(ir))
+    errors.extend(_validate_check_type_references(ir))
+    errors.extend(_validate_transform_type_references(ir))
 
     return errors
 

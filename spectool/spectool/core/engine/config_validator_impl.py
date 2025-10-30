@@ -72,6 +72,72 @@ def load_transform_signature(transform_id: str, impl: str, spec: SpecIR) -> tupl
         return None, [f"Transform '{transform_id}': signature error - {exc}"]
 
 
+def _extract_code_lines(lines: list[str]) -> list[str]:
+    """ソースコードから実質的なコード行を抽出
+
+    Args:
+        lines: ソースコードの行リスト
+
+    Returns:
+        コード行のリスト（コメント、docstring、空行を除外）
+    """
+    code_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # docstring、コメント、空行、関数定義行を除外
+        if (
+            stripped
+            and not stripped.startswith("#")
+            and not stripped.startswith('"""')
+            and not stripped.startswith("'''")
+            and not stripped.startswith("def ")
+        ):
+            code_lines.append(stripped)
+    return code_lines
+
+
+def _filter_docstrings(code_lines: list[str]) -> list[str]:
+    """コード行からdocstringを除外
+
+    Args:
+        code_lines: コード行のリスト
+
+    Returns:
+        docstringを除外したコード行のリスト
+    """
+    filtered_lines = []
+    in_docstring = False
+    for line in code_lines:
+        if '"""' in line or "'''" in line:
+            if in_docstring:
+                in_docstring = False
+                continue
+            in_docstring = True
+            continue
+        if not in_docstring:
+            filtered_lines.append(line)
+    return filtered_lines
+
+
+def _is_placeholder_implementation(filtered_lines: list[str]) -> bool:
+    """実装がプレースホルダーのみかチェック
+
+    Args:
+        filtered_lines: フィルタリングされたコード行
+
+    Returns:
+        プレースホルダーのみの場合True
+    """
+    if len(filtered_lines) > 1:
+        return False
+
+    if not filtered_lines:
+        return False
+
+    placeholders = ["return True", "return pd.DataFrame()", "return None", "return {}"]
+    return any(keyword in filtered_lines[0] for keyword in placeholders)
+
+
 def check_function_implementation(func: Any, transform_id: str) -> list[str]:  # noqa: ANN401
     """関数が実装されているかをチェック（TODOのままではないか）
 
@@ -93,43 +159,12 @@ def check_function_implementation(func: Any, transform_id: str) -> list[str]:  #
         return [f"Transform '{transform_id}': implementation incomplete (TODO markers found)"]
 
     # 関数本体が単純なプレースホルダーのみかチェック
-    # 簡易的なチェック：return文が単純な値のみの場合
     lines = source.split("\n")
-    code_lines = []
-    for line in lines:
-        stripped = line.strip()
-        # docstring、コメント、空行、関数定義行を除外
-        if (
-            stripped
-            and not stripped.startswith("#")
-            and not stripped.startswith('"""')
-            and not stripped.startswith("'''")
-            and not stripped.startswith("def ")
-        ):
-            code_lines.append(stripped)
-
-    # docstringを除外（複数行）
-    filtered_lines = []
-    in_docstring = False
-    for line in code_lines:
-        if '"""' in line or "'''" in line:
-            if in_docstring:
-                in_docstring = False
-                continue
-            in_docstring = True
-            continue
-        if not in_docstring:
-            filtered_lines.append(line)
+    code_lines = _extract_code_lines(lines)
+    filtered_lines = _filter_docstrings(code_lines)
 
     # 実質的なコード行が1行以下（returnのみなど）の場合は未実装とみなす
-    if (
-        len(filtered_lines) <= 1
-        and filtered_lines
-        and any(
-            keyword in filtered_lines[0]
-            for keyword in ["return True", "return pd.DataFrame()", "return None", "return {}"]
-        )
-    ):
+    if _is_placeholder_implementation(filtered_lines):
         return [f"Transform '{transform_id}': implementation incomplete (placeholder return value only)"]
 
     return []

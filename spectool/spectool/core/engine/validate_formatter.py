@@ -28,6 +28,51 @@ def create_category_dict() -> dict[str, list[str]]:
     }
 
 
+def _match_dataframe_schema_error(error: str) -> bool:
+    """DataFrameスキーマエラーかチェック"""
+    return "DataFrame" in error and ("duplicate column" in error.lower() or "dtype is not set" in error)
+
+
+def _match_dataframe_error(error: str) -> bool:
+    """DataFrameエラーかチェック"""
+    return "DataFrame" in error
+
+
+def _match_check_definition_error(error: str) -> bool:
+    """Check定義エラーかチェック"""
+    return "Check" in error and "impl" in error
+
+
+def _match_check_error(error: str) -> bool:
+    """Checkエラーかチェック"""
+    return "Check" in error
+
+
+def _match_transform_definition_error(error: str) -> bool:
+    """Transform定義エラーかチェック"""
+    return "Transform" in error and ("impl" in error or "type_ref" in error or "parameter" in error)
+
+
+def _match_transform_error(error: str) -> bool:
+    """Transformエラーかチェック"""
+    return "Transform" in error
+
+
+def _match_dag_stage_error(error: str) -> bool:
+    """DAG Stageエラーかチェック"""
+    return "DAG Stage" in error or "candidate" in error.lower()
+
+
+def _match_example_error(error: str) -> bool:
+    """Exampleエラーかチェック"""
+    return "Example" in error
+
+
+def _match_parameter_type_error(error: str) -> bool:
+    """パラメータ型エラーかチェック"""
+    return "parameter" in error.lower() and ("type" in error.lower() or "default" in error.lower())
+
+
 def categorize_error(error: str, errors: dict[str, list[str]]) -> None:
     """エラーメッセージをカテゴリ別に分類
 
@@ -35,53 +80,44 @@ def categorize_error(error: str, errors: dict[str, list[str]]) -> None:
         error: エラーメッセージ
         errors: カテゴリ別エラー辞書
     """
-    categorized = False
-
-    # DataFrame schema errors
-    if "DataFrame" in error and ("duplicate column" in error.lower() or "dtype is not set" in error):
+    # マッチング規則を順番に適用（優先度順）
+    if _match_dataframe_schema_error(error):
         errors["dataframe_schemas"].append(error)
-        categorized = True
-    # DataFrame datatype errors
-    elif "DataFrame" in error:
+    elif _match_dataframe_error(error):
         errors["datatypes"].append(error)
-        categorized = True
-
-    # Check definition errors (impl related)
-    if "Check" in error and "impl" in error:
+    elif _match_check_definition_error(error):
         errors["check_definitions"].append(error)
-        categorized = True
-    # Other check errors
-    elif "Check" in error and not categorized:
+    elif _match_check_error(error):
         errors["checks"].append(error)
-        categorized = True
-
-    # Transform definition errors (impl, type_ref, parameter related)
-    if "Transform" in error and ("impl" in error or "type_ref" in error or "parameter" in error):
+    elif _match_transform_definition_error(error):
         errors["transform_definitions"].append(error)
-        categorized = True
-    # Other transform errors
-    elif "Transform" in error and not categorized:
+    elif _match_transform_error(error):
         errors["transforms"].append(error)
-        categorized = True
-
-    # DAG stage errors
-    if ("DAG Stage" in error or "candidate" in error.lower()) and not categorized:
+    elif _match_dag_stage_error(error):
         errors["dag_stages"].append(error)
-        categorized = True
-
-    # Example errors
-    if "Example" in error and not categorized:
+    elif _match_example_error(error):
         errors["examples"].append(error)
-        categorized = True
-
-    # Parameter type errors
-    if "parameter" in error.lower() and ("type" in error.lower() or "default" in error.lower()) and not categorized:
+    elif _match_parameter_type_error(error):
         errors["parameter_types"].append(error)
-        categorized = True
-
-    # Edge cases (uncategorized)
-    if not categorized:
+    else:
         errors["edge_cases"].append(error)
+
+
+def _record_success_if_no_error(
+    item_id: str, item_type: str, all_errors: str, category: str, message: str, successes: dict[str, list[str]]
+) -> None:
+    """エラーがない項目を成功として記録
+
+    Args:
+        item_id: 項目ID
+        item_type: 項目タイプ（"DataFrame", "Check", "Transform"など）
+        all_errors: 全エラーメッセージの結合文字列
+        category: 成功カテゴリ
+        message: 成功メッセージ
+        successes: 成功辞書
+    """
+    if f"{item_type} '{item_id}'" not in all_errors:
+        successes[category].append(message)
 
 
 def record_successes(ir: SpecIR, errors: dict[str, list[str]], successes: dict[str, list[str]]) -> None:
@@ -97,28 +133,53 @@ def record_successes(ir: SpecIR, errors: dict[str, list[str]], successes: dict[s
 
     # DataFrame schemas の成功
     for frame in ir.frames:
-        if f"DataFrame '{frame.id}'" not in all_errors:
-            successes["dataframe_schemas"].append(f"DataFrame '{frame.id}': schema is valid")
+        _record_success_if_no_error(
+            frame.id,
+            "DataFrame",
+            all_errors,
+            "dataframe_schemas",
+            f"DataFrame '{frame.id}': schema is valid",
+            successes,
+        )
 
     # Check definitions の成功
     for check in ir.checks:
-        if f"Check '{check.id}'" not in all_errors:
-            successes["check_definitions"].append(f"Check '{check.id}': definition is valid")
+        _record_success_if_no_error(
+            check.id, "Check", all_errors, "check_definitions", f"Check '{check.id}': definition is valid", successes
+        )
 
     # Transform definitions の成功
     for transform in ir.transforms:
-        if f"Transform '{transform.id}'" not in all_errors:
-            successes["transform_definitions"].append(f"Transform '{transform.id}': definition is valid")
+        _record_success_if_no_error(
+            transform.id,
+            "Transform",
+            all_errors,
+            "transform_definitions",
+            f"Transform '{transform.id}': definition is valid",
+            successes,
+        )
 
     # DAG stages の成功
     for stage in ir.dag_stages:
-        if f"DAG Stage '{stage.stage_id}'" not in all_errors:
-            successes["dag_stages"].append(f"DAG Stage '{stage.stage_id}': configuration is valid")
+        _record_success_if_no_error(
+            stage.stage_id,
+            "DAG Stage",
+            all_errors,
+            "dag_stages",
+            f"DAG Stage '{stage.stage_id}': configuration is valid",
+            successes,
+        )
 
     # Examples の成功
     for example in ir.examples:
-        if f"Example '{example.id}'" not in all_errors:
-            successes["examples"].append(f"Example '{example.id}': datatype_ref is valid")
+        _record_success_if_no_error(
+            example.id,
+            "Example",
+            all_errors,
+            "examples",
+            f"Example '{example.id}': datatype_ref is valid",
+            successes,
+        )
 
 
 _CATEGORY_LABELS = {
