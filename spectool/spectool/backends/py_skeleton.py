@@ -35,20 +35,6 @@ def _extract_function_name(impl: str) -> str:
     return impl
 
 
-def _extract_module_path(impl: str) -> str:
-    """implからモジュールパスを抽出
-
-    Args:
-        impl: "module.path:function_name" 形式の文字列
-
-    Returns:
-        モジュールパス
-    """
-    if ":" in impl:
-        return impl.split(":")[0]
-    return ""
-
-
 def _resolve_type_annotation(param: ParameterSpec, ir: SpecIR) -> str:
     """パラメータから型アノテーション文字列を生成
 

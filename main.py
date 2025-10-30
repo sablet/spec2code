@@ -16,7 +16,7 @@ import fire
 
 from spectool.spectool.core.engine.loader import load_spec
 from spectool.spectool.core.engine.normalizer import normalize_ir
-from spectool.spectool.core.engine.validate import validate_ir, validate_spec
+from spectool.spectool.core.engine.validate import validate_spec, format_validation_result
 from spectool.spectool.core.engine.integrity import IntegrityValidator
 from spectool.spectool.core.engine.dag_runner import DAGRunner
 from spectool.spectool.core.engine.config_runner import ConfigRunner
@@ -29,12 +29,13 @@ __version__ = "2.0.0-alpha"
 class SpectoolCLI:
     """Spectool - Spec2Code Next Generation CLI"""
 
-    def validate(self, spec_file: str, debug: bool = False) -> None:
+    def validate(self, spec_file: str, debug: bool = False, verbose: bool = False) -> None:
         """Validate spec file for correctness.
 
         Args:
             spec_file: Path to spec YAML file
             debug: Enable debug output
+            verbose: Show detailed validation results including successes
         """
         spec_path = Path(spec_file)
         if not spec_path.exists():
@@ -42,27 +43,18 @@ class SpectoolCLI:
             sys.exit(1)
 
         try:
-            # Load spec
-            print(f"📖 Loading spec: {spec_path}")
-            ir = load_spec(str(spec_path))
-            print(f"✅ Loaded {len(ir.frames)} DataFrames, {len(ir.transforms)} Transforms")
+            # Load and validate spec with categorized results
+            print(f"📖 Loading and validating spec: {spec_path}")
+            result = validate_spec(str(spec_path), skip_impl_check=True, normalize=True)
 
-            # Normalize
-            print("🔄 Normalizing IR...")
-            normalized = normalize_ir(ir)
-            print("✅ Normalization complete")
+            # Format and display results
+            formatted = format_validation_result(result, verbose=verbose)
+            print(formatted)
 
-            # Validate IR
-            print("🔍 Validating IR...")
-            errors = validate_ir(normalized, skip_impl_check=True)
-
-            if errors:
-                print(f"\n❌ Validation failed with {len(errors)} error(s):")
-                for error in errors:
-                    print(f"  ⚠️  {error}")
+            # Exit with error if validation failed
+            total_errors = sum(len(msgs) for msgs in result["errors"].values())
+            if total_errors > 0:
                 sys.exit(1)
-
-            print("✅ All validations passed")
 
         except Exception as e:
             print(f"❌ Error: {e}")
@@ -72,13 +64,14 @@ class SpectoolCLI:
                 traceback.print_exc()
             sys.exit(1)
 
-    def gen(self, spec_file: str, output_dir: str | None = None, debug: bool = False) -> None:
+    def gen(self, spec_file: str, output_dir: str | None = None, debug: bool = False, verbose: bool = False) -> None:
         """Generate skeleton code from spec file.
 
         Args:
             spec_file: Path to spec YAML file
             output_dir: Output directory (default: current directory, generates apps/<project-name>/)
             debug: Enable debug output
+            verbose: Show detailed validation results including successes
         """
         spec_path = Path(spec_file)
         if not spec_path.exists():
@@ -86,26 +79,30 @@ class SpectoolCLI:
             sys.exit(1)
 
         try:
-            # Load spec
-            print(f"📖 Loading spec: {spec_path}")
+            # Load and validate spec
+            print(f"📖 Loading and validating spec: {spec_path}")
             ir = load_spec(str(spec_path))
-            print(f"✅ Loaded {len(ir.frames)} DataFrames, {len(ir.transforms)} Transforms, {len(ir.checks)} Checks")
-
-            # Normalize
-            print("🔄 Normalizing IR...")
             normalized = normalize_ir(ir)
-            print("✅ Normalization complete")
 
-            # Validate IR (skip implementation checks for gen)
-            print("🔍 Validating IR...")
-            errors = validate_ir(normalized, skip_impl_check=True)
-            if errors:
-                print(f"\n⚠️  Found {len(errors)} validation warnings:")
-                for error in errors:
-                    print(f"  ⚠️  {error}")
+            # Validate spec
+            result = validate_spec(str(spec_path), skip_impl_check=True, normalize=True)
+
+            # Format and display validation results
+            formatted = format_validation_result(result, verbose=False)
+
+            # エラーがある場合は表示して終了
+            total_errors = sum(len(msgs) for msgs in result["errors"].values())
+            if total_errors > 0:
+                print(formatted)
+                sys.exit(1)
+
+            # 警告がある場合は表示して継続
+            total_warnings = sum(len(msgs) for msgs in result["warnings"].values())
+            if total_warnings > 0:
+                print(formatted)
                 print("Continuing with code generation...\n")
             else:
-                print("✅ All validations passed")
+                print("✅ Validation passed\n")
 
             # Determine output directory
             if output_dir:

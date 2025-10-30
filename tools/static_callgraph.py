@@ -572,10 +572,24 @@ def main() -> None:
     ignored_symbols: Set[str] = set(args.ignore or [])
     if not args.no_default_ignore:
         ignored_symbols.update(DEFAULT_IGNORED_SYMBOLS)
+
+    def should_ignore(defn: Definition) -> bool:
+        """動的参照により静的解析不可能なシンボルを除外"""
+        # meta_types モジュールは文字列ベースのコード生成で参照されるため除外
+        if defn.module == "spectool.spectool.core.base.meta_types":
+            return True
+        # normalizer モジュールはレジストリ経由の動的ディスパッチで参照されるため除外
+        if defn.module == "spectool.spectool.core.engine.normalizer":
+            return True
+        return False
+
     unreachable_defs = [
         defn
         for defn in builder.definitions.values()
-        if defn.kind in args.include_kinds and defn.symbol not in reachable and defn.symbol not in ignored_symbols
+        if defn.kind in args.include_kinds
+        and defn.symbol not in reachable
+        and defn.symbol not in ignored_symbols
+        and not should_ignore(defn)
     ]
     unreachable_defs.sort(key=lambda d: (str(d.filepath), d.lineno, d.symbol))
 

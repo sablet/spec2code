@@ -410,11 +410,17 @@ def _create_category_dict() -> dict[str, list[str]]:
     }
 
 
-def validate_spec(spec_path: str | Path) -> dict[str, dict[str, list[str]]]:
+def validate_spec(
+    spec_path: str | Path,
+    skip_impl_check: bool = False,
+    normalize: bool = False,
+) -> dict[str, dict[str, list[str]]]:
     """Spec YAMLファイルを読み込み、エラー/警告/成功をカテゴリ別に返す
 
     Args:
         spec_path: Spec YAMLファイルのパス
+        skip_impl_check: 実装ファイルのインポートチェックをスキップ（gen時に使用）
+        normalize: IRを正規化してから検証（Pydanticモデルから列を推論）
 
     Returns:
         3層構造の辞書: {"errors": {...}, "warnings": {...}, "successes": {...}}
@@ -426,6 +432,12 @@ def validate_spec(spec_path: str | Path) -> dict[str, dict[str, list[str]]]:
 
     spec_path = Path(spec_path)
     ir = load_spec(spec_path)
+
+    # 正規化オプション
+    if normalize:
+        from spectool.spectool.core.engine.normalizer import normalize_ir
+
+        ir = normalize_ir(ir)
 
     # sys.pathにproject_rootを追加（apps.XXX形式のimportのため）
     # project_root は spec_path の親ディレクトリと仮定
@@ -440,7 +452,7 @@ def validate_spec(spec_path: str | Path) -> dict[str, dict[str, list[str]]]:
     successes = _create_category_dict()
 
     # 既存のvalidate_irを実行
-    flat_errors = validate_ir(ir)
+    flat_errors = validate_ir(ir, skip_impl_check=skip_impl_check)
 
     # エラーをカテゴリ別に分類
     for error in flat_errors:
@@ -914,3 +926,81 @@ def _record_successes(ir: SpecIR, errors: dict[str, list[str]], successes: dict[
     for example in ir.examples:
         if f"Example '{example.id}'" not in all_errors:
             successes["examples"].append(f"Example '{example.id}': datatype_ref is valid")
+
+
+def format_validation_result(result: dict[str, dict[str, list[str]]], verbose: bool = False) -> str:
+    """検証結果をフォーマットして文字列に変換
+
+    Args:
+        result: validate_spec()の戻り値
+        verbose: 詳細表示モード（成功も表示）
+
+    Returns:
+        フォーマットされた検証結果の文字列
+    """
+    lines = []
+    errors = result["errors"]
+    warnings = result["warnings"]
+    successes = result["successes"]
+
+    # エラー数カウント
+    total_errors = sum(len(msgs) for msgs in errors.values())
+    total_warnings = sum(len(msgs) for msgs in warnings.values())
+    total_successes = sum(len(msgs) for msgs in successes.values())
+
+    # カテゴリ名のマッピング（日本語表示用）
+    category_labels = {
+        "dataframe_schemas": "📊 DataFrame Schemas",
+        "datatypes": "🔤 Data Types",
+        "check_definitions": "✓ Check Definitions",
+        "checks": "✓ Checks",
+        "transform_definitions": "🔄 Transform Definitions",
+        "transforms": "🔄 Transforms",
+        "dag_stages": "📈 DAG Stages",
+        "examples": "📝 Examples",
+        "parameter_types": "⚙️  Parameter Types",
+        "edge_cases": "⚠️  Edge Cases",
+    }
+
+    # エラー表示
+    if total_errors > 0:
+        lines.append(f"\n❌ Validation failed with {total_errors} error(s):\n")
+
+        for category, messages in errors.items():
+            if messages:
+                label = category_labels.get(category, category)
+                lines.append(f"{label} ({len(messages)} error{'s' if len(messages) > 1 else ''}):")
+                for msg in messages:
+                    lines.append(f"  • {msg}")
+                lines.append("")
+
+    # 警告表示
+    if total_warnings > 0:
+        lines.append(f"\n⚠️  Found {total_warnings} warning(s):\n")
+
+        for category, messages in warnings.items():
+            if messages:
+                label = category_labels.get(category, category)
+                lines.append(f"{label} ({len(messages)} warning{'s' if len(messages) > 1 else ''}):")
+                for msg in messages:
+                    lines.append(f"  • {msg}")
+                lines.append("")
+
+    # 成功表示（verboseモード）
+    if verbose and total_successes > 0:
+        lines.append(f"\n✅ {total_successes} item(s) passed validation:\n")
+
+        for category, messages in successes.items():
+            if messages:
+                label = category_labels.get(category, category)
+                lines.append(f"{label} ({len(messages)} passed):")
+                for msg in messages:
+                    lines.append(f"  • {msg}")
+                lines.append("")
+
+    # 成功メッセージ（エラーがなければ表示）
+    if total_errors == 0:
+        # エラーがなければ常に成功と見なす（警告があっても）
+        lines.append("✅ All validations passed")
+
+    return "\n".join(lines)
