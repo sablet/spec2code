@@ -270,20 +270,33 @@ def _load_generic_specs(datatypes: list[dict[str, Any]]) -> list[GenericSpec]:
     return generics
 
 
+def _load_parameters(params_data: list[dict[str, Any]]) -> list[ParameterSpec]:
+    """パラメータ定義をParameterSpecに変換
+
+    Args:
+        params_data: パラメータデータのリスト
+
+    Returns:
+        ParameterSpecのリスト
+    """
+    parameters = []
+    for param_data in params_data:
+        param = ParameterSpec(
+            name=param_data.get("name", ""),
+            type_ref=param_data.get("datatype_ref") or param_data.get("native", ""),
+            optional=param_data.get("optional", False),
+            default=param_data.get("default"),
+            description=param_data.get("description", ""),
+        )
+        parameters.append(param)
+    return parameters
+
+
 def _load_transform_specs(transforms_data: list[dict[str, Any]]) -> list[TransformSpec]:
     """Transform定義をTransformSpecに変換"""
     transforms = []
     for transform_data in transforms_data:
-        parameters = []
-        for param_data in transform_data.get("parameters", []):
-            param = ParameterSpec(
-                name=param_data.get("name", ""),
-                type_ref=param_data.get("datatype_ref") or param_data.get("native", ""),
-                optional=param_data.get("optional", False),
-                default=param_data.get("default"),
-                description=param_data.get("description", ""),
-            )
-            parameters.append(param)
+        parameters = _load_parameters(transform_data.get("parameters", []))
 
         transform = TransformSpec(
             id=transform_data.get("id", ""),
@@ -362,16 +375,7 @@ def _load_generator_specs(generators_data: dict[str, Any] | list[dict[str, Any]]
         if not isinstance(gen_data, dict):
             continue
 
-        parameters = []
-        for param_data in gen_data.get("parameters", []):
-            param = ParameterSpec(
-                name=param_data.get("name", ""),
-                type_ref=param_data.get("datatype_ref") or param_data.get("native", ""),
-                optional=param_data.get("optional", False),
-                default=param_data.get("default"),
-                description=param_data.get("description", ""),
-            )
-            parameters.append(param)
+        parameters = _load_parameters(gen_data.get("parameters", []))
 
         generator = GeneratorDef(
             id=gen_data.get("id", ""),

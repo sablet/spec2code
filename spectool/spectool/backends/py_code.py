@@ -18,6 +18,27 @@ def _render_imports(imports: set[str]) -> str:
     return "\n".join(sorted(imports))
 
 
+def _build_file_content(imports: set[str], sections: list[str]) -> str:
+    """ファイルコンテンツを構築
+
+    Args:
+        imports: インポート文のセット
+        sections: コードセクションのリスト
+
+    Returns:
+        完成したファイルコンテンツ
+    """
+    header = [
+        '"""生成されたTypeAlias（AnnotatedメタデータでExampleSpec/CheckedSpecを付与）',
+        "",
+        "このファイルは spectool が spec.yaml から自動生成します。",
+        "新アーキテクチャでは、全ての型にAnnotatedメタ型でメタデータを付与します。",
+        '"""',
+        "",
+    ]
+    return "\n".join(header) + _render_imports(imports) + "\n\n" + "\n".join(sections)
+
+
 def _build_pydantic_row_ref(frame: FrameSpec) -> str | None:
     """PydanticRowRefメタデータを生成"""
     if not frame.row_model:
@@ -94,19 +115,34 @@ def _generate_dataframe_type_alias(frame: FrameSpec, imports: set[str]) -> str:
     return "\n".join(lines)
 
 
-def _generate_enum_type_alias(enum: EnumSpec, imports: set[str]) -> str:
-    """Enum TypeAliasコードブロックを生成"""
+def _build_common_meta_parts(examples: list[Any], check_functions: list[str]) -> list[str]:
+    """ExampleSpecとCheckedSpecのメタデータパーツを構築
+
+    Args:
+        examples: 例示データのリスト
+        check_functions: チェック関数のリスト
+
+    Returns:
+        メタデータパーツのリスト
+    """
     meta_parts = []
 
     # ExampleSpec（存在する場合）
-    example_spec = _build_example_spec(enum.examples)
+    example_spec = _build_example_spec(examples)
     if example_spec:
         meta_parts.append(f"    {example_spec},")
 
     # CheckedSpec（存在する場合）
-    checked_spec = _build_checked_spec(enum.check_functions)
+    checked_spec = _build_checked_spec(check_functions)
     if checked_spec:
         meta_parts.append(f"    {checked_spec},")
+
+    return meta_parts
+
+
+def _generate_enum_type_alias(enum: EnumSpec, imports: set[str]) -> str:
+    """Enum TypeAliasコードブロックを生成"""
+    meta_parts = _build_common_meta_parts(enum.examples, enum.check_functions)
 
     # Enumクラスをインポートするためのパスをビルド
     enum_class_name = enum.id
@@ -133,17 +169,7 @@ def _generate_enum_type_alias(enum: EnumSpec, imports: set[str]) -> str:
 
 def _generate_pydantic_type_alias(model: PydanticModelSpec, imports: set[str]) -> str:
     """Pydanticモデル TypeAliasコードブロックを生成"""
-    meta_parts = []
-
-    # ExampleSpec（存在する場合）
-    example_spec = _build_example_spec(model.examples)
-    if example_spec:
-        meta_parts.append(f"    {example_spec},")
-
-    # CheckedSpec（存在する場合）
-    checked_spec = _build_checked_spec(model.check_functions)
-    if checked_spec:
-        meta_parts.append(f"    {checked_spec},")
+    meta_parts = _build_common_meta_parts(model.examples, model.check_functions)
 
     # Pydanticモデルをインポート
     model_class_name = model.id
@@ -191,16 +217,7 @@ def generate_dataframe_aliases(ir: SpecIR, output_path: Path) -> None:
         sections.append("")  # 空行
 
     # ファイル構築
-    header = [
-        '"""生成されたTypeAlias（AnnotatedメタデータでExampleSpec/CheckedSpecを付与）',
-        "",
-        "このファイルは spectool が spec.yaml から自動生成します。",
-        "新アーキテクチャでは、全ての型にAnnotatedメタ型でメタデータを付与します。",
-        '"""',
-        "",
-    ]
-
-    content = "\n".join(header) + _render_imports(imports) + "\n\n" + "\n".join(sections)
+    content = _build_file_content(imports, sections)
 
     output_path.write_text(content)
     print(f"  ✅ Generated: {output_path}")
@@ -321,16 +338,7 @@ def generate_all_type_aliases(ir: SpecIR, output_path: Path) -> None:
         return
 
     # ファイル構築
-    header = [
-        '"""生成されたTypeAlias（AnnotatedメタデータでExampleSpec/CheckedSpecを付与）',
-        "",
-        "このファイルは spectool が spec.yaml から自動生成します。",
-        "新アーキテクチャでは、全ての型にAnnotatedメタ型でメタデータを付与します。",
-        '"""',
-        "",
-    ]
-
-    content = "\n".join(header) + _render_imports(imports) + "\n\n" + "\n".join(sections)
+    content = _build_file_content(imports, sections)
 
     output_path.write_text(content)
     print(f"  ✅ Generated: {output_path}")

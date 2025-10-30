@@ -158,6 +158,24 @@ def _validate_check_specs(ir: SpecIR) -> list[str]:
     return errors
 
 
+def _collect_all_datatype_ids(ir: SpecIR) -> set[str]:
+    """全datatype IDを収集
+
+    Args:
+        ir: 検証対象のIR
+
+    Returns:
+        全datatype IDのセット
+    """
+    all_datatype_ids = set()
+    all_datatype_ids.update(f.id for f in ir.frames)
+    all_datatype_ids.update(e.id for e in ir.enums)
+    all_datatype_ids.update(p.id for p in ir.pydantic_models)
+    all_datatype_ids.update(t.id for t in ir.type_aliases)
+    all_datatype_ids.update(g.id for g in ir.generics)
+    return all_datatype_ids
+
+
 def _validate_transform_specs(ir: SpecIR) -> list[str]:
     """Transform定義の妥当性チェック
 
@@ -175,12 +193,7 @@ def _validate_transform_specs(ir: SpecIR) -> list[str]:
     errors: list[str] = []
 
     # 全datatype IDを収集
-    all_datatype_ids = set()
-    all_datatype_ids.update(f.id for f in ir.frames)
-    all_datatype_ids.update(e.id for e in ir.enums)
-    all_datatype_ids.update(p.id for p in ir.pydantic_models)
-    all_datatype_ids.update(t.id for t in ir.type_aliases)
-    all_datatype_ids.update(g.id for g in ir.generics)
+    all_datatype_ids = _collect_all_datatype_ids(ir)
 
     for transform in ir.transforms:
         # パラメータのtype_ref検証
@@ -377,6 +390,26 @@ def _can_import_python_ref(ref: str, ir: SpecIR | None = None) -> bool:
         return False
 
 
+def _create_category_dict() -> dict[str, list[str]]:
+    """カテゴリ別辞書を作成
+
+    Returns:
+        カテゴリ別のメッセージリスト辞書
+    """
+    return {
+        "dataframe_schemas": [],
+        "datatypes": [],
+        "check_definitions": [],
+        "checks": [],
+        "transform_definitions": [],
+        "transforms": [],
+        "dag_stages": [],
+        "examples": [],
+        "parameter_types": [],
+        "edge_cases": [],
+    }
+
+
 def validate_spec(spec_path: str | Path) -> dict[str, dict[str, list[str]]]:
     """Spec YAMLファイルを読み込み、エラー/警告/成功をカテゴリ別に返す
 
@@ -401,47 +434,10 @@ def validate_spec(spec_path: str | Path) -> dict[str, dict[str, list[str]]]:
     if project_root_str not in sys.path:
         sys.path.insert(0, project_root_str)
 
-    # カテゴリ別エラー辞書
-    errors: dict[str, list[str]] = {
-        "dataframe_schemas": [],
-        "datatypes": [],
-        "check_definitions": [],
-        "checks": [],
-        "transform_definitions": [],
-        "transforms": [],
-        "dag_stages": [],
-        "examples": [],
-        "parameter_types": [],
-        "edge_cases": [],
-    }
-
-    # カテゴリ別警告辞書
-    warnings: dict[str, list[str]] = {
-        "dataframe_schemas": [],
-        "datatypes": [],
-        "check_definitions": [],
-        "checks": [],
-        "transform_definitions": [],
-        "transforms": [],
-        "dag_stages": [],
-        "examples": [],
-        "parameter_types": [],
-        "edge_cases": [],
-    }
-
-    # カテゴリ別成功辞書
-    successes: dict[str, list[str]] = {
-        "dataframe_schemas": [],
-        "datatypes": [],
-        "check_definitions": [],
-        "checks": [],
-        "transform_definitions": [],
-        "transforms": [],
-        "dag_stages": [],
-        "examples": [],
-        "parameter_types": [],
-        "edge_cases": [],
-    }
+    # カテゴリ別辞書を作成
+    errors = _create_category_dict()
+    warnings = _create_category_dict()
+    successes = _create_category_dict()
 
     # 既存のvalidate_irを実行
     flat_errors = validate_ir(ir)
@@ -534,12 +530,7 @@ def _validate_edge_cases_errors_only(ir: SpecIR) -> list[str]:
     errors: list[str] = []
 
     # 全datatype IDを収集
-    all_datatype_ids = set()
-    all_datatype_ids.update(f.id for f in ir.frames)
-    all_datatype_ids.update(e.id for e in ir.enums)
-    all_datatype_ids.update(p.id for p in ir.pydantic_models)
-    all_datatype_ids.update(t.id for t in ir.type_aliases)
-    all_datatype_ids.update(g.id for g in ir.generics)
+    all_datatype_ids = _collect_all_datatype_ids(ir)
 
     # 1. DAG stageの候補ゼロチェック
     errors.extend(_validate_dag_stage_candidates(ir, all_datatype_ids))
@@ -813,7 +804,7 @@ def _validate_example_data(ir: SpecIR) -> list[str]:
     try:
         import pandas as pd
         import pandera as pa
-        from pandera.typing import Index, Series
+        from pandera.typing import Index
     except ImportError:
         # pandera/pandasがインストールされていない場合はスキップ
         return errors

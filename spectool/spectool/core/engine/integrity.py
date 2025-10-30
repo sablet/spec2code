@@ -113,6 +113,22 @@ class IntegrityValidator:
 
         print("=" * 80)
 
+    def _resolve_file_path(self, file_path_str: str, project_root: Path) -> Path:
+        """file_pathを解決してプロジェクトルートからの絶対パスを返す
+
+        Args:
+            file_path_str: ファイルパス文字列
+            project_root: プロジェクトルートディレクトリ
+
+        Returns:
+            解決されたファイルパス
+        """
+        app_name = self.ir.meta.name if self.ir.meta else "app"
+        file_path = Path(file_path_str)
+        if file_path.parts and file_path.parts[0] == "apps":
+            file_path = Path(*file_path.parts[1:])
+        return project_root / "apps" / app_name / file_path
+
     def _validate_single_check(self, check: CheckSpec, project_root: Path, errors: dict[str, list[str]]) -> None:
         """単一のCheck関数を検証
 
@@ -131,12 +147,8 @@ class IntegrityValidator:
         resolved_impl = self._resolve_impl_path(check.impl)
         module_path, func_name = resolved_impl.split(":", 1)
 
-        # file_pathからapps/ プレフィックスを除去して、app_rootを考慮したパスを作成
-        app_name = self.ir.meta.name if self.ir.meta else "app"
-        file_path = Path(check.file_path)
-        if file_path.parts and file_path.parts[0] == "apps":
-            file_path = Path(*file_path.parts[1:])
-        expected_file = project_root / "apps" / app_name / file_path
+        # file_pathを解決
+        expected_file = self._resolve_file_path(check.file_path, project_root)
 
         try:
             module = importlib.import_module(module_path)
@@ -189,12 +201,8 @@ class IntegrityValidator:
         resolved_impl = self._resolve_impl_path(transform.impl)
         module_path, func_name = resolved_impl.split(":", 1)
 
-        # file_pathからapps/ プレフィックスを除去して、app_rootを考慮したパスを作成
-        app_name = self.ir.meta.name if self.ir.meta else "app"
-        file_path = Path(transform.file_path)
-        if file_path.parts and file_path.parts[0] == "apps":
-            file_path = Path(*file_path.parts[1:])
-        expected_file = project_root / "apps" / app_name / file_path
+        # file_pathを解決
+        expected_file = self._resolve_file_path(transform.file_path, project_root)
 
         try:
             module = importlib.import_module(module_path)
@@ -250,12 +258,8 @@ class IntegrityValidator:
         resolved_impl = self._resolve_impl_path(generator.impl)
         module_path, func_name = resolved_impl.split(":", 1)
 
-        # file_pathからapps/ プレフィックスを除去して、app_rootを考慮したパスを作成
-        app_name = self.ir.meta.name if self.ir.meta else "app"
-        file_path = Path(generator.file_path)
-        if file_path.parts and file_path.parts[0] == "apps":
-            file_path = Path(*file_path.parts[1:])
-        expected_file = project_root / "apps" / app_name / file_path
+        # file_pathを解決
+        expected_file = self._resolve_file_path(generator.file_path, project_root)
 
         try:
             module = importlib.import_module(module_path)

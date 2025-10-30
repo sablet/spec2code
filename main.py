@@ -92,7 +92,13 @@ class SpectoolCLI:
             else:
                 print(f"    ✅ Transform '{transform.id}': definition is valid")
         all_errors.extend(errors)
-        success_count = len(ir.transforms) - len([f"Transform '{t.id}'" for t in ir.transforms if any(f"Transform '{t.id}'" in err for err in error_messages)])
+        success_count = len(ir.transforms) - len(
+            [
+                f"Transform '{t.id}'"
+                for t in ir.transforms
+                if any(f"Transform '{t.id}'" in err for err in error_messages)
+            ]
+        )
         print(f"    📊 {success_count} of {len(ir.transforms)} Transform(s) validated")
 
         # 4. DAG Stage definitions

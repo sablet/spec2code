@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simple static call graph explorer for the spec2code project.
+"""Simple static call graph explorer for the spectool project.
 
 The script walks the Python sources, builds an approximate call graph,
 then reports symbols (functions, methods, and classes) that are not
@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, Literal, Optional, Set
 
 DEFAULT_IGNORED_SYMBOLS: Set[str] = {
-    "packages.spec2code.engine.Check",
-    "packages.spec2code.engine.Check.__class_getitem__",
-    "packages.spec2code.engine.ExampleValue",
-    "packages.spec2code.engine.ExampleValue.__class_getitem__",
+    "spectool.spectool.core.base.meta_types.Check",
+    "spectool.spectool.core.base.meta_types.Check.__class_getitem__",
+    "spectool.spectool.core.base.meta_types.ExampleValue",
+    "spectool.spectool.core.base.meta_types.ExampleValue.__class_getitem__",
 }
 
 
@@ -520,7 +520,7 @@ def main() -> None:
     parser.add_argument(
         "--inputs",
         nargs="+",
-        default=["main.py", "packages/spec2code"],
+        default=["main.py", "spectool/spectool"],
         help="Paths (files or directories) to include in the analysis.",
     )
     parser.add_argument(
