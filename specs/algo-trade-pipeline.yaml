@@ -391,6 +391,42 @@ datatypes:
     type_alias:
       type: simple
       target: "pandas:DataFrame"
+    dataframe_schema:
+      index:
+        name: timestamp
+        dtype: datetime
+        nullable: false
+        unique: false
+        monotonic: ""
+        description: "Timestamp index"
+      columns:
+        - name: open
+          dtype: float
+          nullable: false
+          description: "Open price"
+        - name: high
+          dtype: float
+          nullable: false
+          description: "High price"
+        - name: low
+          dtype: float
+          nullable: false
+          checks:
+            - type: ge
+              value: 0
+              description: "Low price must be non-negative"
+          description: "Low price"
+        - name: close
+          dtype: float
+          nullable: false
+          description: "Close price"
+        - name: volume
+          dtype: int
+          nullable: true
+          description: "Trading volume"
+      strict: false
+      coerce: true
+      ordered: false
     schema:
       type: array
       items:
