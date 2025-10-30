@@ -21,10 +21,6 @@ from spectool.spectool.core.engine.integrity import IntegrityValidator
 from spectool.spectool.core.engine.dag_runner import DAGRunner
 from spectool.spectool.core.engine.config_runner import ConfigRunner
 from spectool.spectool.backends.py_skeleton import generate_skeleton
-from spectool.spectool.backends.py_code import (
-    generate_dataframe_aliases,
-    generate_models_file,
-)
 from spectool.spectool.backends.py_validators import generate_pandera_schemas
 
 __version__ = "2.0.0-alpha"

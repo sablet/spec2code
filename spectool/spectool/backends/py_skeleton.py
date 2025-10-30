@@ -18,6 +18,7 @@ from spectool.spectool.core.base.ir import (
     TransformSpec,
 )
 from spectool.spectool.backends.py_validators import generate_pandera_schemas
+from spectool.spectool.backends.py_code import generate_all_type_aliases
 
 
 def _extract_function_name(impl: str) -> str:
@@ -507,3 +508,8 @@ def generate_skeleton(ir: SpecIR, output_dir: Path) -> None:
     if ir.frames:
         schema_path = app_root / "schemas" / "dataframe_schemas.py"
         generate_pandera_schemas(ir, schema_path)
+
+    # TypeAlias生成（Annotatedメタデータ付き）
+    if ir.frames or ir.enums or ir.pydantic_models:
+        type_aliases_path = app_root / "types.py"
+        generate_all_type_aliases(ir, type_aliases_path)

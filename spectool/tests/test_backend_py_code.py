@@ -14,11 +14,11 @@ from spectool.spectool.core.base.ir import (
     PydanticModelSpec,
     SpecIR,
 )
-from spectool.spectool.backends.py_code import (
+from spectool.spectool.backends.py_code import generate_all_type_aliases
+from spectool.tests.test_helpers import (
     generate_dataframe_aliases,
     generate_enum_aliases,
     generate_pydantic_aliases,
-    generate_all_type_aliases,
 )
 
 
@@ -113,7 +113,7 @@ def test_generate_enum_aliases_basic():
 
         # 基本的な構造の確認
         assert "AssetClassType: TypeAlias" in content
-        assert "from apps.datatypes.models import AssetClass" in content
+        assert "from apps.test_project.models.enums import AssetClass" in content
 
 
 def test_generate_enum_aliases_with_examples():
@@ -172,7 +172,7 @@ def test_generate_pydantic_aliases_basic():
 
         # 基本的な構造の確認
         assert "UserConfigType: TypeAlias" in content
-        assert "from apps.datatypes.models import UserConfig" in content
+        assert "from apps.test_project.models.models import UserConfig" in content
 
 
 def test_generate_all_type_aliases():

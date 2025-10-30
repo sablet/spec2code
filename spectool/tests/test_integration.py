@@ -11,7 +11,7 @@ import pytest
 from spectool.spectool.core.engine.loader import load_spec
 from spectool.spectool.core.engine.normalizer import normalize_ir
 from spectool.spectool.core.engine.validate import validate_ir
-from spectool.spectool.backends.py_code import generate_dataframe_aliases, generate_models_file
+from spectool.tests.test_helpers import generate_dataframe_aliases, generate_models_file
 from spectool.spectool.backends.py_validators import generate_pandera_schemas
 
 
