@@ -770,6 +770,7 @@ dependencies = [
     { name = "pandera" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -795,6 +796,7 @@ requires-dist = [
     { name = "pandera", specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.12.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
 
 [package.metadata.requires-dev]

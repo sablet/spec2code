@@ -11,6 +11,7 @@ dependencies = [
     "pandera>=0.26.1",
     "pydantic>=2.12.3",
     "pyyaml>=6.0.3",
+    "typing-extensions>=4.15.0",
 ]
 
 [dependency-groups]
@@ -79,4 +80,5 @@ extend_exclude = ["apps", "output", "frontend", "packages/tests"]
 ignore_notebooks = true
 
 [tool.deptry.per_rule_ignores]
-DEP001 = ["spec2code", "spectool"]  # Local package import (project itself)
+DEP001 = ["spec2code", "spectool", "apps"]  # Local package import (project itself + generated apps)
+DEP004 = ["pytest"]  # pytest is dev dependency but used in test files
