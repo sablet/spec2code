@@ -345,6 +345,7 @@ def _load_check_specs(checks_data: list[dict[str, Any]]) -> list[CheckSpec]:
             description=check_data.get("description", ""),
             impl=check_data.get("impl", ""),
             file_path=check_data.get("file_path", ""),
+            input_type_ref=check_data.get("input_type_ref"),
         )
         checks.append(check)
     return checks

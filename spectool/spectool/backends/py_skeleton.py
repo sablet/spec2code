@@ -99,27 +99,33 @@ def _generate_check_modules(ir: SpecIR, app_root: Path) -> None:
     if not ir.checks:
         return
 
-    check_functions_by_file: dict[str, list[str]] = {}
+    check_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
     for check in ir.checks:
         file_path = check.file_path or "checks/validators.py"
         # Normalize file_path to remove "apps/" prefix for grouping
         normalized_path = str(_strip_apps_prefix(Path(file_path)))
         imports_check: set[str] = set()
-        func_code = generate_check_function(check, imports_check)
+        func_code = generate_check_function(check, ir, imports_check)
 
         if normalized_path not in check_functions_by_file:
             check_functions_by_file[normalized_path] = []
-        check_functions_by_file[normalized_path].append(func_code)
+        check_functions_by_file[normalized_path].append((func_code, imports_check))
 
-    for file_path, functions in check_functions_by_file.items():
+    for file_path, functions_with_imports in check_functions_by_file.items():
         relative_path = _strip_apps_prefix(Path(file_path))
         output_path = app_root / relative_path
+
         imports_check_global: set[str] = set()
+        function_codes = []
+        for func_code, imports_local in functions_with_imports:
+            imports_check_global.update(imports_local)
+            function_codes.append(func_code)
+
         _write_module_file(
             output_path,
             "Check functions\n\nこのファイルは spectool が自動生成しました。",
             imports_check_global,
-            functions,
+            function_codes,
         )
 
 

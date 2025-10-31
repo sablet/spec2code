@@ -8,6 +8,7 @@ checks:
     description: "Validate positive values"
     impl: "apps.checks:validate_positive"
     file_path: "apps/checks/validators.py"
+    input_type_ref: DataPoint
 
 datatypes:
   - id: Status

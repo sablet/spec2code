@@ -52,10 +52,11 @@ def implemented_project(generated_project, sample_spec_path):
     # Check関数の実装
     validators_file = app_root / "checks" / "validators.py"
     validators_code = """# Check functions
+from apps.sample_project.models.models import DataPoint
 
-def validate_positive(value: float) -> bool:
+def validate_positive(payload: DataPoint) -> bool:
     '''Validate positive values'''
-    return value > 0
+    return payload.value > 0
 
 
 def validate_status(status: str) -> bool:

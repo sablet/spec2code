@@ -184,6 +184,7 @@ class CheckSpec:
     description: str = ""
     impl: str = ""
     file_path: str = ""
+    input_type_ref: str | None = None
 
 
 @dataclass

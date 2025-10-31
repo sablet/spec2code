@@ -12,14 +12,16 @@ from spectool.spectool.backends.py_skeleton_codegen import (
     extract_function_name,
     render_parameter_signature,
     resolve_transform_return_type,
+    _resolve_type_ref,
 )
 
 
-def generate_check_function(check: CheckSpec, imports: set[str]) -> str:
+def generate_check_function(check: CheckSpec, ir: SpecIR, imports: set[str]) -> str:
     """Check関数のスケルトンを生成
 
     Args:
         check: Check関数定義
+        ir: SpecIR（型参照解決用）
         imports: インポート文を蓄積するセット
 
     Returns:
@@ -27,11 +29,14 @@ def generate_check_function(check: CheckSpec, imports: set[str]) -> str:
     """
     func_name = extract_function_name(check.impl)
 
+    # input_type_refがある場合は型解決、ない場合はdictをデフォルトとする
+    input_type = _resolve_type_ref(check.input_type_ref, ir, imports) if check.input_type_ref else "dict"
+
     lines = []
     if check.description:
         lines.append(f"# {check.description}")
 
-    lines.append(f"def {func_name}(payload: dict) -> bool:")
+    lines.append(f"def {func_name}(payload: {input_type}) -> bool:")
     lines.append(f'    """TODO: Implement {func_name}')
     lines.append("    ")
     if check.description:

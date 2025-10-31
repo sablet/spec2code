@@ -63,8 +63,8 @@ def test_generate_check_function_skeletons(sample_spec_path, temp_output_dir):
 
     content = check_file.read_text()
 
-    # validate_positive関数が生成されていることを確認
-    assert "def validate_positive(payload: dict) -> bool:" in content
+    # validate_positive関数が生成されていることを確認（input_type_refに基づく型）
+    assert "def validate_positive(payload: DataPoint) -> bool:" in content
     assert "TODO" in content  # スケルトンにはTODOコメントが含まれる
 
 
@@ -174,8 +174,10 @@ def test_generate_check_function_with_correct_signature(sample_spec_path, temp_o
     check_file = temp_output_dir / "apps" / "sample_project" / "checks" / "validators.py"
     content = check_file.read_text()
 
-    # Check関数は dict を受け取り bool を返す
-    assert "def validate_positive(payload: dict) -> bool:" in content
+    # Check関数は input_type_ref に指定された型（DataPoint）を受け取り bool を返す
+    assert "def validate_positive(payload: DataPoint) -> bool:" in content
+    # DataPointのインポート文が生成されることも確認
+    assert "from apps.sample_project.models.models import DataPoint" in content
 
 
 def test_generate_enum_datatypes(sample_spec_path, temp_output_dir):
