@@ -345,3 +345,156 @@ def test_example_without_expected_is_valid(temp_spec_dir):
         assert len(ir.examples) == 1
     except Exception as e:
         pytest.fail(f"Example without expected should be valid: {e}")
+
+
+def test_datatype_without_example_or_generator_fails(temp_spec_dir):
+    """ExampleもGeneratorもないDataTypeがエラーとして検出される"""
+    spec_data = {
+        "version": "1.0",
+        "meta": {"name": "no-example-no-generator_spec"},
+        "datatypes": [
+            {
+                "id": "TestModel",
+                "pydantic_model": {"fields": [{"name": "value", "type": {"native": "builtins:int"}}]},
+            }
+        ],
+        # examplesセクションなし、generatorsセクションなし
+    }
+
+    spec_path = temp_spec_dir / "spec.yaml"
+    with open(spec_path, "w") as f:
+        yaml.dump(spec_data, f)
+
+    from spectool.spectool.core.engine.validate import validate_spec
+
+    result = validate_spec(str(spec_path))
+    errors = result["errors"]
+
+    # エラーが報告されること
+    total_errors = sum(len(errs) for errs in errors.values())
+    assert total_errors > 0, "DataType without example or generator should be detected as error"
+
+    # エラーメッセージに該当するDataTypeIDが含まれること
+    all_error_messages = []
+    for category_errors in errors.values():
+        all_error_messages.extend(category_errors)
+
+    combined_errors = " ".join(all_error_messages).lower()
+    assert "testmodel" in combined_errors
+    assert "neither examples nor generators" in combined_errors
+
+
+def test_datatype_with_example_passes(temp_spec_dir):
+    """Exampleがあるdatatypeはバリデーションを通過する"""
+    spec_data = {
+        "version": "1.0",
+        "meta": {"name": "with-example_spec"},
+        "examples": [
+            {
+                "id": "ex_test",
+                "datatype_ref": "TestModel",
+                "input": {"value": 42},
+                "expected": {"valid": True},
+            }
+        ],
+        "datatypes": [
+            {
+                "id": "TestModel",
+                "pydantic_model": {"fields": [{"name": "value", "type": {"native": "builtins:int"}}]},
+            }
+        ],
+    }
+
+    spec_path = temp_spec_dir / "spec.yaml"
+    with open(spec_path, "w") as f:
+        yaml.dump(spec_data, f)
+
+    from spectool.spectool.core.engine.validate import validate_spec
+
+    result = validate_spec(str(spec_path))
+    errors = result["errors"]
+
+    # DataTypeに関するエラーがないこと（他のエラーは許容）
+    datatype_errors = errors.get("datatypes", [])
+    for error in datatype_errors:
+        assert "neither examples nor generators" not in error.lower()
+
+
+def test_datatype_with_generator_passes(temp_spec_dir):
+    """Generatorがあるdatatypeはバリデーションを通過する"""
+    spec_data = {
+        "version": "1.0",
+        "meta": {"name": "with-generator_spec"},
+        "generators": [
+            {
+                "id": "gen_test",
+                "impl": "apps.generators:generate_test",
+                "file_path": "generators/test.py",
+                "return_type_ref": "TestModel",
+            }
+        ],
+        "datatypes": [
+            {
+                "id": "TestModel",
+                "pydantic_model": {"fields": [{"name": "value", "type": {"native": "builtins:int"}}]},
+            }
+        ],
+    }
+
+    spec_path = temp_spec_dir / "spec.yaml"
+    with open(spec_path, "w") as f:
+        yaml.dump(spec_data, f)
+
+    from spectool.spectool.core.engine.validate import validate_spec
+
+    result = validate_spec(str(spec_path), skip_impl_check=True)
+    errors = result["errors"]
+
+    # DataTypeに関するエラーがないこと
+    datatype_errors = errors.get("datatypes", [])
+    for error in datatype_errors:
+        assert "neither examples nor generators" not in error.lower()
+
+
+def test_datatype_with_both_example_and_generator_passes(temp_spec_dir):
+    """ExampleとGeneratorの両方があるdatatypeもバリデーションを通過する"""
+    spec_data = {
+        "version": "1.0",
+        "meta": {"name": "with-both_spec"},
+        "examples": [
+            {
+                "id": "ex_test",
+                "datatype_ref": "TestModel",
+                "input": {"value": 42},
+                "expected": {"valid": True},
+            }
+        ],
+        "generators": [
+            {
+                "id": "gen_test",
+                "impl": "apps.generators:generate_test",
+                "file_path": "generators/test.py",
+                "return_type_ref": "TestModel",
+            }
+        ],
+        "datatypes": [
+            {
+                "id": "TestModel",
+                "pydantic_model": {"fields": [{"name": "value", "type": {"native": "builtins:int"}}]},
+            }
+        ],
+    }
+
+    spec_path = temp_spec_dir / "spec.yaml"
+    with open(spec_path, "w") as f:
+        yaml.dump(spec_data, f)
+
+    from spectool.spectool.core.engine.validate import validate_spec
+
+    result = validate_spec(str(spec_path), skip_impl_check=True)
+    errors = result["errors"]
+
+    # DataTypeに関するエラーがないこと
+    datatype_errors = errors.get("datatypes", [])
+    for error in datatype_errors:
+        assert "neither examples nor generators" not in error.lower()

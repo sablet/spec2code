@@ -187,6 +187,15 @@ meta:
   name: integrity_test_temp
   description: "Integrity test temporary"
 
+examples:
+  - id: ex_test
+    datatype_ref: TestFrame
+    input:
+      idx: [1, 2]
+      value: [1.0, 2.0]
+    expected:
+      valid: true
+
 datatypes:
   - id: TestFrame
     dataframe_schema:

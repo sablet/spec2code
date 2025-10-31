@@ -3,6 +3,16 @@ meta:
   name: "cli_test_project"
   description: "Simple spec for CLI testing"
 
+examples:
+  - id: ex_test_frame
+    datatype_ref: TestFrame
+    input:
+      timestamp: ["2024-01-01", "2024-01-02"]
+      value: [1.0, 2.0]
+      category: ["A", "B"]
+    expected:
+      valid: true
+
 datatypes:
   - id: TestFrame
     dataframe_schema:

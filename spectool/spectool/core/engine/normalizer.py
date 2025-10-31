@@ -199,5 +199,57 @@ def _infer_dtype_from_pydantic_field(field_info: FieldInfo) -> str:
     return "str"
 
 
+def _distribute_examples_to_datatypes(datatypes: list[Any], examples_map: dict[str, list[Any]]) -> None:
+    """Examples mapをdatatypesに振り分ける共通ヘルパー
+
+    Args:
+        datatypes: datatype定義のリスト
+        examples_map: datatype_id -> examples のマップ
+    """
+    for datatype in datatypes:
+        if datatype.id in examples_map:
+            # 重複を避けるため、既存のexamplesに含まれていないもののみ追加
+            for example in examples_map[datatype.id]:
+                if example not in datatype.examples:
+                    datatype.examples.append(example)
+
+
+def example_distribution_handler(ir: SpecIR) -> SpecIR:
+    """Exampleの自動振り分けハンドラ
+
+    トップレベルのexamplesセクションからdatatype_refを使って、
+    各datatype（Pydantic/Enum/Generic/Frame/CustomTypeAlias）にexamplesを振り分ける。
+
+    Args:
+        ir: 入力IR
+
+    Returns:
+        正規化されたIR
+    """
+    ir_copy = deepcopy(ir)
+
+    if not ir_copy.examples:
+        return ir_copy
+
+    # datatype_ref別にexamplesをグループ化
+    examples_map: dict[str, list[Any]] = {}
+    for example in ir_copy.examples:
+        if not example.datatype_ref:
+            continue
+        if example.datatype_ref not in examples_map:
+            examples_map[example.datatype_ref] = []
+        examples_map[example.datatype_ref].append(example.input)
+
+    # 各datatype種別に振り分け
+    _distribute_examples_to_datatypes(ir_copy.pydantic_models, examples_map)
+    _distribute_examples_to_datatypes(ir_copy.enums, examples_map)
+    _distribute_examples_to_datatypes(ir_copy.generics, examples_map)
+    _distribute_examples_to_datatypes(ir_copy.frames, examples_map)
+    _distribute_examples_to_datatypes(ir_copy.type_aliases, examples_map)
+
+    return ir_copy
+
+
 # Built-inハンドラを自動登録
 register_meta_handler(pydantic_row_handler)
+register_meta_handler(example_distribution_handler)

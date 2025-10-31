@@ -81,8 +81,9 @@ def validate_spec(
     datatype_check_warnings = validate_datatype_checks(ir)
     warnings["datatypes"].extend(datatype_check_warnings)
 
-    datatype_example_warnings = validate_datatype_examples_generators(ir)
-    warnings["datatypes"].extend(datatype_example_warnings)
+    # ExampleまたはGeneratorが存在しないdatatypeをエラーとして扱う
+    datatype_example_errors = validate_datatype_examples_generators(ir)
+    errors["datatypes"].extend(datatype_example_errors)
 
     # 成功を記録
     record_successes(ir, errors, successes)

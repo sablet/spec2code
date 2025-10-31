@@ -3,6 +3,16 @@ meta:
   name: minimal_test
   description: "Minimal test spec"
 
+examples:
+  - id: ex_sample_frame
+    datatype_ref: SampleFrame
+    input:
+      idx: [1, 2]
+      value: [1.0, 2.0]
+      label: ["a", "b"]
+    expected:
+      valid: true
+
 datatypes:
   - id: SampleFrame
     description: "Simple DataFrame with basic columns"

@@ -52,6 +52,15 @@ meta:
   name: my_valid_project
   description: "Test project with underscore in name"
 
+examples:
+  - id: ex_test
+    datatype_ref: TestFrame
+    input:
+      idx: [1, 2]
+      value: [1.0, 2.0]
+    expected:
+      valid: true
+
 datatypes:
   - id: TestFrame
     dataframe_schema:
@@ -117,6 +126,15 @@ class TestMetaNameEdgeCases:
 meta:
   name: ""
   description: "Test project"
+
+examples:
+  - id: ex_test
+    datatype_ref: TestFrame
+    input:
+      idx: [1, 2]
+      value: [1.0, 2.0]
+    expected:
+      valid: true
 
 datatypes:
   - id: TestFrame

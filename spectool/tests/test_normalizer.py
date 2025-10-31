@@ -169,3 +169,156 @@ def test_invalid_row_model_reference():
     assert normalized_ir.frames[0].id == "InvalidFrame"
     # 列は追加されない（インポート失敗でスキップ）
     assert len(normalized_ir.frames[0].columns) == 0
+
+
+def test_example_distribution_to_pydantic():
+    """Example自動振り分け: Pydantic Modelへの振り分けテスト"""
+    from spectool.spectool.core.base.ir import (
+        EnumSpec,
+        ExampleCase,
+        GenericSpec,
+        MetaSpec,
+        PydanticModelSpec,
+        SpecIR,
+    )
+
+    # トップレベルのexamplesを持つIRを作成
+    ir = SpecIR(
+        meta=MetaSpec(name="test"),
+        pydantic_models=[
+            PydanticModelSpec(id="TestModel", fields=[], examples=[]),
+        ],
+        examples=[
+            ExampleCase(id="ex1", datatype_ref="TestModel", input={"value": 42}, expected={"valid": True}),
+            ExampleCase(id="ex2", datatype_ref="TestModel", input={"value": 100}, expected={"valid": True}),
+        ],
+    )
+
+    # 正規化前: datatypeのexamplesは空
+    assert len(ir.pydantic_models[0].examples) == 0
+
+    # 正規化
+    normalized_ir = normalize_ir(ir)
+
+    # 正規化後: datatypeのexamplesに振り分けられている
+    assert len(normalized_ir.pydantic_models[0].examples) == 2
+    assert normalized_ir.pydantic_models[0].examples[0] == {"value": 42}
+    assert normalized_ir.pydantic_models[0].examples[1] == {"value": 100}
+
+
+def test_example_distribution_to_enum():
+    """Example自動振り分け: Enumへの振り分けテスト"""
+    from spectool.spectool.core.base.ir import EnumSpec, ExampleCase, MetaSpec, SpecIR
+
+    ir = SpecIR(
+        meta=MetaSpec(name="test"),
+        enums=[
+            EnumSpec(id="Status", base_type="str", members=[], examples=[]),
+        ],
+        examples=[
+            ExampleCase(id="ex1", datatype_ref="Status", input="ACTIVE", expected={"valid": True}),
+        ],
+    )
+
+    # 正規化前
+    assert len(ir.enums[0].examples) == 0
+
+    # 正規化
+    normalized_ir = normalize_ir(ir)
+
+    # 正規化後
+    assert len(normalized_ir.enums[0].examples) == 1
+    assert normalized_ir.enums[0].examples[0] == "ACTIVE"
+
+
+def test_example_distribution_to_generic():
+    """Example自動振り分け: Generic（List）への振り分けテスト"""
+    from spectool.spectool.core.base.ir import ExampleCase, GenericSpec, MetaSpec, SpecIR
+
+    ir = SpecIR(
+        meta=MetaSpec(name="test"),
+        generics=[
+            GenericSpec(
+                id="TestList",
+                container="list",
+                element_type={"native": "builtins:int"},
+                examples=[],
+            ),
+        ],
+        examples=[
+            ExampleCase(id="ex1", datatype_ref="TestList", input=[1, 2, 3], expected={"valid": True}),
+        ],
+    )
+
+    # 正規化前
+    assert len(ir.generics[0].examples) == 0
+
+    # 正規化
+    normalized_ir = normalize_ir(ir)
+
+    # 正規化後
+    assert len(normalized_ir.generics[0].examples) == 1
+    assert normalized_ir.generics[0].examples[0] == [1, 2, 3]
+
+
+def test_example_distribution_multiple_datatypes():
+    """Example自動振り分け: 複数datatypeへの同時振り分けテスト"""
+    from spectool.spectool.core.base.ir import (
+        EnumSpec,
+        ExampleCase,
+        GenericSpec,
+        MetaSpec,
+        PydanticModelSpec,
+        SpecIR,
+    )
+
+    ir = SpecIR(
+        meta=MetaSpec(name="test"),
+        pydantic_models=[
+            PydanticModelSpec(id="Model1", fields=[], examples=[]),
+            PydanticModelSpec(id="Model2", fields=[], examples=[]),
+        ],
+        enums=[
+            EnumSpec(id="Enum1", base_type="str", members=[], examples=[]),
+        ],
+        generics=[
+            GenericSpec(id="List1", container="list", element_type={"native": "builtins:int"}, examples=[]),
+        ],
+        examples=[
+            ExampleCase(id="ex1", datatype_ref="Model1", input={"a": 1}, expected={"valid": True}),
+            ExampleCase(id="ex2", datatype_ref="Model1", input={"a": 2}, expected={"valid": True}),
+            ExampleCase(id="ex3", datatype_ref="Model2", input={"b": 3}, expected={"valid": True}),
+            ExampleCase(id="ex4", datatype_ref="Enum1", input="VALUE", expected={"valid": True}),
+            ExampleCase(id="ex5", datatype_ref="List1", input=[1, 2], expected={"valid": True}),
+        ],
+    )
+
+    # 正規化
+    normalized_ir = normalize_ir(ir)
+
+    # 各datatypeに正しく振り分けられている
+    assert len(normalized_ir.pydantic_models[0].examples) == 2  # Model1
+    assert len(normalized_ir.pydantic_models[1].examples) == 1  # Model2
+    assert len(normalized_ir.enums[0].examples) == 1  # Enum1
+    assert len(normalized_ir.generics[0].examples) == 1  # List1
+
+
+def test_example_distribution_no_datatype_ref():
+    """Example自動振り分け: datatype_refがない場合はスキップ"""
+    from spectool.spectool.core.base.ir import ExampleCase, MetaSpec, PydanticModelSpec, SpecIR
+
+    ir = SpecIR(
+        meta=MetaSpec(name="test"),
+        pydantic_models=[
+            PydanticModelSpec(id="TestModel", fields=[], examples=[]),
+        ],
+        examples=[
+            ExampleCase(id="ex1", datatype_ref=None, input={"value": 42}, expected={"valid": True}),
+        ],
+    )
+
+    # 正規化
+    normalized_ir = normalize_ir(ir)
+
+    # datatype_refがないのでexamplesは振り分けられない
+    assert len(normalized_ir.pydantic_models[0].examples) == 0

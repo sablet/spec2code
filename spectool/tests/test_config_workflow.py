@@ -24,6 +24,20 @@ def sample_spec_with_config(temp_project_dir):
     spec_data = {
         "version": "1.0",
         "meta": {"name": "test_pipeline"},
+        "examples": [
+            {
+                "id": "ex_df1",
+                "datatype_ref": "DataFrame1",
+                "input": {"idx": [1, 2], "value": [1.0, 2.0]},
+                "expected": {"valid": True},
+            },
+            {
+                "id": "ex_df2",
+                "datatype_ref": "DataFrame2",
+                "input": {"idx": [1, 2], "result": [2.0, 4.0]},
+                "expected": {"valid": True},
+            },
+        ],
         "datatypes": [
             {
                 "id": "DataFrame1",

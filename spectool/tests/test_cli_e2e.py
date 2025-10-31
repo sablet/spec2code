@@ -65,6 +65,15 @@ meta:
   name: "test_project"
   description: "Test project"
 
+examples:
+  - id: ex_test
+    datatype_ref: TestFrame
+    input:
+      timestamp: ["2024-01-01"]
+      value: [1.0]
+    expected:
+      valid: true
+
 datatypes:
   - id: TestFrame
     dataframe_schema:
@@ -121,6 +130,15 @@ class TestCLIValidateIntegrityCommand:
 meta:
   name: "integrity_test_project"
   description: "Integrity test project"
+
+examples:
+  - id: ex_test
+    datatype_ref: TestFrame
+    input:
+      timestamp: ["2024-01-01"]
+      value: [1.0]
+    expected:
+      valid: true
 
 datatypes:
   - id: TestFrame

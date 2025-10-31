@@ -210,6 +210,142 @@ examples:
     expected:
       valid: true
 
+  - id: ex_cv_method
+    description: "CV method enum example"
+    datatype_ref: CVMethod
+    input: "TIME_SERIES"
+    expected:
+      valid: true
+
+  - id: ex_position_signal
+    description: "Position signal enum example"
+    datatype_ref: PositionSignal
+    input: 1
+    expected:
+      valid: true
+
+  - id: ex_trading_cost_config
+    description: "Trading cost configuration example"
+    datatype_ref: TradingCostConfig
+    input:
+      swap_rates:
+        USDJPY: 0.0001
+        EURUSD: 0.0002
+      spread_costs:
+        USDJPY: 0.0003
+        EURUSD: 0.0004
+    expected:
+      valid: true
+
+  - id: ex_simple_lgbm_params
+    description: "LightGBM parameters example"
+    datatype_ref: SimpleLGBMParams
+    input:
+      learning_rate: 0.05
+      num_leaves: 31
+      max_depth: -1
+    expected:
+      valid: true
+
+  - id: ex_selected_currency_data
+    description: "Selected currency data example"
+    datatype_ref: SelectedCurrencyData
+    input:
+      timestamp: "2024-01-01T00:00:00"
+      symbol: "USDJPY"
+      prediction: 0.65
+      signal: 1
+    expected:
+      valid: true
+
+  - id: ex_ranked_prediction_data
+    description: "Ranked prediction data example"
+    datatype_ref: RankedPredictionData
+    input:
+      timestamp: "2024-01-01T00:00:00"
+      symbol: "USDJPY"
+      prediction: 0.65
+      actual_return: 0.02
+      prediction_rank_pct: 0.85
+    expected:
+      valid: true
+
+  - id: ex_selected_currency_with_costs
+    description: "Selected currency with costs example"
+    datatype_ref: SelectedCurrencyDataWithCosts
+    input:
+      timestamp: "2024-01-01T00:00:00"
+      symbol: "USDJPY"
+      prediction: 0.65
+      signal: 1
+      adjusted_return: 0.015
+    expected:
+      valid: true
+
+  - id: ex_prediction_data_list
+    description: "Prediction data list example"
+    datatype_ref: PredictionDataList
+    input:
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "USDJPY"
+        prediction: 0.65
+        actual_return: 0.02
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "EURUSD"
+        prediction: 0.58
+        actual_return: 0.01
+    expected:
+      valid: true
+
+  - id: ex_ranked_prediction_data_list
+    description: "Ranked prediction data list example"
+    datatype_ref: RankedPredictionDataList
+    input:
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "USDJPY"
+        prediction: 0.65
+        actual_return: 0.02
+        prediction_rank_pct: 0.85
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "EURUSD"
+        prediction: 0.58
+        actual_return: 0.01
+        prediction_rank_pct: 0.65
+    expected:
+      valid: true
+
+  - id: ex_selected_currency_data_list
+    description: "Selected currency data list example"
+    datatype_ref: SelectedCurrencyDataList
+    input:
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "USDJPY"
+        prediction: 0.65
+        signal: 1
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "EURUSD"
+        prediction: 0.58
+        signal: 1
+    expected:
+      valid: true
+
+  - id: ex_selected_currency_with_costs_list
+    description: "Selected currency with costs list example"
+    datatype_ref: SelectedCurrencyDataWithCostsList
+    input:
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "USDJPY"
+        prediction: 0.65
+        signal: 1
+        adjusted_return: 0.015
+      - timestamp: "2024-01-01T00:00:00"
+        symbol: "EURUSD"
+        prediction: 0.58
+        signal: 1
+        adjusted_return: 0.008
+    expected:
+      valid: true
+
 generators:
   - id: gen_provider_batches
     description: "Synthesize provider batch payloads"
@@ -259,77 +395,11 @@ generators:
     file_path: "generators/feature_engineering.py"
     return_type_ref: AlignedFeatureTarget
 
-  - id: gen_cv_method
-    description: "Select a cross-validation method"
-    impl: "apps.algo_trade_pipeline.generators.model:generate_cv_method"
-    file_path: "generators/model.py"
-    return_type_ref: CVMethod
-
-  - id: gen_simple_lgbm_params
-    description: "Provide LightGBM hyperparameter defaults"
-    impl: "apps.algo_trade_pipeline.generators.model:generate_simple_lgbm_params"
-    file_path: "generators/model.py"
-    return_type_ref: SimpleLGBMParams
-
   - id: gen_cv_result
     description: "Create a minimal CV result payload"
     impl: "apps.algo_trade_pipeline.generators.model:generate_cv_result"
     file_path: "generators/model.py"
     return_type_ref: CVResult
-
-  - id: gen_prediction_data_list
-    description: "Build a list of prediction records"
-    impl: "apps.algo_trade_pipeline.generators.model:generate_prediction_data_list"
-    file_path: "generators/model.py"
-    return_type_ref: PredictionDataList
-
-  - id: gen_ranked_prediction_data
-    description: "Produce ranked prediction data"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_ranked_prediction_data"
-    file_path: "generators/backtest.py"
-    return_type_ref: RankedPredictionData
-
-  - id: gen_ranked_prediction_data_list
-    description: "Construct a ranked prediction list"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_ranked_prediction_data_list"
-    file_path: "generators/backtest.py"
-    return_type_ref: RankedPredictionDataList
-
-  - id: gen_position_signal
-    description: "Emit a position signal sample"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_position_signal"
-    file_path: "generators/backtest.py"
-    return_type_ref: PositionSignal
-
-  - id: gen_selected_currency_data
-    description: "Create selected currency data entry"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_selected_currency_data"
-    file_path: "generators/backtest.py"
-    return_type_ref: SelectedCurrencyData
-
-  - id: gen_selected_currency_data_list
-    description: "Create selected currency allocation list"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_selected_currency_data_list"
-    file_path: "generators/backtest.py"
-    return_type_ref: SelectedCurrencyDataList
-
-  - id: gen_trading_cost_config
-    description: "Provide trading cost configuration"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_trading_cost_config"
-    file_path: "generators/backtest.py"
-    return_type_ref: TradingCostConfig
-
-  - id: gen_selected_currency_with_costs
-    description: "Produce currency selection with costs"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_selected_currency_with_costs"
-    file_path: "generators/backtest.py"
-    return_type_ref: SelectedCurrencyDataWithCosts
-
-  - id: gen_selected_currency_with_costs_list
-    description: "Produce currency selection list including costs"
-    impl: "apps.algo_trade_pipeline.generators.backtest:generate_selected_currency_with_costs_list"
-    file_path: "generators/backtest.py"
-    return_type_ref: SelectedCurrencyDataWithCostsList
 
   - id: gen_simulation_result
     description: "Create a simulation result payload"

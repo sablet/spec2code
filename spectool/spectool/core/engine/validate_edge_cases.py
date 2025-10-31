@@ -150,11 +150,30 @@ def validate_datatype_checks(ir: SpecIR) -> list[str]:
 
 
 def _collect_example_datatypes(ir: SpecIR) -> set[str]:
-    """Exampleから参照されているdatatype_refを収集"""
+    """Exampleから参照されているdatatype_refを収集
+
+    トップレベルのexamplesとdatatypeレベルのexamplesの両方を確認する。
+    """
     example_datatypes = set()
+
+    # トップレベルのexamplesから収集
     for example in ir.examples:
         if example.datatype_ref and example.datatype_ref.strip():
             example_datatypes.add(example.datatype_ref)
+
+    # datatypeレベルのexamplesから収集（正規化後）
+    all_datatypes: list[FrameSpec | EnumSpec | PydanticModelSpec | TypeAliasSpec | GenericSpec] = [
+        *ir.frames,
+        *ir.enums,
+        *ir.pydantic_models,
+        *ir.type_aliases,
+        *ir.generics,
+    ]
+
+    for datatype in all_datatypes:
+        if datatype.examples:
+            example_datatypes.add(datatype.id)
+
     return example_datatypes
 
 
