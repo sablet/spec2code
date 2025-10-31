@@ -339,7 +339,7 @@ DAGの処理ノードを定義します。
 - `file_path`: 生成先ファイルパス（`apps/{name}/` からの相対パス）
 
 **オプションフィールド**:
-- `description`: 説明
+- `description`: 説明（日本語推奨）
 - `parameters`: パラメータリスト
   - `name` (必須): パラメータ名
   - `datatype_ref` または `native`: 型参照
@@ -347,30 +347,43 @@ DAGの処理ノードを定義します。
   - `default`: デフォルト値
   - `literal`: リテラル値リスト（選択肢）
 - `return_type_ref`: 戻り値型参照
-- `spec_metadata`: 追加メタデータ（疑似コード、複雑度、依存関係など）
+- `spec_metadata`: 実装者向けのヒント（実装ステップ、注意点、依存関係など）。詳細は下記参照
 
 ### spec_metadata（推奨）
 
-実装者向けのヒントを記述できます：
+実装者向けのヒントを記述できます。**すべての関数（transforms, checks, generators）で統一されたスキーマを使用します**：
 
 ```yaml
 spec_metadata:
-  logic_overview:
+  logic_steps:
     - "各プロバイダバッチからDataFrameを抽出"
-    - "カラム名を標準OHLCV形式にマッピング"
-    - "タイムスタンプをUTC datetimeに変換"
-  pseudo_code: |
-    normalized_frames = []
-    for batch in batches.batches:
-        df = standardize_columns(batch)
-        df.index = pd.to_datetime(df.index).tz_localize('UTC')
-        normalized_frames.append(df)
-    return pd.concat(normalized_frames)
-  complexity: "O(n*m) where n=batches, m=rows"
-  dependencies:
-    - pandas
-    - datetime
+    - "カラム名を標準OHLCV形式にマッピング (open, high, low, close, volume)"
+    - "タイムスタンプをUTC datetime形式に変換する (pd.to_datetime().tz_localize('UTC'))"
+    - "データの完全性を検証し、OHLC値が欠損している行を削除"
+    - "すべての正規化されたDataFrameを単一の結果に結合 (pd.concat())"
+  implementation_hints:
+    - "pandasでDataFrame操作、datetimeでタイムスタンプ変換を行う"
+    - "プロバイダ固有のカラムマッピングは設定ファイルまたはルックアップテーブルが必要な可能性"
+    - "UTC変換によりプロバイダ間のタイムゾーン一貫性を確保"
 ```
+
+**フィールド説明**:
+- `logic_steps` (必須): 実装すべきロジックのステップを順序立てて記述。「何をするか」に焦点を当てる。**日本語で記述することを推奨**
+- `implementation_hints` (必須): 実装のヒント、注意点、依存ライブラリ、制約など。「どう実装するか」に焦点を当てる。**日本語で記述することを推奨**
+
+**設計方針**:
+- **日本語推奨**: レビューしやすくするため、`logic_steps`と`implementation_hints`は日本語で記述することを推奨
+- **仕様と実装の分離**: `logic_steps`は仕様レベル、`implementation_hints`は実装レベル
+- **擬似コードの排除**: 詳細な擬似コードは実装者の創意工夫の余地を残すため記述しない
+- **シンプル性の重視**: 複雑度や依存関係は`implementation_hints`に統合し、スキーマを簡潔に保つ
+
+**spec_metadata での重要な情報（transforms 特有）**:
+- `logic_steps`: **ビジネスロジックの処理フローを記述**（例: データ抽出 → 変換 → 集約 → 結合）
+- `implementation_hints`:
+  - 依存ライブラリとその使用目的
+  - データ変換のエッジケース処理（欠損値、異常値、境界条件）
+  - 外部リソースやAPI呼び出しに関する注意事項
+  - パフォーマンス最適化のポイント（大規模データ処理時）
 
 ---
 
@@ -379,10 +392,22 @@ spec_metadata:
 データ検証関数を定義します。
 
 ```yaml
-- id: check_ingestion_config
-  description: "市場データ取得設定を検証"
-  impl: "apps.algo_trade_pipeline.checks.market_data_checks:check_ingestion_config"
-  file_path: "checks/market_data_checks.py"
+- id: check_ohlcv
+  description: "OHLCV価格制約と時系列異常を検証"
+  impl: "apps.algo_trade_pipeline.checks.feature_checks:check_ohlcv"
+  file_path: "checks/feature_checks.py"
+  input_type_ref: OHLCVFrame
+  spec_metadata:
+    logic_steps:
+      - "np.isinf(df.select_dtypes(include=[np.number])).any().any() で Inf値検出"
+      - "df.index.duplicated().any() でインデックス重複チェック"
+      - "(df['high'] >= df[['open', 'close']].max(axis=1)).all() で価格上限制約"
+      - "(df['low'] <= df[['open', 'close']].min(axis=1)).all() で価格下限制約"
+      - "df['close'].pct_change().abs() > 0.5 で異常変動率検出"
+    implementation_hints:
+      - "価格制約: max(axis=1)/min(axis=1) で行ごとの最大・最小を取得して比較"
+      - "時系列ギャップ: mode() で最頻値を期待頻度とし、その2倍を閾値とする"
+      - "dataframe_schemaでカラム存在・dtype・NaN・単調性は既にカバー済み"
 ```
 
 **必須フィールド**:
@@ -391,7 +416,16 @@ spec_metadata:
 - `file_path`: 生成先ファイルパス
 
 **オプションフィールド**:
-- `description`: 説明
+- `description`: 説明（日本語推奨）
+- `input_type_ref`: 入力型参照
+- `spec_metadata`: 実装者向けのヒント。transforms と同じスキーマ（`logic_steps` + `implementation_hints`）を使用
+
+**spec_metadata での重要な情報（checks 特有）**:
+- `logic_steps`: **検証すべき条件を具体的なコードレベルで記述**（例: `df.isnull().any()`, `len(x) > 0`）
+- `implementation_hints`:
+  - 検証閾値の根拠（なぜその値を使うか）
+  - dataframe_schema や Pydantic で既にカバーされている検証との重複を避けるための注意
+  - エッジケースやデータ特性に応じた調整ポイント
 
 ---
 
@@ -428,11 +462,20 @@ spec_metadata:
 テストデータやモックデータを生成する関数を定義します。
 
 ```yaml
-- id: gen_provider_batches
-  description: "プロバイダバッチペイロードを合成"
-  impl: "apps.algo_trade_pipeline.generators.market_data:generate_provider_batches"
-  file_path: "generators/market_data.py"
-  return_type_ref: ProviderBatchCollection
+- id: gen_ohlcv_frame
+  description: "リサンプルされたOHLCVフレームを生成"
+  impl: "apps.algo_trade_pipeline.generators.feature_engineering:generate_ohlcv_frame"
+  file_path: "generators/feature_engineering.py"
+  return_type_ref: OHLCVFrame
+  spec_metadata:
+    logic_steps:
+      - "1時間頻度でdatetimeインデックスを作成"
+      - "価格制約を満たす現実的なOHLCV値を生成"
+      - "high >= max(open, close) かつ low <= min(open, close) を保証"
+      - "オプションでランダムな整数値のvolume列を追加"
+    implementation_hints:
+      - "pandasとnumpyを使用して効率的にデータ生成"
+      - "テストデータの現実性のため価格制約を維持する必要がある"
 ```
 
 **必須フィールド**:
@@ -442,8 +485,16 @@ spec_metadata:
 - `return_type_ref`: 戻り値型参照
 
 **オプションフィールド**:
-- `description`: 説明
+- `description`: 説明（日本語推奨）
 - `parameters`: パラメータリスト
+- `spec_metadata`: 実装者向けのヒント。transforms と同じスキーマ（`logic_steps` + `implementation_hints`）を使用
+
+**spec_metadata での重要な情報（generators 特有）**:
+- `logic_steps`: **データ生成の手順を順序立てて記述**（例: インデックス作成 → 値生成 → 制約適用）
+- `implementation_hints`:
+  - テストデータとして現実的な値の範囲や分布
+  - 生成データが満たすべき制約条件（price constraints, 時系列順序など）
+  - パフォーマンス考慮事項（大量データ生成時のメモリ効率など）
 
 ---
 
@@ -594,7 +645,7 @@ type:
 
 ### 2. 説明を充実させる
 
-`description` フィールドを積極的に使用し、生成されるdocstringを充実させます。
+`description` フィールドを積極的に使用し、生成されるdocstringを充実させます。**レビューしやすくするため、日本語で記述することを推奨します**。
 
 ### 3. 例示データを提供する
 
@@ -602,7 +653,7 @@ type:
 
 ### 4. spec_metadata を活用する
 
-`spec_metadata` に疑似コード、複雑度、依存関係を記述することで、実装者へのヒントを提供できます。
+`spec_metadata` に実装ステップ (`logic_steps`) と実装ヒント (`implementation_hints`) を記述することで、実装者への明確なガイダンスを提供できます。仕様レベルの「何をするか」と実装レベルの「どう実装するか」を分離して記述することで、実装者の理解を助けます。
 
 ### 5. DAGステージの粒度
 

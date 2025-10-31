@@ -113,22 +113,20 @@ def _check_datatype_has_check_functions(datatype: Any) -> str | None:  # noqa: A
     Returns:
         警告メッセージ、または None
     """
-    if not datatype.check_functions:
-        return (
-            f"DataType '{datatype.id}': no check functions defined. "
-            f"Consider adding check_functions for data validation."
-        )
+    # check_functionsは0個以上許容するため、警告を出さない
     return None
 
 
 def validate_datatype_checks(ir: SpecIR) -> list[str]:
-    """DataTypeのcheck関数がゼロ件でないかチェック（警告）
+    """DataTypeのcheck関数の存在をチェック（現在は警告を出さない）
+
+    check_functionsは0個以上許容するため、現在は警告を生成しない。
 
     Args:
         ir: 検証対象のIR
 
     Returns:
-        警告メッセージのリスト
+        警告メッセージのリスト（空リスト）
     """
     warnings: list[str] = []
 
