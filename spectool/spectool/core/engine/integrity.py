@@ -35,7 +35,7 @@ class IntegrityValidator:
         """implパスを解決（apps. プレフィックスをプロジェクト名を含む形に変換）
 
         Args:
-            impl: 元のimplパス (例: "apps.checks:func")
+            impl: 元のimplパス (例: "apps.checks:func" または "apps.project_name.checks:func")
 
         Returns:
             解決されたimplパス (例: "apps.sample-project.checks:func")
@@ -49,6 +49,12 @@ class IntegrityValidator:
         # "apps." の後の部分を取得
         rest = impl[5:]  # "apps." を除去
 
+        # 既にプロジェクト名が含まれているかチェック
+        # rest が "{app_name}." で始まっていたら、既に正しい形式なのでそのまま返す
+        if rest.startswith(f"{app_name}."):
+            return impl
+
+        # 短縮形式の場合のみプロジェクト名を挿入
         # "apps.<project-name>." + 残りの部分
         return f"apps.{app_name}.{rest}"
 

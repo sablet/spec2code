@@ -71,19 +71,33 @@ class GeneratorSpec:
     """データ生成関数への参照
 
     Usage:
+        # 単一factory形式（従来）
         OHLCVFrame: TypeAlias = Annotated[
             pd.DataFrame,
             GeneratorSpec(factory="apps.generators:generate_ohlcv_frame"),
         ]
 
+        # 複数generators形式（新アーキテクチャ）
+        OHLCVFrame: TypeAlias = Annotated[
+            pd.DataFrame,
+            GeneratorSpec(generators=["gen_ohlcv_1", "gen_ohlcv_2"]),
+        ]
+
     Attributes:
-        factory: 生成関数への参照（"module.path:function_name"形式）
+        factory: 生成関数への参照（"module.path:function_name"形式）- 単一factory形式用
+        generators: Generator IDのリスト - 複数generators形式用
+
+    Note:
+        factory または generators のいずれか一方を指定する必要があります
     """
 
-    factory: str
+    factory: str | None = None
+    generators: list[str] = field(default_factory=list)
 
     def __repr__(self) -> str:
-        return f"GeneratorSpec(factory={self.factory!r})"
+        if self.factory:
+            return f"GeneratorSpec(factory={self.factory!r})"
+        return f"GeneratorSpec(generators={self.generators!r})"
 
 
 @dataclass(frozen=True)
