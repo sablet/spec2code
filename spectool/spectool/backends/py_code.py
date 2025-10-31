@@ -9,7 +9,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from spectool.spectool.core.base.ir import EnumSpec, FrameSpec, PydanticModelSpec, SpecIR
+from spectool.spectool.core.base.ir import (
+    EnumSpec,
+    FrameSpec,
+    GenericSpec,
+    PydanticModelSpec,
+    SpecIR,
+    TypeAliasSpec,
+)
+from spectool.spectool.backends.py_skeleton_codegen import _resolve_type_ref
 
 
 def render_imports(imports: set[str]) -> str:
@@ -318,6 +326,400 @@ def generate_pydantic_type_alias_with_generators(
     return "\n".join(lines)
 
 
+def generate_type_alias_code(type_alias: TypeAliasSpec, imports: set[str], app_name: str, ir: SpecIR) -> str:
+    """TypeAlias（simple/tuple）コードブロックを生成
+
+    Args:
+        type_alias: TypeAlias定義
+        imports: インポート文のセット
+        app_name: アプリケーション名
+        ir: SpecIR（型参照解決用）
+
+    Returns:
+        生成されたTypeAliasコード
+    """
+    type_def = type_alias.type_def
+    alias_type = type_def.get("type", "simple")
+
+    # メタデータパーツを構築
+    meta_parts = _build_common_meta_parts(type_alias.examples, type_alias.check_functions)
+
+    # TypeAlias構築
+    lines = []
+    if type_alias.description:
+        lines.append(f"# {type_alias.description}")
+
+    # ターゲット型を解決
+    if alias_type == "simple":
+        target = type_def.get("target", "")
+        if "pandas:" in target:
+            imports.add("import pandas as pd")
+            target_type = "pd.DataFrame"
+        elif ":" in target:
+            target_type = target.split(":")[-1]
+        else:
+            target_type = target
+    elif alias_type == "tuple":
+        # tuple要素を解決（types.py内では循環インポートを避けるため、importsにNoneを渡す）
+        elements = type_def.get("elements", [])
+        element_types = []
+        for elem in elements:
+            if "datatype_ref" in elem:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(elem["datatype_ref"], ir, None)
+                element_types.append(elem_type)
+            elif "native" in elem:
+                elem_type = process_native_type(elem["native"])
+                element_types.append(elem_type)
+
+        imports.add("from typing import Tuple")
+        target_type = f"tuple[{', '.join(element_types)}]"
+    else:
+        # Unsupported type
+        target_type = "Any"
+        imports.add("from typing import Any")
+
+    if meta_parts:
+        imports.add("from typing import Annotated")
+        imports.add("from spectool.spectool.core.base.meta_types import ExampleSpec, CheckedSpec")
+
+        lines.append(f"{type_alias.id}: TypeAlias = Annotated[")
+        lines.append(f"    {target_type},")
+        lines.extend(meta_parts)
+        lines.append("]")
+    else:
+        lines.append(f"{type_alias.id}: TypeAlias = {target_type}")
+
+    return "\n".join(lines)
+
+
+def generate_type_alias_code_with_generators(
+    type_alias: TypeAliasSpec, imports: set[str], app_name: str, ir: SpecIR, generator_ids: list[str]
+) -> str:
+    """TypeAlias（simple/tuple）コードブロックを生成（GeneratorSpec付き）
+
+    Args:
+        type_alias: TypeAlias定義
+        imports: インポート文のセット
+        app_name: アプリケーション名
+        ir: SpecIR（型参照解決用）
+        generator_ids: Generator IDリスト
+
+    Returns:
+        生成されたTypeAliasコード
+    """
+    type_def = type_alias.type_def
+    alias_type = type_def.get("type", "simple")
+
+    # メタデータパーツを構築
+    meta_parts = _build_common_meta_parts(type_alias.examples, type_alias.check_functions)
+
+    # GeneratorSpecを追加
+    gen_spec = _build_generator_spec_from_ids(generator_ids)
+    if gen_spec:
+        meta_parts.append(f"    {gen_spec},")
+
+    # TypeAlias構築
+    lines = []
+    if type_alias.description:
+        lines.append(f"# {type_alias.description}")
+
+    # ターゲット型を解決
+    if alias_type == "simple":
+        target = type_def.get("target", "")
+        if "pandas:" in target:
+            imports.add("import pandas as pd")
+            target_type = "pd.DataFrame"
+        elif ":" in target:
+            target_type = target.split(":")[-1]
+        else:
+            target_type = target
+    elif alias_type == "tuple":
+        # tuple要素を解決（types.py内では循環インポートを避けるため、importsにNoneを渡す）
+        elements = type_def.get("elements", [])
+        element_types = []
+        for elem in elements:
+            if "datatype_ref" in elem:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(elem["datatype_ref"], ir, None)
+                element_types.append(elem_type)
+            elif "native" in elem:
+                elem_type = process_native_type(elem["native"])
+                element_types.append(elem_type)
+
+        imports.add("from typing import Tuple")
+        target_type = f"tuple[{', '.join(element_types)}]"
+    else:
+        # Unsupported type
+        target_type = "Any"
+        imports.add("from typing import Any")
+
+    if meta_parts:
+        imports.add("from typing import Annotated")
+        imports.add("from spectool.spectool.core.base.meta_types import ExampleSpec, CheckedSpec, GeneratorSpec")
+
+        lines.append(f"{type_alias.id}: TypeAlias = Annotated[")
+        lines.append(f"    {target_type},")
+        lines.extend(meta_parts)
+        lines.append("]")
+    else:
+        lines.append(f"{type_alias.id}: TypeAlias = {target_type}")
+
+    return "\n".join(lines)
+
+
+def generate_generic_code(generic: GenericSpec, imports: set[str], app_name: str, ir: SpecIR) -> str:
+    """Generic（list/dict/set/tuple）コードブロックを生成
+
+    Args:
+        generic: Generic定義
+        imports: インポート文のセット
+        app_name: アプリケーション名
+        ir: SpecIR（型参照解決用）
+
+    Returns:
+        生成されたGenericコード
+    """
+    # メタデータパーツを構築
+    meta_parts = _build_common_meta_parts(generic.examples, generic.check_functions)
+
+    # TypeAlias構築
+    lines = []
+    if generic.description:
+        lines.append(f"# {generic.description}")
+
+    # Helper function to process native types and add necessary imports
+    def process_native_type(native_str: str) -> str:
+        if ":" in native_str:
+            module, typename = native_str.split(":", 1)
+            if module == "typing":
+                imports.add(f"from typing import {typename}")
+            return typename
+        return native_str
+
+    # Generic型を構築
+    container = generic.container
+
+    if container == "list":
+        if generic.element_type:
+            if "datatype_ref" in generic.element_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(generic.element_type["datatype_ref"], ir, None)
+            elif "native" in generic.element_type:
+                elem_type = process_native_type(generic.element_type["native"])
+            else:
+                elem_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            elem_type = "Any"
+            imports.add("from typing import Any")
+        target_type = f"list[{elem_type}]"
+
+    elif container == "dict":
+        if generic.key_type:
+            if "datatype_ref" in generic.key_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                key_type = _resolve_type_ref(generic.key_type["datatype_ref"], ir, None)
+            elif "native" in generic.key_type:
+                key_type = process_native_type(generic.key_type["native"])
+            else:
+                key_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            key_type = "Any"
+            imports.add("from typing import Any")
+
+        if generic.value_type:
+            if "datatype_ref" in generic.value_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                value_type = _resolve_type_ref(generic.value_type["datatype_ref"], ir, None)
+            elif "native" in generic.value_type:
+                value_type = process_native_type(generic.value_type["native"])
+            else:
+                value_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            value_type = "Any"
+            imports.add("from typing import Any")
+
+        target_type = f"dict[{key_type}, {value_type}]"
+
+    elif container == "set":
+        if generic.element_type:
+            if "datatype_ref" in generic.element_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(generic.element_type["datatype_ref"], ir, None)
+            elif "native" in generic.element_type:
+                elem_type = process_native_type(generic.element_type["native"])
+            else:
+                elem_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            elem_type = "Any"
+            imports.add("from typing import Any")
+        target_type = f"set[{elem_type}]"
+
+    elif container == "tuple":
+        element_types = []
+        for elem in generic.elements:
+            if "datatype_ref" in elem:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(elem["datatype_ref"], ir, None)
+                element_types.append(elem_type)
+            elif "native" in elem:
+                elem_type = process_native_type(elem["native"])
+                element_types.append(elem_type)
+        target_type = f"tuple[{', '.join(element_types)}]"
+
+    else:
+        # Unsupported container
+        target_type = "Any"
+        imports.add("from typing import Any")
+
+    if meta_parts:
+        imports.add("from typing import Annotated")
+        imports.add("from spectool.spectool.core.base.meta_types import ExampleSpec, CheckedSpec")
+
+        lines.append(f"{generic.id}: TypeAlias = Annotated[")
+        lines.append(f"    {target_type},")
+        lines.extend(meta_parts)
+        lines.append("]")
+    else:
+        lines.append(f"{generic.id}: TypeAlias = {target_type}")
+
+    return "\n".join(lines)
+
+
+def generate_generic_code_with_generators(
+    generic: GenericSpec, imports: set[str], app_name: str, ir: SpecIR, generator_ids: list[str]
+) -> str:
+    """Generic（list/dict/set/tuple）コードブロックを生成（GeneratorSpec付き）
+
+    Args:
+        generic: Generic定義
+        imports: インポート文のセット
+        app_name: アプリケーション名
+        ir: SpecIR（型参照解決用）
+        generator_ids: Generator IDリスト
+
+    Returns:
+        生成されたGenericコード
+    """
+    # メタデータパーツを構築
+    meta_parts = _build_common_meta_parts(generic.examples, generic.check_functions)
+
+    # GeneratorSpecを追加
+    gen_spec = _build_generator_spec_from_ids(generator_ids)
+    if gen_spec:
+        meta_parts.append(f"    {gen_spec},")
+
+    # TypeAlias構築
+    lines = []
+    if generic.description:
+        lines.append(f"# {generic.description}")
+
+    # Helper function to process native types and add necessary imports
+    def process_native_type(native_str: str) -> str:
+        if ":" in native_str:
+            module, typename = native_str.split(":", 1)
+            if module == "typing":
+                imports.add(f"from typing import {typename}")
+            return typename
+        return native_str
+
+    # Generic型を構築
+    container = generic.container
+
+    if container == "list":
+        if generic.element_type:
+            if "datatype_ref" in generic.element_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(generic.element_type["datatype_ref"], ir, None)
+            elif "native" in generic.element_type:
+                elem_type = process_native_type(generic.element_type["native"])
+            else:
+                elem_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            elem_type = "Any"
+            imports.add("from typing import Any")
+        target_type = f"list[{elem_type}]"
+
+    elif container == "dict":
+        if generic.key_type:
+            if "datatype_ref" in generic.key_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                key_type = _resolve_type_ref(generic.key_type["datatype_ref"], ir, None)
+            elif "native" in generic.key_type:
+                key_type = process_native_type(generic.key_type["native"])
+            else:
+                key_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            key_type = "Any"
+            imports.add("from typing import Any")
+
+        if generic.value_type:
+            if "datatype_ref" in generic.value_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                value_type = _resolve_type_ref(generic.value_type["datatype_ref"], ir, None)
+            elif "native" in generic.value_type:
+                value_type = process_native_type(generic.value_type["native"])
+            else:
+                value_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            value_type = "Any"
+            imports.add("from typing import Any")
+
+        target_type = f"dict[{key_type}, {value_type}]"
+
+    elif container == "set":
+        if generic.element_type:
+            if "datatype_ref" in generic.element_type:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(generic.element_type["datatype_ref"], ir, None)
+            elif "native" in generic.element_type:
+                elem_type = process_native_type(generic.element_type["native"])
+            else:
+                elem_type = "Any"
+                imports.add("from typing import Any")
+        else:
+            elem_type = "Any"
+            imports.add("from typing import Any")
+        target_type = f"set[{elem_type}]"
+
+    elif container == "tuple":
+        element_types = []
+        for elem in generic.elements:
+            if "datatype_ref" in elem:
+                # types.py内での参照なので、インポートなしで型名のみ取得
+                elem_type = _resolve_type_ref(elem["datatype_ref"], ir, None)
+                element_types.append(elem_type)
+            elif "native" in elem:
+                elem_type = process_native_type(elem["native"])
+                element_types.append(elem_type)
+        target_type = f"tuple[{', '.join(element_types)}]"
+
+    else:
+        # Unsupported container
+        target_type = "Any"
+        imports.add("from typing import Any")
+
+    if meta_parts:
+        imports.add("from typing import Annotated")
+        imports.add("from spectool.spectool.core.base.meta_types import ExampleSpec, CheckedSpec, GeneratorSpec")
+
+        lines.append(f"{generic.id}: TypeAlias = Annotated[")
+        lines.append(f"    {target_type},")
+        lines.extend(meta_parts)
+        lines.append("]")
+    else:
+        lines.append(f"{generic.id}: TypeAlias = {target_type}")
+
+    return "\n".join(lines)
+
+
 def _build_generator_refs_map(ir: SpecIR) -> dict[str, list[str]]:
     """generatorsのreturn_type_refからDatatype IDへのマップを構築
 
@@ -427,6 +829,46 @@ def generate_all_type_aliases(ir: SpecIR, output_path: Path) -> None:
                 generate_dataframe_type_alias,
             )
         )
+
+    # TypeAlias (simple/tuple) TypeAliases
+    if ir.type_aliases:
+        section = ["# === Custom TypeAliases ===\n"]
+        for type_alias in ir.type_aliases:
+            if type_alias.id in generator_map:
+                # Ensure check_functions is not None
+                if not type_alias.check_functions:
+                    type_alias.check_functions = []
+
+                # ラッパー関数でirを渡す
+                def gen_with_gen(ta, imp, an, gids):
+                    return generate_type_alias_code_with_generators(ta, imp, an, ir, gids)
+
+                alias = gen_with_gen(type_alias, imports, app_name, generator_map[type_alias.id])
+            else:
+                alias = generate_type_alias_code(type_alias, imports, app_name, ir)
+            section.append(alias)
+            section.append("")
+        sections.extend(section)
+
+    # Generic (list/dict/set/tuple) TypeAliases
+    if ir.generics:
+        section = ["# === Generic TypeAliases ===\n"]
+        for generic in ir.generics:
+            if generic.id in generator_map:
+                # Ensure check_functions is not None
+                if not generic.check_functions:
+                    generic.check_functions = []
+
+                # ラッパー関数でirを渡す
+                def gen_with_gen(g, imp, an, gids):
+                    return generate_generic_code_with_generators(g, imp, an, ir, gids)
+
+                alias = gen_with_gen(generic, imports, app_name, generator_map[generic.id])
+            else:
+                alias = generate_generic_code(generic, imports, app_name, ir)
+            section.append(alias)
+            section.append("")
+        sections.extend(section)
 
     if not sections:
         print("  ⏭️  Skip (no type aliases to generate)")

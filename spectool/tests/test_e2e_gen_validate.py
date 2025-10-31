@@ -54,10 +54,11 @@ def test_algo_trade_pipeline_gen_validate_e2e(temp_project_dir, algo_trade_spec)
     assert len(normalized.type_aliases) > 0, "Should load type_aliases"
     assert len(normalized.generics) > 0, "Should load generics"
 
-    print(f"  ✅ Loaded: {len(normalized.transforms)} transforms, "
-          f"{len(normalized.checks)} checks, {len(normalized.generators)} generators")
-    print(f"  ✅ Loaded: {len(normalized.type_aliases)} type_aliases, "
-          f"{len(normalized.generics)} generics")
+    print(
+        f"  ✅ Loaded: {len(normalized.transforms)} transforms, "
+        f"{len(normalized.checks)} checks, {len(normalized.generators)} generators"
+    )
+    print(f"  ✅ Loaded: {len(normalized.type_aliases)} type_aliases, {len(normalized.generics)} generics")
 
     # 2. Generate skeleton
     print(f"\n🔨 Generating skeleton in: {temp_project_dir}")
@@ -77,7 +78,7 @@ def test_algo_trade_pipeline_gen_validate_e2e(temp_project_dir, algo_trade_spec)
     required_types = [
         "MultiAssetOHLCVFrame",  # type_alias: simple
         "AlignedFeatureTarget",  # type_alias: tuple
-        "PredictionDataList",    # generic: list
+        "PredictionDataList",  # generic: list
     ]
 
     for type_name in required_types:
@@ -90,7 +91,7 @@ def test_algo_trade_pipeline_gen_validate_e2e(temp_project_dir, algo_trade_spec)
             print(f"  - {mt}")
         print(f"\nGenerated types.py preview:")
         print("=" * 80)
-        lines = types_content.split('\n')
+        lines = types_content.split("\n")
         for i, line in enumerate(lines[:50], 1):
             print(f"{i:3}: {line}")
         if len(lines) > 50:
@@ -112,9 +113,7 @@ def test_algo_trade_pipeline_gen_validate_e2e(temp_project_dir, algo_trade_spec)
             continue
         content = tf.read_text()
         # Should import from types module
-        assert "from apps.algo_trade_pipeline.types import" in content, (
-            f"{tf.name} should import from types module"
-        )
+        assert "from apps.algo_trade_pipeline.types import" in content, f"{tf.name} should import from types module"
 
     # 5. Run integrity validation
     print(f"\n✅ Running integrity validation...")
@@ -206,9 +205,7 @@ transforms:
 
     # With skeleton only, functions exist as stubs with TODO
     # IntegrityValidator tries to import them, which should succeed
-    assert total_errors == 0, (
-        f"Should be able to import skeleton functions. Found {total_errors} errors."
-    )
+    assert total_errors == 0, f"Should be able to import skeleton functions. Found {total_errors} errors."
 
 
 def test_type_alias_spec_gen_validate_e2e(temp_project_dir):
@@ -280,8 +277,7 @@ transforms:
 
     # AliasFrame should be in types.py
     assert "AliasFrame" in types_content, (
-        "AliasFrame TypeAlias should be generated in types.py. "
-        "type_alias code generation is not implemented."
+        "AliasFrame TypeAlias should be generated in types.py. type_alias code generation is not implemented."
     )
 
     # Validate
@@ -289,6 +285,4 @@ transforms:
     errors = validator.validate_integrity(temp_project_dir)
 
     total_errors = sum(len(err_list) for err_list in errors.values())
-    assert total_errors == 0, (
-        f"Should be able to validate after generating type_alias. Found {total_errors} errors."
-    )
+    assert total_errors == 0, f"Should be able to validate after generating type_alias. Found {total_errors} errors."
