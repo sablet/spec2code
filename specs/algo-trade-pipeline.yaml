@@ -9,115 +9,137 @@ checks:
     description: "Validate market data ingestion configuration"
     impl: "apps.algo_trade_pipeline.checks.market_data_checks:check_ingestion_config"
     file_path: "checks/market_data_checks.py"
+    input_type_ref: MarketDataIngestionConfig
 
   - id: check_batch_collection
     description: "Validate provider batch collection"
     impl: "apps.algo_trade_pipeline.checks.market_data_checks:check_batch_collection"
     file_path: "checks/market_data_checks.py"
+    input_type_ref: ProviderBatchCollection
 
   - id: check_normalized_bundle
     description: "Validate normalized OHLCV bundle"
     impl: "apps.algo_trade_pipeline.checks.market_data_checks:check_normalized_bundle"
     file_path: "checks/market_data_checks.py"
+    input_type_ref: NormalizedOHLCVBundle
 
   - id: check_multiasset_frame
     description: "Validate MultiAsset OHLCV frame with MultiIndex structure"
     impl: "apps.algo_trade_pipeline.checks.market_data_checks:check_multiasset_frame"
     file_path: "checks/market_data_checks.py"
+    input_type_ref: MultiAssetOHLCVFrame
 
   - id: check_snapshot_meta
     description: "Validate market data snapshot metadata"
     impl: "apps.algo_trade_pipeline.checks.market_data_checks:check_snapshot_meta"
     file_path: "checks/market_data_checks.py"
+    input_type_ref: MarketDataSnapshotMeta
 
   # Phase 2: Feature Engineering
   - id: check_ohlcv
     description: "Validate OHLCV DataFrame structure"
     impl: "apps.algo_trade_pipeline.checks.feature_checks:check_ohlcv"
     file_path: "checks/feature_checks.py"
+    input_type_ref: OHLCVFrame
 
   - id: check_target
     description: "Validate target variable DataFrame"
     impl: "apps.algo_trade_pipeline.checks.feature_checks:check_target"
     file_path: "checks/feature_checks.py"
+    input_type_ref: TargetFrame
 
   - id: check_feature_frame
     description: "Validate feature DataFrame"
     impl: "apps.algo_trade_pipeline.checks.feature_checks:check_feature_frame"
     file_path: "checks/feature_checks.py"
+    input_type_ref: FeatureFrame
 
   - id: check_aligned_data
     description: "Validate aligned feature-target data"
     impl: "apps.algo_trade_pipeline.checks.feature_checks:check_aligned_data"
     file_path: "checks/feature_checks.py"
+    input_type_ref: AlignedFeatureTarget
 
   # Phase 3: Model Training & Prediction
   - id: check_cv_config
     description: "Validate cross-validation configuration"
     impl: "apps.algo_trade_pipeline.checks.model_checks:check_cv_config"
     file_path: "checks/model_checks.py"
+    input_type_ref: SimpleCVConfig
 
   - id: check_cv_result
     description: "Validate CV training result"
     impl: "apps.algo_trade_pipeline.checks.model_checks:check_cv_result"
     file_path: "checks/model_checks.py"
+    input_type_ref: CVResult
 
   - id: check_prediction_data
     description: "Validate prediction data list"
     impl: "apps.algo_trade_pipeline.checks.model_checks:check_prediction_data"
     file_path: "checks/model_checks.py"
+    input_type_ref: PredictionDataList
 
   # Phase 4: Backtest & Evaluation
   - id: check_ranked_predictions
     description: "Validate ranked prediction data"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_ranked_predictions"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: RankedPredictionDataList
 
   - id: check_selected_currencies
     description: "Validate selected currency data"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_selected_currencies"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: SelectedCurrencyDataList
 
   - id: check_selected_currencies_with_costs
     description: "Validate selected currency data with trading costs"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_selected_currencies_with_costs"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: SelectedCurrencyDataWithCostsList
 
   - id: check_simulation_result
     description: "Validate simulation result"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_simulation_result"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: SimulationResult
 
   - id: check_performance_metrics
     description: "Validate performance metrics"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_performance_metrics"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: PerformanceMetrics
 
   # Additional type checks
   - id: check_cv_method
     description: "Validate CV method enum value"
     impl: "apps.algo_trade_pipeline.checks.model_checks:check_cv_method"
     file_path: "checks/model_checks.py"
+    input_type_ref: CVMethod
 
   - id: check_position_signal
     description: "Validate position signal enum value"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_position_signal"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: PositionSignal
 
   - id: check_ohlcv_row
     description: "Validate OHLCV row data structure"
     impl: "apps.algo_trade_pipeline.checks.feature_checks:check_ohlcv_row"
     file_path: "checks/feature_checks.py"
+    input_type_ref: OHLCVRow
 
   - id: check_trading_cost_config
     description: "Validate trading cost configuration"
     impl: "apps.algo_trade_pipeline.checks.backtest_checks:check_trading_cost_config"
     file_path: "checks/backtest_checks.py"
+    input_type_ref: TradingCostConfig
 
   - id: check_simple_lgbm_params
     description: "Validate LightGBM parameters dictionary"
     impl: "apps.algo_trade_pipeline.checks.model_checks:check_simple_lgbm_params"
     file_path: "checks/model_checks.py"
+    input_type_ref: SimpleLGBMParams
 
 examples:
   - id: ex_ingestion_config

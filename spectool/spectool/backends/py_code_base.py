@@ -8,7 +8,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from spectool.spectool.core.base.ir import FrameSpec, GenericSpec, SpecIR
+from spectool.spectool.core.base.ir import (
+    ColumnRule,
+    FrameSpec,
+    GenericSpec,
+    IndexRule,
+    MultiIndexLevel,
+    SpecIR,
+)
 from spectool.spectool.backends.py_skeleton_codegen import _resolve_type_ref
 
 
@@ -98,6 +105,93 @@ def _build_example_spec(examples: list[Any]) -> str | None:
     return f"ExampleSpec(examples=[{examples_str}])"
 
 
+def _build_index_dict(index: IndexRule) -> dict:
+    """Indexの辞書表現を構築"""
+    return {
+        "name": index.name,
+        "dtype": index.dtype,
+        "nullable": index.nullable,
+        "unique": index.unique,
+        "monotonic": index.monotonic,
+        "description": index.description,
+    }
+
+
+def _build_multi_index_list(multi_index: list[MultiIndexLevel]) -> list[dict]:
+    """MultiIndexのリスト表現を構築"""
+    return [
+        {
+            "name": level.name,
+            "dtype": level.dtype,
+            "enum": level.enum,
+            "description": level.description,
+        }
+        for level in multi_index
+    ]
+
+
+def _build_column_dict(col: ColumnRule) -> dict:
+    """Columnの辞書表現を構築"""
+    return {
+        "name": col.name,
+        "dtype": col.dtype,
+        "nullable": col.nullable,
+        "unique": col.unique,
+        "coerce": col.coerce,
+        "checks": col.checks,
+        "description": col.description,
+    }
+
+
+def _build_index_part(frame: FrameSpec) -> str:
+    """Index部分の文字列を構築
+
+    Args:
+        frame: DataFrame定義
+
+    Returns:
+        "index=..." 形式の文字列
+    """
+    if frame.index:
+        return f"index={_build_index_dict(frame.index)!r}"
+    if frame.multi_index:
+        return f"index={_build_multi_index_list(frame.multi_index)!r}"
+    return "index=None"
+
+
+def _build_schema_spec(frame: FrameSpec) -> str | None:
+    """SchemaSpecメタデータを生成
+
+    Args:
+        frame: DataFrame定義
+
+    Returns:
+        SchemaSpec(...) 形式の文字列、またはNone（スキーマ情報がない場合）
+    """
+    if not frame.index and not frame.multi_index and not frame.columns:
+        return None
+
+    parts = [_build_index_part(frame)]
+
+    # Columns定義
+    if frame.columns:
+        columns_list = [_build_column_dict(col) for col in frame.columns]
+        parts.append(f"columns={columns_list!r}")
+
+    # DataFrame-level checks
+    if frame.checks:
+        parts.append(f"checks={frame.checks!r}")
+
+    # strict/coerce/ordered
+    if frame.strict:
+        parts.append(f"strict={frame.strict}")
+
+    if not parts:
+        return None
+
+    return f"SchemaSpec({', '.join(parts)})"
+
+
 def _build_dataframe_meta_parts(
     frame: FrameSpec, app_name: str, imports: set[str], generator_ids: list[str] | None = None
 ) -> list[str]:
@@ -122,6 +216,12 @@ def _build_dataframe_meta_parts(
             # row_modelからクラス名を抽出してインポート
             model_class = frame.row_model.split(":")[-1]
             imports.add(f"from apps.{app_name}.models.models import {model_class}")
+
+    # SchemaSpec（DataFrame制約情報）を追加
+    schema_spec = _build_schema_spec(frame)
+    if schema_spec:
+        meta_parts.append(f"    {schema_spec},")
+        imports.add("from spectool.spectool.core.base.meta_types import SchemaSpec")
 
     # GeneratorSpec（generatorsから）を追加
     if generator_ids:

@@ -5,7 +5,7 @@ Enum、Pydanticモデルのスケルトンを生成。
 
 from __future__ import annotations
 
-from spectool.spectool.core.base.ir import EnumSpec, PydanticModelSpec
+from spectool.spectool.core.base.ir import EnumSpec, PydanticModelSpec, SpecIR
 
 
 def _resolve_generic_type(generic_def: dict, imports: set[str] | None = None) -> str:
@@ -58,6 +58,11 @@ def _resolve_type_from_def(type_def: dict, imports: set[str] | None = None) -> s
 
     Returns:
         型文字列
+
+    Note:
+        datatype_refがTypeAlias/Frameの場合、循環インポートを避けるため
+        models.py内ではIDをそのまま使用（他のPydanticモデルやEnumを参照）。
+        TypeAlias/Frameは関数シグネチャで使われるべきで、Pydanticモデル内では使用しない。
     """
     if "native" in type_def:
         native_full = type_def["native"]  # "module:type"形式
@@ -75,6 +80,8 @@ def _resolve_type_from_def(type_def: dict, imports: set[str] | None = None) -> s
 
         return native_type
     if "datatype_ref" in type_def:
+        # datatype_refはPydanticモデルやEnumのIDをそのまま返す
+        # TypeAlias/Frameの場合も、models.py内では他のモデルと同様に扱う
         return type_def["datatype_ref"]
     if "generic" in type_def:
         return _resolve_generic_type(type_def["generic"], imports)
@@ -136,6 +143,8 @@ def _resolve_field_type_and_imports(field_type: dict, imports: set[str] | None) 
                 if module not in {"builtins", "typing"}:
                     imports.add(f"from {module} import {native_type}")
     elif "datatype_ref" in field_type:
+        # datattype_refはそのままIDを返す（Pydanticモデル/Enum参照）
+        # 注: TypeAlias/Frameの展開はgenerate_pydantic_model()側で行う
         type_str = field_type["datatype_ref"]
     elif "generic" in field_type:
         # Generic型の処理
@@ -148,12 +157,104 @@ def _resolve_field_type_and_imports(field_type: dict, imports: set[str] | None) 
     return type_str
 
 
-def generate_pydantic_model(model: PydanticModelSpec, imports: set[str] | None = None) -> str:
+def _add_pandas_import(type_name: str, imports: set[str] | None) -> None:
+    """pandasの型に応じたimportを追加
+
+    Args:
+        type_name: 型名（DataFrame/Series）
+        imports: インポート文を蓄積するセット
+    """
+    if imports is None:
+        return
+    imports.add(f"from pandas import {type_name}")
+
+
+def _resolve_type_alias_target(target: str, imports: set[str] | None) -> str | None:
+    """TypeAliasのtargetを解決
+
+    Args:
+        target: type_defのtarget（例: "pandas:DataFrame"）
+        imports: インポート文を蓄積するセット
+
+    Returns:
+        解決された型文字列、解決できない場合はNone
+    """
+    if target == "pandas:DataFrame":
+        _add_pandas_import("DataFrame", imports)
+        return "DataFrame"
+    if target == "pandas:Series":
+        _add_pandas_import("Series", imports)
+        return "Series"
+    return None
+
+
+def _resolve_type_alias_or_frame(ref_id: str, ir: SpecIR | None, imports: set[str] | None) -> str | None:
+    """TypeAliasまたはFrameを解決してDataFrame/Series型文字列を返す
+
+    Args:
+        ref_id: datatype_refのID
+        ir: SpecIR（TypeAlias/Frame解決用）
+        imports: インポート文を蓄積するセット
+
+    Returns:
+        解決された型文字列（DataFrame/Series）、解決できない場合はNone
+    """
+    if not ir:
+        return None
+
+    # TypeAliasチェック
+    for type_alias in ir.type_aliases:
+        if type_alias.id != ref_id:
+            continue
+        type_def = type_alias.type_def
+        if type_def.get("type") != "simple":
+            return None
+        target = type_def.get("target", "")
+        return _resolve_type_alias_target(target, imports)
+
+    # Frameチェック
+    for frame in ir.frames:
+        if frame.id == ref_id:
+            _add_pandas_import("DataFrame", imports)
+            return "DataFrame"
+
+    return None
+
+
+def _generate_field_type(field: dict, ir: SpecIR | None, imports: set[str] | None) -> str:
+    """フィールドの型文字列を生成
+
+    Args:
+        field: フィールド定義
+        ir: SpecIR（TypeAlias/Frame解決用）
+        imports: インポート文を蓄積するセット
+
+    Returns:
+        型文字列（オプショナル処理を含む）
+    """
+    field_type = field.get("type", {})
+    type_str = _resolve_field_type_and_imports(field_type, imports)
+
+    # IRがある場合、TypeAlias/Frameを展開
+    if "datatype_ref" in field_type:
+        resolved = _resolve_type_alias_or_frame(field_type["datatype_ref"], ir, imports)
+        if resolved:
+            type_str = resolved
+
+    # オプショナルフィールドの処理
+    if not field.get("required", True):
+        type_str = f"{type_str} | None"
+
+    return type_str
+
+
+def generate_pydantic_model(model: PydanticModelSpec, imports: set[str] | None = None, ir: SpecIR | None = None) -> str:
     """Pydanticモデルを生成
 
     Args:
         model: Pydanticモデル定義
         imports: インポート文を蓄積するセット（指定時のみimportを追加）
+        ir: SpecIR（TypeAlias/Frame解決用、Noneの場合は従来の動作）
 
     Returns:
         Pydanticモデルクラス定義文字列
@@ -176,18 +277,8 @@ def generate_pydantic_model(model: PydanticModelSpec, imports: set[str] | None =
 
     if model.fields:
         for field in model.fields:
-            field_name = field["name"]
-            field_type = field.get("type", {})
-
-            # 型を解決
-            type_str = _resolve_field_type_and_imports(field_type, imports)
-
-            # オプショナルフィールドの処理
-            required = field.get("required", True)
-            if not required:
-                type_str = f"{type_str} | None"
-
-            lines.append(f"    {field_name}: {type_str}")
+            field_type_str = _generate_field_type(field, ir, imports)
+            lines.append(f"    {field['name']}: {field_type_str}")
     else:
         lines.append("    pass")
 

@@ -230,10 +230,18 @@ def _load_pydantic_model_specs(datatypes: list[dict[str, Any]]) -> list[Pydantic
 
 
 def _load_type_alias_specs(datatypes: list[dict[str, Any]]) -> list[TypeAliasSpec]:
-    """型エイリアス定義をTypeAliasSpecに変換"""
+    """型エイリアス定義をTypeAliasSpecに変換
+
+    Note: dataframe_schemaが存在する場合、type_aliasがあっても
+          FrameSpecとして扱うため、TypeAliasSpecには登録しない（重複回避）
+    """
     aliases = []
     for datatype in datatypes:
         if "type_alias" not in datatype:
+            continue
+
+        # dataframe_schemaが存在する場合はFrameSpecとして扱うためスキップ
+        if "dataframe_schema" in datatype:
             continue
 
         alias = TypeAliasSpec(

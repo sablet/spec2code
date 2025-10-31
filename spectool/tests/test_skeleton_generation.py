@@ -85,8 +85,9 @@ def test_generate_transform_function_skeletons(sample_spec_path, temp_output_dir
     assert "threshold:" in content  # パラメータ名
     assert "-> " in content  # 戻り値型アノテーション
 
-    # 型アノテーションの確認
-    assert "from typing import Annotated" in content
+    # 型アノテーションの確認（TypeAliasを使用）
+    assert "from apps.sample_project.types import TimeSeriesFrame" in content
+    assert "data: TimeSeriesFrame" in content
 
     # TODOコメントの確認
     assert "TODO" in content
@@ -116,14 +117,14 @@ def test_generated_code_has_type_annotations(sample_spec_path, temp_output_dir):
     transform_file = temp_output_dir / "apps" / "sample_project" / "transforms" / "processors.py"
     content = transform_file.read_text()
 
-    # 型アノテーションの確認
-    assert "Annotated[" in content
+    # 型アノテーションの確認（TypeAliasを使用）
+    assert "from apps.sample_project.types import TimeSeriesFrame" in content
 
     # パラメータの型アノテーション
-    assert "data: Annotated[" in content
+    assert "data: TimeSeriesFrame" in content
 
-    # 戻り値の型アノテーション
-    assert "-> Annotated[" in content
+    # 戻り値の型アノテーション（TypeAliasを使用）
+    assert "-> TimeSeriesFrame" in content
 
 
 def test_generated_directory_structure(sample_spec_path, temp_output_dir):

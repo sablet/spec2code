@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from spectool.spectool.core.base.ir import FrameSpec, ParameterSpec, SpecIR
+from spectool.spectool.core.base.ir import ParameterSpec, SpecIR
 
 
 class HasReturnTypeRef(Protocol):
@@ -57,22 +57,6 @@ def _add_model_imports(imports: set[str] | None, app_name: str, model_id: str) -
         imports.add(f"from apps.{app_name}.models.models import {model_id}")
 
 
-def _resolve_dataframe_fallback(frame: FrameSpec, imports: set[str] | None) -> str:
-    """DataFrame型のフォールバック解決（TypeAliasが定義されていない場合）"""
-    if imports is not None:
-        imports.add("import pandas as pd")
-
-    if frame.check_functions:
-        if imports is not None:
-            imports.add("from typing import Annotated")
-            imports.add("from spectool.spectool.core.base.meta_types import Check")
-        # implパスから関数名だけを抽出 (例: "apps.module:func" -> "func")
-        check_func_names = [cf.split(":")[-1] if ":" in cf else cf for cf in frame.check_functions]
-        check_refs = ", ".join(f'Check["{cf}"]' for cf in check_func_names)
-        return f"Annotated[pd.DataFrame, {check_refs}]"
-    return "pd.DataFrame"
-
-
 def _search_in_type_aliases(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
     """TypeAliasコレクションから検索"""
     for type_alias in ir.type_aliases:
@@ -110,11 +94,16 @@ def _search_in_models(type_ref: str, ir: SpecIR, app_name: str, imports: set[str
     return None
 
 
-def _search_in_frames(type_ref: str, ir: SpecIR, imports: set[str] | None) -> str | None:
-    """DataFrameコレクションから検索"""
+def _search_in_frames(type_ref: str, ir: SpecIR, app_name: str, imports: set[str] | None) -> str | None:
+    """DataFrameコレクションから検索してTypeAliasを返す
+
+    Frameが見つかった場合、types.pyで定義されているTypeAliasを使用する。
+    """
     for frame in ir.frames:
         if frame.id == type_ref:
-            return _resolve_dataframe_fallback(frame, imports)
+            # types.pyで定義されているTypeAliasを使用
+            _add_type_alias_imports(imports, app_name, frame.id, "pandas:DataFrame")
+            return frame.id
     return None
 
 
@@ -130,7 +119,7 @@ def _find_type_in_collections(type_ref: str, ir: SpecIR, app_name: str, imports:
         or _search_in_generics(type_ref, ir, app_name, imports)
         or _search_in_enums(type_ref, ir, app_name, imports)
         or _search_in_models(type_ref, ir, app_name, imports)
-        or _search_in_frames(type_ref, ir, imports)
+        or _search_in_frames(type_ref, ir, app_name, imports)
     )
 
 
