@@ -123,6 +123,22 @@ class ParameterSpec:
 
 
 @dataclass
+class SpecMetadata:
+    """実装者向けメタデータ
+
+    Attributes:
+        logic_steps: 実装すべきロジックのステップを順序立てて記述（必須、1個以上）
+        implementation_hints: 実装のヒント、依存ライブラリ、制約など（必須、1個以上）
+        explicit_checks: 実装時に追加すべき検証を明示（オプション、デフォルト空リスト）
+                         空リスト = 素朴な実装、記載あり = その検証のみ追加
+    """
+
+    logic_steps: list[str]
+    implementation_hints: list[str]
+    explicit_checks: list[str] = field(default_factory=list)
+
+
+@dataclass
 class TransformSpec:
     """Transform定義
 
@@ -144,7 +160,7 @@ class TransformSpec:
     parameters: list[ParameterSpec] = field(default_factory=list)
     return_type_ref: str | None = None
     default_args: dict[str, Any] = field(default_factory=dict)
-    spec_metadata: dict[str, Any] | None = None
+    spec_metadata: SpecMetadata | None = None
 
 
 @dataclass
@@ -194,7 +210,7 @@ class CheckSpec:
     impl: str = ""
     file_path: str = ""
     input_type_ref: str | None = None
-    spec_metadata: dict[str, Any] | None = None
+    spec_metadata: SpecMetadata | None = None
 
 
 @dataclass
@@ -229,7 +245,7 @@ class GeneratorDef:
     file_path: str = ""
     parameters: list[ParameterSpec] = field(default_factory=list)
     return_type_ref: str | None = None
-    spec_metadata: dict[str, Any] | None = None
+    spec_metadata: SpecMetadata | None = None
 
 
 @dataclass

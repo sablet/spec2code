@@ -1048,9 +1048,11 @@ transforms:
         - "取得した全DataFrameをProviderBatchCollectionとして集約して返却"
       implementation_hints:
         - "yfinanceライブラリまたはpandas_datareaderを使用してAPIアクセス"
-        - "日付範囲のバリデーション（start_date < end_date）を実施"
-        - "APIエラー（ネットワーク、レート制限、シンボル不正）のハンドリングが必要"
+        - "APIエラー（ネットワーク、レート制限、シンボル不正）はyfinanceの例外をそのまま伝播"
         - "プロバイダ名はyahoo固定だが将来の拡張性のために設定として保持"
+      explicit_checks:
+        - "symbols リストが空でないことを確認 → ValueError('Empty symbols list')"
+        - "start_date < end_date を確認 → ValueError('Invalid date range: start_date must be before end_date')"
 
   - id: normalize_multi_provider
     description: "Normalize data from multiple providers to unified format"

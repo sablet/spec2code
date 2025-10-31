@@ -4,68 +4,10 @@ spec_metadataフィールドを使った動的なdocstring生成のテスト。
 """
 
 import pytest
+from spectool.spectool.core.base.ir import SpecMetadata
 from spectool.spectool.backends.py_skeleton_codegen import (
-    format_metadata_section,
     build_transform_function_signature,
 )
-
-
-class TestFormatMetadataSection:
-    """format_metadata_section() のテスト"""
-
-    def test_format_string_value(self):
-        """文字列値のフォーマット"""
-        result = format_metadata_section("complexity", "O(n)")
-        assert result == ["    Complexity: O(n)"]
-
-    def test_format_multiline_string(self):
-        """複数行文字列のフォーマット"""
-        value = "Line 1\nLine 2\nLine 3"
-        result = format_metadata_section("notes", value)
-        assert result[0] == "    Notes:"
-        assert result[1] == "        Line 1"
-        assert result[2] == "        Line 2"
-        assert result[3] == "        Line 3"
-
-    def test_format_list_value(self):
-        """リスト値のフォーマット"""
-        value = ["Step 1", "Step 2", "Step 3"]
-        result = format_metadata_section("logic_overview", value)
-        assert result[0] == "    Logic Overview:"
-        assert result[1] == "        - Step 1"
-        assert result[2] == "        - Step 2"
-        assert result[3] == "        - Step 3"
-
-    def test_format_dict_value(self):
-        """辞書値のフォーマット"""
-        value = {"pandas": ">=2.0", "numpy": ">=1.24"}
-        result = format_metadata_section("dependencies", value)
-        assert result[0] == "    Dependencies:"
-        assert "        pandas: >=2.0" in result
-        assert "        numpy: >=1.24" in result
-
-    def test_format_nested_dict(self):
-        """ネストした辞書のフォーマット"""
-        value = {"error_handling": {"missing_data": "Raise ValueError", "invalid_type": "Log warning"}}
-        result = format_metadata_section("specs", value)
-        assert result[0] == "    Specs:"
-        # ネストされた構造が含まれる
-        assert any("Error Handling:" in line for line in result)
-
-    def test_format_numeric_value(self):
-        """数値のフォーマット"""
-        result = format_metadata_section("version", 2)
-        assert result == ["    Version: 2"]
-
-    def test_snake_case_to_title_case(self):
-        """snake_caseキーがTitle Caseに変換される"""
-        result = format_metadata_section("logic_overview", ["Step 1"])
-        assert result[0] == "    Logic Overview:"
-
-    def test_custom_indent(self):
-        """カスタムインデント"""
-        result = format_metadata_section("key", "value", indent=8)
-        assert result[0] == "        Key: value"
 
 
 class TestBuildTransformFunctionSignature:
@@ -88,10 +30,10 @@ class TestBuildTransformFunctionSignature:
 
     def test_signature_with_metadata(self):
         """メタデータ付きシグネチャ"""
-        spec_metadata = {
-            "logic_overview": ["Step 1: Extract data", "Step 2: Transform data", "Step 3: Return result"],
-            "complexity": "O(n)",
-        }
+        spec_metadata = SpecMetadata(
+            logic_steps=["Step 1: Extract data", "Step 2: Transform data", "Step 3: Return result"],
+            implementation_hints=["Use pandas for efficient processing"],
+        )
 
         result = build_transform_function_signature(
             func_name="process_data",
@@ -106,41 +48,63 @@ class TestBuildTransformFunctionSignature:
         # 基本構造の確認
         assert "def process_data(data: pd.DataFrame) -> pd.DataFrame:" in result_text
 
+        # Policyセクションの確認（explicit_checksが空）
+        assert (
+            "Policy: Implement straightforwardly without defensive checks or custom exception handling" in result_text
+        )
+
         # メタデータの確認
-        assert "Logic Overview:" in result_text
+        assert "Logic steps:" in result_text
         assert "- Step 1: Extract data" in result_text
         assert "- Step 2: Transform data" in result_text
         assert "- Step 3: Return result" in result_text
-        assert "Complexity: O(n)" in result_text
+        assert "Implementation hints:" in result_text
+        assert "- Use pandas for efficient processing" in result_text
 
-    def test_signature_with_pseudo_code(self):
-        """疑似コード付きシグネチャ"""
-        spec_metadata = {
-            "pseudo_code": "result = []\nfor item in data:\n    result.append(transform(item))\nreturn result"
-        }
+    def test_signature_with_explicit_checks(self):
+        """explicit_checks付きシグネチャ"""
+        spec_metadata = SpecMetadata(
+            logic_steps=["Fetch data from API"],
+            implementation_hints=["Use requests library"],
+            explicit_checks=[
+                "symbols リストが空でないことを確認 → ValueError('Empty symbols')",
+                "start_date < end_date を確認 → ValueError('Invalid date range')",
+            ],
+        )
 
         result = build_transform_function_signature(
-            func_name="transform_items",
-            param_str="data: list",
-            return_type="list",
-            description="Transform each item",
+            func_name="fetch_data",
+            param_str="config: dict",
+            return_type="DataFrame",
+            description="Fetch data from API",
             spec_metadata=spec_metadata,
         )
 
         result_text = "\n".join(result)
 
-        assert "Pseudo Code:" in result_text
-        assert "result = []" in result_text
-        assert "for item in data:" in result_text
+        # explicit_checksセクションの確認
+        assert "Explicit checks (validate only these):" in result_text
+        assert "- symbols リストが空でないことを確認 → ValueError('Empty symbols')" in result_text
+        assert "- start_date < end_date を確認 → ValueError('Invalid date range')" in result_text
+        assert "Do NOT add other defensive checks beyond what is explicitly listed above." in result_text
 
     def test_signature_with_complex_metadata(self):
         """複雑なメタデータ構造"""
-        spec_metadata = {
-            "logic_overview": ["Normalize provider data", "Validate completeness", "Return bundle"],
-            "pseudo_code": "for batch in batches:\n    normalize(batch)\nreturn bundle",
-            "dependencies": ["pandas", "numpy"],
-            "notes": "Assumes UTC timestamps",
-        }
+        spec_metadata = SpecMetadata(
+            logic_steps=[
+                "Normalize provider data",
+                "Validate completeness",
+                "Return bundle",
+            ],
+            implementation_hints=[
+                "Use pandas and numpy for data processing",
+                "Assumes UTC timestamps",
+                "Each provider may have different column names",
+            ],
+            explicit_checks=[
+                "batches リストが空でないことを確認 → ValueError('Empty batches')",
+            ],
+        )
 
         result = build_transform_function_signature(
             func_name="normalize_data",
@@ -153,27 +117,12 @@ class TestBuildTransformFunctionSignature:
         result_text = "\n".join(result)
 
         # 全てのメタデータセクションが含まれる
-        assert "Logic Overview:" in result_text
-        assert "Pseudo Code:" in result_text
-        assert "Dependencies:" in result_text
-        assert "Notes:" in result_text
-
-    def test_signature_with_empty_metadata(self):
-        """空のメタデータ"""
-        result = build_transform_function_signature(
-            func_name="simple_func",
-            param_str="x: int",
-            return_type="int",
-            description="Simple function",
-            spec_metadata={},
-        )
-
-        result_text = "\n".join(result)
-
-        # 基本構造のみ（メタデータなし）
-        assert "def simple_func(x: int) -> int:" in result_text
-        assert "Logic Overview:" not in result_text
-        assert "Pseudo Code:" not in result_text
+        assert "Logic steps:" in result_text
+        assert "- Normalize provider data" in result_text
+        assert "Implementation hints:" in result_text
+        assert "- Use pandas and numpy for data processing" in result_text
+        assert "Explicit checks (validate only these):" in result_text
+        assert "- batches リストが空でないことを確認 → ValueError('Empty batches')" in result_text
 
     def test_signature_with_none_metadata(self):
         """Noneメタデータ"""
@@ -230,15 +179,17 @@ class TestCheckFunctionWithMetadata:
             impl="apps.checks:validate_data",
             file_path="checks/validators.py",
             input_type_ref="dict",
-            spec_metadata={
-                "validation_steps": [
+            spec_metadata=SpecMetadata(
+                logic_steps=[
                     "Check for required fields",
                     "Validate data types",
                     "Check value ranges",
                 ],
-                "complexity": "O(1)",
-                "error_handling": "Returns False on validation failure",
-            },
+                implementation_hints=[
+                    "Returns False on validation failure",
+                    "Time complexity: O(1)",
+                ],
+            ),
         )
         ir = SpecIR(meta=MetaSpec(name="test-app"))
         imports = set()
@@ -250,12 +201,12 @@ class TestCheckFunctionWithMetadata:
         assert "Validate data completeness" in result
 
         # メタデータの確認
-        assert "Validation Steps:" in result
+        assert "Logic steps:" in result
         assert "- Check for required fields" in result
         assert "- Validate data types" in result
         assert "- Check value ranges" in result
-        assert "Complexity: O(1)" in result
-        assert "Error Handling: Returns False on validation failure" in result
+        assert "Implementation hints:" in result
+        assert "- Returns False on validation failure" in result
 
 
 class TestGeneratorFunctionWithMetadata:
@@ -299,16 +250,18 @@ class TestGeneratorFunctionWithMetadata:
             file_path="generators/data.py",
             parameters=[ParameterSpec(name="size", type_ref="builtins:int", default=100)],
             return_type_ref="DataFrame",
-            spec_metadata={
-                "generation_steps": [
+            spec_metadata=SpecMetadata(
+                logic_steps=[
                     "Create timestamp index",
                     "Generate random OHLCV values",
                     "Apply realistic constraints",
                 ],
-                "complexity": "O(n)",
-                "dependencies": ["pandas", "numpy"],
-                "notes": "Generated data follows realistic market patterns",
-            },
+                implementation_hints=[
+                    "Use pandas and numpy for data generation",
+                    "Generated data follows realistic market patterns",
+                    "Time complexity: O(n)",
+                ],
+            ),
         )
         ir = SpecIR(meta=MetaSpec(name="test-app"))
         imports = set()
@@ -320,12 +273,10 @@ class TestGeneratorFunctionWithMetadata:
         assert "Generate OHLCV sample data" in result
 
         # メタデータの確認
-        assert "Generation Steps:" in result
+        assert "Logic steps:" in result
         assert "- Create timestamp index" in result
         assert "- Generate random OHLCV values" in result
         assert "- Apply realistic constraints" in result
-        assert "Complexity: O(n)" in result
-        assert "Dependencies:" in result
-        assert "- pandas" in result
-        assert "- numpy" in result
-        assert "Notes: Generated data follows realistic market patterns" in result
+        assert "Implementation hints:" in result
+        assert "- Use pandas and numpy for data generation" in result
+        assert "- Generated data follows realistic market patterns" in result

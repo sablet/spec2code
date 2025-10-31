@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
-from spectool.spectool.core.base.ir import ParameterSpec, SpecIR
+from spectool.spectool.core.base.ir import ParameterSpec, SpecIR, SpecMetadata
 
 
 class HasReturnTypeRef(Protocol):
@@ -212,7 +212,7 @@ def build_transform_function_signature(
     param_str: str,
     return_type: str,
     description: str | None,
-    spec_metadata: dict[str, Any] | None = None,
+    spec_metadata: SpecMetadata | None = None,
 ) -> list[str]:
     """Build function signature lines with optional metadata.
 
@@ -221,7 +221,7 @@ def build_transform_function_signature(
         param_str: パラメータ文字列
         return_type: 戻り値型
         description: 関数の説明
-        spec_metadata: 追加のメタデータ（docstring生成用）
+        spec_metadata: 実装者向けメタデータ（docstring生成用）
 
     Returns:
         関数定義の行リスト
@@ -232,13 +232,39 @@ def build_transform_function_signature(
     if description:
         lines.append(f"    {description}")
 
-    # メタデータセクションを動的に追加
+    # SpecMetadataセクションを追加
     if spec_metadata:
         if description:
             lines.append("    ")
-        for key, value in spec_metadata.items():
-            metadata_lines = format_metadata_section(key, value, indent=4)
-            lines.extend(metadata_lines)
+
+        # Implementation policy or Explicit checks
+        if not spec_metadata.explicit_checks:
+            # 空リスト or 省略の場合: 素朴な実装ポリシー
+            lines.append(
+                "    Policy: Implement straightforwardly without defensive checks or custom exception handling"
+            )
+            lines.append("    ")
+        else:
+            # explicit_checksがある場合
+            lines.append("    Explicit checks (validate only these):")
+            for check in spec_metadata.explicit_checks:
+                lines.append(f"    - {check}")
+            lines.append("    ")
+            lines.append("    Do NOT add other defensive checks beyond what is explicitly listed above.")
+            lines.append("    ")
+
+        # Logic steps
+        if spec_metadata.logic_steps:
+            lines.append("    Logic steps:")
+            for step in spec_metadata.logic_steps:
+                lines.append(f"    - {step}")
+            lines.append("    ")
+
+        # Implementation hints
+        if spec_metadata.implementation_hints:
+            lines.append("    Implementation hints:")
+            for hint in spec_metadata.implementation_hints:
+                lines.append(f"    - {hint}")
 
     lines.append('    """')
 
@@ -257,53 +283,3 @@ def render_imports(imports: set[str]) -> str:
     if not imports:
         return ""
     return "\n".join(sorted(imports))
-
-
-def format_metadata_section(key: str, value: object, indent: int = 4) -> list[str]:
-    """メタデータの値を適切にフォーマット
-
-    Args:
-        key: メタデータのキー名
-        value: メタデータの値（str, list, dictなど）
-        indent: インデントレベル
-
-    Returns:
-        フォーマットされた行のリスト
-    """
-    lines = []
-    prefix = " " * indent
-
-    # キー名を人間が読みやすい形式に変換（snake_case -> Title Case）
-    display_name = key.replace("_", " ").title()
-
-    if isinstance(value, list):
-        # リスト形式: 箇条書き
-        lines.append(f"{prefix}{display_name}:")
-        for item in value:
-            lines.append(f"{prefix}    - {item}")
-
-    elif isinstance(value, dict):
-        # 辞書形式: キーバリューペア
-        lines.append(f"{prefix}{display_name}:")
-        for k, v in value.items():
-            if isinstance(v, (list, dict)):
-                # ネストされた構造
-                nested = format_metadata_section(k, v, indent + 4)
-                lines.extend(nested)
-            else:
-                lines.append(f"{prefix}    {k}: {v}")
-
-    elif isinstance(value, str):
-        # 文字列: 複数行対応
-        if "\n" in value:
-            lines.append(f"{prefix}{display_name}:")
-            for line in value.strip().split("\n"):
-                lines.append(f"{prefix}    {line}")
-        else:
-            lines.append(f"{prefix}{display_name}: {value}")
-
-    else:
-        # その他（数値、bool等）
-        lines.append(f"{prefix}{display_name}: {value}")
-
-    return lines

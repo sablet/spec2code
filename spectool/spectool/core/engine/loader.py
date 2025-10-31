@@ -28,6 +28,7 @@ from spectool.spectool.core.base.ir import (
     ParameterSpec,
     PydanticModelSpec,
     SpecIR,
+    SpecMetadata,
     TransformSpec,
     TypeAliasSpec,
 )
@@ -300,6 +301,25 @@ def _load_parameters(params_data: list[dict[str, Any]]) -> list[ParameterSpec]:
     return parameters
 
 
+def _parse_spec_metadata(metadata_dict: dict[str, Any] | None) -> SpecMetadata | None:
+    """spec_metadata辞書をSpecMetadataオブジェクトに変換
+
+    Args:
+        metadata_dict: YAMLから読み込んだspec_metadata辞書
+
+    Returns:
+        SpecMetadataオブジェクト、またはNone
+    """
+    if not metadata_dict:
+        return None
+
+    return SpecMetadata(
+        logic_steps=metadata_dict.get("logic_steps", []),
+        implementation_hints=metadata_dict.get("implementation_hints", []),
+        explicit_checks=metadata_dict.get("explicit_checks", []),
+    )
+
+
 def _load_transform_specs(transforms_data: list[dict[str, Any]]) -> list[TransformSpec]:
     """Transform定義をTransformSpecに変換"""
     transforms = []
@@ -318,7 +338,7 @@ def _load_transform_specs(transforms_data: list[dict[str, Any]]) -> list[Transfo
                 or transform_data.get("return_native")
             ),
             default_args=transform_data.get("default_args", {}),
-            spec_metadata=transform_data.get("spec_metadata"),  # メタデータをパース
+            spec_metadata=_parse_spec_metadata(transform_data.get("spec_metadata")),
         )
         transforms.append(transform)
     return transforms
@@ -354,7 +374,7 @@ def _load_check_specs(checks_data: list[dict[str, Any]]) -> list[CheckSpec]:
             impl=check_data.get("impl", ""),
             file_path=check_data.get("file_path", ""),
             input_type_ref=check_data.get("input_type_ref"),
-            spec_metadata=check_data.get("spec_metadata"),  # メタデータをパース
+            spec_metadata=_parse_spec_metadata(check_data.get("spec_metadata")),
         )
         checks.append(check)
     return checks
@@ -396,7 +416,7 @@ def _load_generator_specs(generators_data: dict[str, Any] | list[dict[str, Any]]
             file_path=gen_data.get("file_path", ""),
             parameters=parameters,
             return_type_ref=gen_data.get("return_type_ref", ""),
-            spec_metadata=gen_data.get("spec_metadata"),  # メタデータをパース
+            spec_metadata=_parse_spec_metadata(gen_data.get("spec_metadata")),
         )
         generators.append(generator)
     return generators
