@@ -1,6 +1,6 @@
 # Spec仕様書記述ガイド
 
-このディレクトリにはspec2codeの仕様ファイル（YAML）を配置します。仕様ファイルは、データ型・変換処理・DAG構造を宣言的に記述し、システムが自動的にスケルトンコードを生成するための入力として使用されます。
+このディレクトリにはspectoolの仕様ファイル（YAML）を配置します。仕様ファイルは、データ型・変換処理・DAG構造を宣言的に記述し、システムが自動的にスケルトンコードを生成するための入力として使用されます。
 
 ## 目次
 
@@ -370,12 +370,16 @@ spec_metadata:
 **フィールド説明**:
 - `logic_steps` (必須): 実装すべきロジックのステップを順序立てて記述。「何をするか」に焦点を当てる。**日本語で記述することを推奨**
 - `implementation_hints` (必須): 実装のヒント、注意点、依存ライブラリ、制約など。「どう実装するか」に焦点を当てる。**日本語で記述することを推奨**
+- `explicit_checks` (オプション、デフォルト空リスト): 実装時に追加すべき検証を明示。**空リスト省略可能**
+  - **省略または空リスト**: 素朴に実装、pandas/numpyの標準例外に任せる
+  - **記述あり**: 記載された検証のみ追加、それ以外の防御的チェックは追加しない
 
 **設計方針**:
 - **日本語推奨**: レビューしやすくするため、`logic_steps`と`implementation_hints`は日本語で記述することを推奨
 - **仕様と実装の分離**: `logic_steps`は仕様レベル、`implementation_hints`は実装レベル
 - **擬似コードの排除**: 詳細な擬似コードは実装者の創意工夫の余地を残すため記述しない
 - **シンプル性の重視**: 複雑度や依存関係は`implementation_hints`に統合し、スキーマを簡潔に保つ
+- **暗黙的挙動の排除**: `explicit_checks`により「記載された検証のみ」を徹底し、勝手な補正・フォールバックを防止
 
 **spec_metadata での重要な情報（transforms 特有）**:
 - `logic_steps`: **ビジネスロジックの処理フローを記述**（例: データ抽出 → 変換 → 集約 → 結合）
@@ -384,6 +388,127 @@ spec_metadata:
   - データ変換のエッジケース処理（欠損値、異常値、境界条件）
   - 外部リソースやAPI呼び出しに関する注意事項
   - パフォーマンス最適化のポイント（大規模データ処理時）
+- `explicit_checks`:
+  - 特定の入力検証が必要な場合のみ記述
+  - 記載された検証以外の防御的if文は追加しない
+
+**explicit_checks の記述例**:
+
+```yaml
+# 素朴な実装（検証なし）
+spec_metadata:
+  logic_steps:
+    - "close価格の前日比変化を計算"
+    - "RSI計算式を適用"
+  implementation_hints:
+    - "taライブラリ推奨"
+  # explicit_checks は省略可（デフォルト空リスト = 素朴な実装）
+
+# 特定の検証のみ追加
+spec_metadata:
+  logic_steps:
+    - "APIに接続してデータ取得"
+  implementation_hints:
+    - "yfinanceライブラリ使用"
+  explicit_checks:
+    - "symbols リストが空でないことを確認 → ValueError('Empty symbols list')"
+    - "start_date < end_date を確認 → ValueError('Invalid date range')"
+```
+
+### スケルトン生成時の docstring フォーマット
+
+#### explicit_checks が空（省略）の場合
+
+```python
+def calculate_rsi(df: OHLCVFrame, period: int = 14) -> FeatureFrame:
+    """
+    Calculate RSI indicator
+
+    Policy: Implement straightforwardly without defensive checks or custom exception handling
+
+    Logic steps:
+    - close価格の前日比変化を計算
+    - RSI計算式を適用
+
+    Implementation hints:
+    - taライブラリ推奨
+    - period期間分の初期NaNが発生
+    """
+    # TODO: Implement
+    raise NotImplementedError
+```
+
+#### explicit_checks に記載がある場合
+
+```python
+def fetch_data(config: Config) -> Data:
+    """
+    Fetch data from API
+
+    Explicit checks (validate only these):
+    - symbols リストが空でないことを確認 → ValueError('Empty symbols')
+    - start_date < end_date を確認 → ValueError('Invalid date range')
+
+    Do NOT add other defensive checks beyond what is explicitly listed above.
+
+    Logic steps:
+    - APIに接続してデータ取得
+
+    Implementation hints:
+    - yfinanceライブラリ使用
+    """
+    # TODO: Implement with explicit checks
+    raise NotImplementedError
+```
+
+**explicit_checks の記述フォーマット**:
+```
+"<条件説明> → <例外名>('<エラーメッセージ>')"
+```
+
+**具体例**:
+```yaml
+explicit_checks:
+  - "空のDataFrameを処理しない → ValueError('Empty DataFrame')"
+  - "period < 1 を補正しない → ValueError('Invalid period: {period}')"
+  - "'close'列なしで処理しない → KeyError('close column required')"
+  - "symbols リストが空でないことを確認 → ValueError('Empty symbols list')"
+```
+
+**フォーマットの意図**:
+- **何をチェックするか**: 条件説明（左側）
+- **どう失敗するか**: 例外名とメッセージ（右側）
+- **排他性**: 記載されたもの以外は追加しない
+
+---
+
+**🚨 重要な警告**:
+
+`explicit_checks` に記載された検証**以外**の防御的チェックは追加しないでください。
+
+**NG例**（勝手な補正・フォールバック）:
+```python
+# ❌ 仕様にない防御的コード
+if df.empty:
+    return pd.DataFrame()  # 空を空で返す
+
+if period < 1:
+    period = 14  # デフォルト値で補正
+
+# ❌ 勝手なエラーハンドリング
+try:
+    result = some_operation()
+except Exception:
+    return None  # エラーを握りつぶす
+```
+
+**OK例**（素朴な実装）:
+```python
+# ✅ pandas/numpyの標準例外に任せる
+result = df['close'].rolling(window=period).mean()  # period < 1 なら自然にエラー
+```
+
+これにより、**仕様と実装の乖離を防ぎ、予測可能で保守性の高いコード生成**を実現します。
 
 ---
 

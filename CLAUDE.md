@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**spec2code** is a specification-driven code generation and validation system that enables developers to define code structure as declarative YAML and automatically generate type-safe Python skeleton code. The system validates that implementations remain consistent with specifications and manages data flow as Directed Acyclic Graphs (DAGs).
+**spectool** is a specification-driven code generation and validation system that enables developers to define code structure as declarative YAML and automatically generate type-safe Python skeleton code. The system validates that implementations remain consistent with specifications and manages data flow as Directed Acyclic Graphs (DAGs).
 
 Core principle: **Specification as Source of Truth**
 
@@ -99,24 +99,24 @@ YAML Specification → [Engine] → Generated Skeleton Code
 
 ### Directory Structure Philosophy
 
-- **`packages/spec2code/`**: Core engine library - contains all generation, validation, and execution logic
+- **`spectool/`**: Core engine library - contains all generation, validation, and execution logic
 - **`apps/`**: Generated applications - each spec generates an isolated app directory
 - **`specs/`**: Specification files - YAML definitions that drive code generation
-- **`packages/tests/`**: Test suite - pytest-based integration tests
+- **`spectool/tests/`**: Test suite - pytest-based integration tests
 - **`output/`**: Generated artifacts - reports, data, logs (gitignored)
 
 ### Key Components
 
-#### Engine (`packages/spec2code/engine.py`)
+#### Core Engine (`spectool/spectool/core/`)
 
-The 600+ line core engine implements:
+The core engine implements:
 
-1. **Pydantic Data Models**: `Spec`, `Transform`, `Check`, `DataType`, `Example`, `DAGEdge`, `Parameter`, `Meta`
-2. **Code Generation**: `generate_skeleton()` creates Python files with type annotations
-3. **Type Annotation System**: Builds complex `Annotated` types with `Check[ref]` and `ExampleValue[data]`
-4. **Validation Engine**: `Engine.validate_integrity()` checks spec-implementation alignment
-5. **DAG Execution**: `Engine.run_dag()` topologically sorts and executes transforms
-6. **Schema Validation**: JSON Schema validation for datatypes
+1. **IR Data Models** (`core/base/ir.py`): `SpecIR`, `TransformSpec`, `CheckSpec`, `FrameSpec`, `EnumSpec`, etc.
+2. **Code Generation** (`backends/py_skeleton.py`): Generates Python skeleton code with type annotations
+3. **Type System** (`core/base/meta_types.py`): Type resolution and annotation building
+4. **Validation Engine** (`core/engine/validate.py`): Checks spec-implementation alignment
+5. **DAG Execution** (`core/engine/dag_runner.py`): Topologically sorts and executes transforms
+6. **Schema Validation** (`backends/py_validators.py`): DataFrame schema validation with pandera
 
 #### Generated Code Structure
 
@@ -177,19 +177,18 @@ All generated code uses absolute imports based on the app name from `meta.name`.
 
 **Framework**: pytest with fixtures
 
-**Key Fixtures** (`packages/tests/conftest.py`):
-- `temp_project_dir`: Isolated temporary directory
-- `sample_spec_yaml`: Template specification data
-- `spec_file`: Generated YAML file path
-- `generated_project`: Project after skeleton generation
-- `implemented_project`: Project with full implementations
+**Test Organization** (`spectool/tests/`):
+- `test_loader.py`: YAML loading and normalization
+- `test_validator.py`: IR validation
+- `test_backend_py_code.py`: Code generation
+- `test_integrity_full.py`: Integration tests
 
-Tests validate that integrity checking correctly detects:
-- Missing implementations
-- File relocations
-- Signature mismatches
-- Schema violations
-- Multiple simultaneous errors
+Tests validate:
+- YAML spec loading and normalization
+- IR validation and type checking
+- Skeleton code generation
+- Schema validation (DataFrame, Pydantic, Enum)
+- DAG execution and integrity checks
 
 ## Development Guidelines
 
@@ -198,15 +197,15 @@ Tests validate that integrity checking correctly detects:
 1. **Type Annotations**: All generated code must maintain type safety with `Annotated` types
 2. **Backward Compatibility**: Spec format changes require version updates
 3. **Error Messages**: Validation errors should include specific file locations and line numbers
-4. **Test Coverage**: Add corresponding tests to `packages/tests/` for new validation logic
+4. **Test Coverage**: Add corresponding tests to `spectool/tests/` for new validation logic
 
 ### When Adding New Features
 
-1. Update the `Spec` Pydantic model if adding new spec fields
-2. Update `generate_skeleton()` if changing code generation
-3. Update `validate_integrity()` if adding new validation checks
+1. Update the `SpecIR` dataclass in `core/base/ir.py` if adding new spec fields
+2. Update backend modules (`backends/py_skeleton.py`) if changing code generation
+3. Update validation modules (`core/engine/validate.py`) if adding new validation checks
 4. Add tests demonstrating the feature and error cases
-5. Update CLI subcommands in `main()` if exposing new functionality
+5. Update CLI in `__main__.py` if exposing new functionality
 
 ### When Writing Specs
 
