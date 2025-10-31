@@ -227,22 +227,18 @@ def build_transform_function_signature(
         関数定義の行リスト
     """
     lines = []
-    if description:
-        lines.append(f"# {description}")
-
     lines.append(f"def {func_name}({param_str}) -> {return_type}:")
-    lines.append(f'    """TODO: Implement {func_name}')
-    lines.append("    ")
+    lines.append('    """')
     if description:
         lines.append(f"    {description}")
 
     # メタデータセクションを動的に追加
     if spec_metadata:
-        lines.append("    ")
+        if description:
+            lines.append("    ")
         for key, value in spec_metadata.items():
             metadata_lines = format_metadata_section(key, value, indent=4)
             lines.extend(metadata_lines)
-            lines.append("    ")  # セクション間の空行
 
     lines.append('    """')
 

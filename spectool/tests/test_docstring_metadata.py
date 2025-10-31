@@ -80,13 +80,11 @@ class TestBuildTransformFunctionSignature:
             description="Process input data",
         )
 
-        assert "# Process input data" in result
         assert "def process_data(data: pd.DataFrame) -> pd.DataFrame:" in result
-        assert '    """TODO: Implement process_data' in result
         assert "    Process input data" in result
         assert '    """' in result
-        # build_transform_function_signature doesn't include TODO comment anymore
-        # Each function generator adds its own specific TODO comment
+        # Function-level comments and TODO lines are not added by build_transform_function_signature
+        # Each function generator adds its own specific TODO comment in the implementation
 
     def test_signature_with_metadata(self):
         """メタデータ付きシグネチャ"""
@@ -216,7 +214,7 @@ class TestCheckFunctionWithMetadata:
         # 基本構造の確認
         assert "def validate_data(payload: dict) -> bool:" in result
         assert "Validate data completeness" in result
-        assert "TODO: Implement validate_data" in result
+        assert "# TODO: Implement validation logic" in result
         # メタデータセクションがない
         assert "Logic Overview:" not in result
         assert "Validation Steps:" not in result
@@ -284,7 +282,7 @@ class TestGeneratorFunctionWithMetadata:
         # 基本構造の確認
         assert "def generate_sample(size: int = 10) -> list:" in result
         assert "Generate sample data" in result
-        assert "TODO: Implement generate_sample" in result
+        assert "# TODO: Implement data generation logic" in result
         # メタデータセクションがない
         assert "Logic Overview:" not in result
         assert "Generation Steps:" not in result
