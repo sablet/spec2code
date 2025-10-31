@@ -181,8 +181,8 @@ def render_parameter_signature(param: ParameterSpec, ir: SpecIR, imports: set[st
     """
     type_annotation = resolve_type_annotation(param, ir, imports)
 
-    if param.optional and param.default is not None:
-        # デフォルト値がある場合
+    # デフォルト値がある場合は、optionalフラグに関わらず生成
+    if param.default is not None:
         if isinstance(param.default, str):
             return f"{param.name}: {type_annotation} = '{param.default}'"
         return f"{param.name}: {type_annotation} = {param.default}"
