@@ -349,8 +349,8 @@ datatypes:
             generic:
               container: list
               element_type:
-                native: "typing:Any"
-          description: "Raw data batches from providers"
+                native: "pandas:DataFrame"
+          description: "Raw OHLCV DataFrames from providers"
 
   - id: NormalizedOHLCVBundle
     description: "Normalized OHLCV data bundle from multiple providers"
@@ -360,8 +360,8 @@ datatypes:
       fields:
         - name: data
           type:
-            native: "typing:Any"
-          description: "Normalized OHLCV data"
+            datatype_ref: MultiAssetOHLCVFrame
+          description: "Normalized OHLCV data as MultiAsset DataFrame"
 
   # Using type_alias for MultiIndex DataFrame
   - id: MultiAssetOHLCVFrame
@@ -590,6 +590,27 @@ datatypes:
       value_type:
         native: "typing:Any"
 
+  - id: FoldResult
+    description: "Single fold training result with metrics"
+    check_functions:
+      - check_cv_result
+    pydantic_model:
+      fields:
+        - name: fold_index
+          type:
+            native: "builtins:int"
+          description: "Fold index (0-based)"
+        - name: train_score
+          type:
+            native: "builtins:float"
+          optional: true
+          description: "Training score for this fold"
+        - name: val_score
+          type:
+            native: "builtins:float"
+          optional: true
+          description: "Validation score for this fold"
+
   - id: CVResult
     description: "Cross-validation training result (models, metrics, OOS predictions)"
     check_functions:
@@ -601,7 +622,7 @@ datatypes:
             generic:
               container: list
               element_type:
-                native: "typing:Any"
+                datatype_ref: FoldResult
           description: "Results from each fold"
         - name: oos_predictions
           type:

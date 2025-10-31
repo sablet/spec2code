@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from spectool.spectool.core.base.ir import SpecIR
+from spectool.spectool.core.base.ir import SpecIR, TypeAliasSpec
 from spectool.spectool.backends.py_validators import generate_pandera_schemas
 from spectool.spectool.backends.py_code import generate_all_type_aliases
 from spectool.spectool.backends.py_skeleton_codegen import render_imports
@@ -208,25 +208,131 @@ def _generate_enum_module(ir: SpecIR, app_root: Path) -> None:
     )
 
 
+def _collect_used_datatype_refs(ir: SpecIR) -> set[str]:
+    """Collect all datatype_refs used in Pydantic models.
+
+    Args:
+        ir: Spec IR
+
+    Returns:
+        Set of datatype_ref IDs used in Pydantic models
+    """
+    used_datatype_refs: set[str] = set()
+    for model in ir.pydantic_models:
+        for field in model.fields:
+            field_type = field.get("type", {})
+            _collect_datatype_refs(field_type, used_datatype_refs)
+    return used_datatype_refs
+
+
+def _add_enum_imports(ir: SpecIR, used_datatype_refs: set[str], imports_models: set[str]) -> None:
+    """Add imports for Enums that are referenced in models.
+
+    Args:
+        ir: Spec IR
+        used_datatype_refs: Set of datatype_ref IDs used in models
+        imports_models: Import set to add enum imports to
+    """
+    enum_ids = {enum.id for enum in ir.enums}
+    for ref in used_datatype_refs:
+        if ref in enum_ids:
+            imports_models.add(f"from apps.{ir.meta.name.replace('-', '_')}.models.enums import {ref}")
+
+
+def _generate_type_alias_sections(ir: SpecIR, used_datatype_refs: set[str], imports_models: set[str]) -> list[str]:
+    """Generate TypeAlias sections for used type aliases.
+
+    Args:
+        ir: Spec IR
+        used_datatype_refs: Set of datatype_ref IDs used in models
+        imports_models: Import set to add type alias imports to
+
+    Returns:
+        List of TypeAlias code sections
+    """
+    type_alias_sections = []
+    if ir.type_aliases:
+        for type_alias in ir.type_aliases:
+            if type_alias.id in used_datatype_refs:
+                # Generate simple TypeAlias
+                type_alias_sections.append(_generate_simple_type_alias(type_alias, imports_models))
+    return type_alias_sections
+
+
 def _generate_pydantic_model_module(ir: SpecIR, app_root: Path) -> None:
     """Generate Pydantic model module."""
     if not ir.pydantic_models:
         return
 
     imports_models: set[str] = {"from pydantic import BaseModel"}
-    model_sections = []
 
+    # Collect all datatype_refs used in Pydantic models
+    used_datatype_refs = _collect_used_datatype_refs(ir)
+
+    # Add imports for Enums
+    _add_enum_imports(ir, used_datatype_refs, imports_models)
+
+    # Add TypeAliases as direct definitions for simple type aliases
+    type_alias_sections = _generate_type_alias_sections(ir, used_datatype_refs, imports_models)
+
+    # Generate model code sections
+    model_sections = []
     for model in ir.pydantic_models:
-        model_code = generate_pydantic_model(model)
+        model_code = generate_pydantic_model(model, imports_models)
         model_sections.append(model_code)
+
+    # Combine type aliases and models
+    all_sections = type_alias_sections + model_sections
 
     models_path = app_root / "models" / "models.py"
     _write_module_file(
         models_path,
         "Pydantic Model definitions\n\nこのファイルは spectool が自動生成しました。",
         imports_models,
-        model_sections,
+        all_sections,
     )
+
+
+def _collect_datatype_refs(field_type: dict, refs: set[str]) -> None:
+    """Recursively collect all datatype_ref references from a field type definition."""
+    if "datatype_ref" in field_type:
+        refs.add(field_type["datatype_ref"])
+    elif "generic" in field_type:
+        generic_def = field_type["generic"]
+        if "element_type" in generic_def:
+            _collect_datatype_refs(generic_def["element_type"], refs)
+        if "key_type" in generic_def:
+            _collect_datatype_refs(generic_def["key_type"], refs)
+        if "value_type" in generic_def:
+            _collect_datatype_refs(generic_def["value_type"], refs)
+
+
+def _generate_simple_type_alias(type_alias: TypeAliasSpec, imports: set[str]) -> str:
+    """Generate a simple TypeAlias definition for use in models.py."""
+    if not isinstance(type_alias, TypeAliasSpec):
+        return ""
+
+    # type_def contains {"type": "simple", "target": "pandas:DataFrame"}
+    type_def = type_alias.type_def
+    if not type_def:
+        return ""
+
+    # Handle simple type aliases (e.g., MultiAssetOHLCVFrame = pd.DataFrame)
+    if type_def.get("type") == "simple":
+        target = type_def.get("target", "")
+        if target == "pandas:DataFrame":
+            imports.add("from pandas import DataFrame")
+            return f"{type_alias.id} = DataFrame"
+        if target == "pandas:Series":
+            imports.add("from pandas import Series")
+            return f"{type_alias.id} = Series"
+        # Generic target handling
+        module, type_name = target.split(":") if ":" in target else ("", target)
+        if module and module not in {"builtins", "typing"}:
+            imports.add(f"from {module} import {type_name}")
+        return f"{type_alias.id} = {type_name}"
+
+    return ""
 
 
 def _generate_pandera_schemas(ir: SpecIR, app_root: Path) -> None:

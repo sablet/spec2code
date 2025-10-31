@@ -187,8 +187,7 @@ def test_algo_trade_pipeline_quality():
 
     既存のalgo-trade-pipeline specを使用して、実際の問題を検出する。
 
-    注意: NormalizedOHLCVBundle.dataフィールドは意図的に"typing:Any"と定義されているため、
-    Any型が1つ残ることは正常です。このテストでは許容範囲を1に設定します。
+    修正後: 不適切なAny使用は全て削除され、適切な型定義に置き換えられています。
     """
     spec_path = Path(__file__).parent.parent.parent / "specs" / "algo-trade-pipeline.yaml"
 
@@ -233,13 +232,18 @@ def test_algo_trade_pipeline_quality():
                 if "import" in line.lower():
                     continue
                 # フィールド定義でAnyを使用している行を検出
-                if re.search(r":\s*(?:typing\.)?Any(?:\s|$|,)", line):
+                # list[Any], dict[str, Any], または単体のAnyを検出
+                if re.search(r":\s*(?:list\[)?(?:dict\[.+,\s*)?(?:typing\.)?Any(?:\])?(?:\s|$|,|\])", line):
                     any_field_lines.append(f"  Line {i}: {line.strip()}")
 
-            # NormalizedOHLCVBundle.dataは意図的にtyping:Anyなので、最大1つまで許容
-            assert len(any_field_lines) <= 1, (
+            # 修正後: Pydanticモデルに不適切なAny使用はない
+            # - ProviderBatchCollection.batches: list[DataFrame] (修正済み)
+            # - NormalizedOHLCVBundle.data: MultiAssetOHLCVFrame (修正済み)
+            # - CVResult.fold_results: list[FoldResult] (修正済み)
+            expected_any_count = 0
+            assert len(any_field_lines) == expected_any_count, (
                 f"Found {len(any_field_lines)} 'Any' type(s) in Pydantic model fields "
-                f"(expected at most 1 for NormalizedOHLCVBundle.data):\n" + "\n".join(any_field_lines)
+                f"(expected {expected_any_count} - all should use proper types):\n" + "\n".join(any_field_lines)
             )
 
 
@@ -392,6 +396,85 @@ def test_algo_trade_pipeline_generator_spec_coverage():
             f"Missing GeneratorSpec annotations for {len(missing_generator_specs)} datatype(s):\n"
             + "\n".join(f"  - {spec}" for spec in missing_generator_specs)
         )
+
+
+def test_generated_models_are_importable():
+    """生成されたPydanticモデルがインポート可能であることを確認
+
+    Any型やdatetime型などを使う場合、適切なimportが含まれているべき。
+    """
+    spec_yaml = """
+version: "1"
+meta:
+  name: "test-importable"
+  description: "Test for importable models"
+
+checks:
+  - id: check_data
+    description: "Validate data"
+    impl: "apps.test-importable.checks.checks:check_data"
+    file_path: "checks/checks.py"
+
+datatypes:
+  - id: DataWithAny
+    description: "Model with Any field"
+    check_functions:
+      - check_data
+    pydantic_model:
+      fields:
+        - name: items
+          type:
+            generic:
+              container: list
+              element_type:
+                native: "typing:Any"
+          description: "List of any items"
+        - name: created_at
+          type:
+            native: "datetime:datetime"
+          description: "Creation timestamp"
+"""
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+
+        # YAMLファイルを作成
+        spec_file = tmppath / "test_spec.yaml"
+        spec_file.write_text(spec_yaml, encoding="utf-8")
+
+        # YAMLをロードしてIR生成
+        ir = load_spec(spec_file)
+
+        # スケルトンコード生成
+        generate_skeleton(ir, tmppath)
+
+        # 生成されたmodels/models.pyを読み込み
+        models_file = tmppath / "apps" / "test_importable" / "models" / "models.py"
+        assert models_file.exists(), f"Models file not found: {models_file}"
+
+        content = models_file.read_text()
+
+        # 必要なimportが含まれていることを確認
+        assert "from typing import Any" in content, "Missing 'from typing import Any'"
+        assert "from datetime import datetime" in content, "Missing 'from datetime import datetime'"
+
+        # Pythonコードとして実行可能か確認（import可能か）
+        import sys
+
+        sys.path.insert(0, str(tmppath))
+        try:
+            # importを試行
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location("test_models", models_file)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                # クラスが定義されていることを確認
+                assert hasattr(module, "DataWithAny"), "DataWithAny class not found"
+        finally:
+            sys.path.pop(0)
 
 
 if __name__ == "__main__":
