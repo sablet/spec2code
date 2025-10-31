@@ -31,11 +31,12 @@ class IntegrityValidator:
         """
         self.ir = ir
 
-    def _resolve_impl_path(self, impl: str) -> str:
+    def _resolve_impl_path(self, impl: str, file_path: str | None = None) -> str:
         """implパスを解決（apps. プレフィックスをプロジェクト名を含む形に変換）
 
         Args:
             impl: 元のimplパス (例: "apps.checks:func" または "apps.project_name.checks:func")
+            file_path: ファイルパス（短縮形式の場合に完全なモジュールパスを推測するために使用）
 
         Returns:
             解決されたimplパス (例: "apps.sample-project.checks:func")
@@ -54,9 +55,39 @@ class IntegrityValidator:
         if rest.startswith(f"{app_name}."):
             return impl
 
-        # 短縮形式の場合のみプロジェクト名を挿入
+        # 短縮形式の場合、file_pathから完全なモジュールパスを推測
+        if file_path and ":" in impl:
+            func_name = impl.split(":", 1)[1]
+            module_path = self._infer_module_path_from_file(file_path)
+            return f"{module_path}:{func_name}"
+
+        # file_pathが無い場合は、プロジェクト名を挿入
         # "apps.<project-name>." + 残りの部分
         return f"apps.{app_name}.{rest}"
+
+    def _infer_module_path_from_file(self, file_path: str) -> str:
+        """file_pathから完全なモジュールパスを推測
+
+        Args:
+            file_path: ファイルパス（例: "checks/validators.py" または "apps/checks/validators.py"）
+
+        Returns:
+            モジュールパス（例: "apps.test_project.checks.validators"）
+        """
+        app_name = self.ir.meta.name if self.ir.meta else "app"
+
+        # Pathオブジェクトに変換
+        path = Path(file_path)
+
+        # "apps" プレフィックスを除去
+        if path.parts and path.parts[0] == "apps":
+            path = Path(*path.parts[1:])
+
+        # .pyを除去してモジュールパスに変換
+        module_parts = list(path.with_suffix("").parts)
+
+        # apps.<app_name>.<module_path>の形式で返す
+        return f"apps.{app_name}.{'.'.join(module_parts)}"
 
     def validate_integrity(self, project_root: Path) -> dict[str, list[str]]:
         """完全なIntegrity検証
@@ -150,8 +181,8 @@ class IntegrityValidator:
             print(f"  ❌ {message}")
             return
 
-        # implパスを解決
-        resolved_impl = self._resolve_impl_path(check.impl)
+        # implパスを解決（file_pathを使って短縮形式をサポート）
+        resolved_impl = self._resolve_impl_path(check.impl, check.file_path)
         module_path, func_name = resolved_impl.split(":", 1)
 
         # file_pathを解決
@@ -204,8 +235,8 @@ class IntegrityValidator:
             print(f"  ❌ {message}")
             return
 
-        # implパスを解決
-        resolved_impl = self._resolve_impl_path(transform.impl)
+        # implパスを解決（file_pathを使って短縮形式をサポート）
+        resolved_impl = self._resolve_impl_path(transform.impl, transform.file_path)
         module_path, func_name = resolved_impl.split(":", 1)
 
         # file_pathを解決
@@ -261,8 +292,8 @@ class IntegrityValidator:
             print(f"  ❌ {message}")
             return
 
-        # implパスを解決
-        resolved_impl = self._resolve_impl_path(generator.impl)
+        # implパスを解決（file_pathを使って短縮形式をサポート）
+        resolved_impl = self._resolve_impl_path(generator.impl, generator.file_path)
         module_path, func_name = resolved_impl.split(":", 1)
 
         # file_pathを解決

@@ -61,7 +61,13 @@ def generate_transform_function(transform: TransformSpec, ir: SpecIR, imports: s
     # 戻り値型解決時にimportsを渡す
     return_type = resolve_transform_return_type(transform, ir, imports)
 
-    lines = build_transform_function_signature(func_name, param_str, return_type, transform.description)
+    lines = build_transform_function_signature(
+        func_name,
+        param_str,
+        return_type,
+        transform.description,
+        spec_metadata=transform.spec_metadata,  # メタデータを渡す
+    )
     lines.extend(build_function_body_placeholder(return_type))
 
     return "\n".join(lines)

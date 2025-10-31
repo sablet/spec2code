@@ -890,6 +890,26 @@ transforms:
       - name: batches
         datatype_ref: ProviderBatchCollection
     return_type_ref: NormalizedOHLCVBundle
+    spec_metadata:
+      logic_overview:
+        - "Extract DataFrame from each provider batch"
+        - "Map provider-specific column names to standard OHLCV format (open, high, low, close, volume)"
+        - "Convert all timestamps to UTC datetime format"
+        - "Validate data completeness and drop rows with missing OHLC values"
+        - "Combine all normalized DataFrames"
+      pseudo_code: |
+        normalized_frames = []
+        for batch in batches.batches:
+            df = batch  # Extract DataFrame
+            df = standardize_columns(df)  # Map to OHLCV
+            df.index = pd.to_datetime(df.index).tz_localize('UTC')
+            df = df.dropna(subset=['open', 'high', 'low', 'close'])
+            normalized_frames.append(df)
+        return NormalizedOHLCVBundle(data=pd.concat(normalized_frames))
+      complexity: "O(n*m) where n=number of batches, m=rows per batch"
+      dependencies:
+        - pandas
+        - datetime
 
   - id: merge_market_data_bundle
     description: "Merge normalized bundle into MultiIndex DataFrame"
@@ -1017,6 +1037,31 @@ transforms:
         datatype_ref: SimpleLGBMParams
         optional: true
     return_type_ref: CVResult
+    spec_metadata:
+      logic_overview:
+        - "Unpack aligned feature and target DataFrames from tuple"
+        - "Use cv_config to generate train/test splits according to selected method (TIME_SERIES, EXPANDING_WINDOW, SLIDING_WINDOW)"
+        - "For each fold, train LightGBM model with lgbm_params"
+        - "Collect validation metrics and OOS predictions per fold"
+        - "Return CVResult with all fold results and concatenated OOS predictions"
+      pseudo_code: |
+        features, target = aligned_data
+        splits = generate_cv_splits(features, cv_config)
+        fold_results = []
+        oos_preds = []
+        for fold_idx, (train_idx, val_idx) in enumerate(splits):
+            X_train, y_train = features.iloc[train_idx], target.iloc[train_idx]
+            X_val, y_val = features.iloc[val_idx], target.iloc[val_idx]
+            model = lgb.train(lgbm_params, lgb.Dataset(X_train, y_train))
+            val_pred = model.predict(X_val)
+            fold_results.append(FoldResult(fold_index=fold_idx, train_score=..., val_score=...))
+            oos_preds.append(pd.DataFrame({'pred': val_pred}, index=val_idx))
+        return CVResult(fold_results=fold_results, oos_predictions=pd.concat(oos_preds))
+      complexity: "O(n_folds * n_samples * log(n_samples)) for tree training"
+      notes: |
+        - Time-series CV ensures no data leakage by respecting temporal order
+        - OOS predictions are critical for unbiased performance estimation
+        - Default cv_config uses 5-fold time-series split if not provided
 
   - id: generate_predictions
     description: "Generate prediction data list from CV OOS predictions"

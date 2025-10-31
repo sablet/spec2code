@@ -310,6 +310,7 @@ def _load_transform_specs(transforms_data: list[dict[str, Any]]) -> list[Transfo
                 or transform_data.get("return_native")
             ),
             default_args=transform_data.get("default_args", {}),
+            spec_metadata=transform_data.get("spec_metadata"),  # メタデータをパース
         )
         transforms.append(transform)
     return transforms

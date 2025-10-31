@@ -222,8 +222,8 @@ meta:
 checks:
   - id: check_frame
     description: "Check dataframe"
-    impl: "apps.checks:check_frame"
-    file_path: "apps/checks/validators.py"
+    impl: "apps.test_alias_project.checks.validators:check_frame"
+    file_path: "checks/validators.py"
 
 datatypes:
   - id: BaseFrame
@@ -249,8 +249,8 @@ datatypes:
 transforms:
   - id: process_alias_frame
     description: "Process aliased frame"
-    impl: "apps.transforms:process_alias_frame"
-    file_path: "apps/transforms/processors.py"
+    impl: "apps.test_alias_project.transforms.processors:process_alias_frame"
+    file_path: "transforms/processors.py"
     parameters:
       - name: data
         datatype_ref: AliasFrame

@@ -102,12 +102,14 @@ def _generate_check_modules(ir: SpecIR, app_root: Path) -> None:
     check_functions_by_file: dict[str, list[str]] = {}
     for check in ir.checks:
         file_path = check.file_path or "checks/validators.py"
+        # Normalize file_path to remove "apps/" prefix for grouping
+        normalized_path = str(_strip_apps_prefix(Path(file_path)))
         imports_check: set[str] = set()
         func_code = generate_check_function(check, imports_check)
 
-        if file_path not in check_functions_by_file:
-            check_functions_by_file[file_path] = []
-        check_functions_by_file[file_path].append(func_code)
+        if normalized_path not in check_functions_by_file:
+            check_functions_by_file[normalized_path] = []
+        check_functions_by_file[normalized_path].append(func_code)
 
     for file_path, functions in check_functions_by_file.items():
         relative_path = _strip_apps_prefix(Path(file_path))
@@ -129,12 +131,14 @@ def _generate_transform_modules(ir: SpecIR, app_root: Path) -> None:
     transform_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
     for transform in ir.transforms:
         file_path = transform.file_path or "transforms/processors.py"
+        # Normalize file_path to remove "apps/" prefix for grouping
+        normalized_path = str(_strip_apps_prefix(Path(file_path)))
         imports_transform: set[str] = set()
         func_code = generate_transform_function(transform, ir, imports_transform)
 
-        if file_path not in transform_functions_by_file:
-            transform_functions_by_file[file_path] = []
-        transform_functions_by_file[file_path].append((func_code, imports_transform))
+        if normalized_path not in transform_functions_by_file:
+            transform_functions_by_file[normalized_path] = []
+        transform_functions_by_file[normalized_path].append((func_code, imports_transform))
 
     for file_path, functions_with_imports in transform_functions_by_file.items():
         relative_path = _strip_apps_prefix(Path(file_path))
@@ -162,12 +166,14 @@ def _generate_generator_modules(ir: SpecIR, app_root: Path) -> None:
     generator_functions_by_file: dict[str, list[tuple[str, set[str]]]] = {}
     for generator in ir.generators:
         file_path = generator.file_path or "generators/data_generators.py"
+        # Normalize file_path to remove "apps/" prefix for grouping
+        normalized_path = str(_strip_apps_prefix(Path(file_path)))
         imports_generator: set[str] = set()
         func_code = generate_generator_function(generator, ir, imports_generator)
 
-        if file_path not in generator_functions_by_file:
-            generator_functions_by_file[file_path] = []
-        generator_functions_by_file[file_path].append((func_code, imports_generator))
+        if normalized_path not in generator_functions_by_file:
+            generator_functions_by_file[normalized_path] = []
+        generator_functions_by_file[normalized_path].append((func_code, imports_generator))
 
     for file_path, functions_with_imports in generator_functions_by_file.items():
         relative_path = _strip_apps_prefix(Path(file_path))

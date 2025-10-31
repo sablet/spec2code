@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from spectool.spectool.core.base.ir import FrameSpec, ParameterSpec, SpecIR, TransformSpec
 
 
@@ -58,7 +60,9 @@ def _resolve_dataframe_fallback(frame: FrameSpec, imports: set[str] | None) -> s
         if imports is not None:
             imports.add("from typing import Annotated")
             imports.add("from spectool.spectool.core.base.meta_types import Check")
-        check_refs = ", ".join(f'Check["{cf}"]' for cf in frame.check_functions)
+        # implパスから関数名だけを抽出 (例: "apps.module:func" -> "func")
+        check_func_names = [cf.split(":")[-1] if ":" in cf else cf for cf in frame.check_functions]
+        check_refs = ", ".join(f'Check["{cf}"]' for cf in check_func_names)
         return f"Annotated[pd.DataFrame, {check_refs}]"
     return "pd.DataFrame"
 
@@ -209,9 +213,24 @@ def resolve_transform_return_type(transform: TransformSpec, ir: SpecIR, imports:
 
 
 def build_transform_function_signature(
-    func_name: str, param_str: str, return_type: str, description: str | None
+    func_name: str,
+    param_str: str,
+    return_type: str,
+    description: str | None,
+    spec_metadata: dict[str, Any] | None = None,
 ) -> list[str]:
-    """Build function signature lines."""
+    """Build function signature lines with optional metadata.
+
+    Args:
+        func_name: 関数名
+        param_str: パラメータ文字列
+        return_type: 戻り値型
+        description: 関数の説明
+        spec_metadata: 追加のメタデータ（docstring生成用）
+
+    Returns:
+        関数定義の行リスト
+    """
     lines = []
     if description:
         lines.append(f"# {description}")
@@ -221,6 +240,15 @@ def build_transform_function_signature(
     lines.append("    ")
     if description:
         lines.append(f"    {description}")
+
+    # メタデータセクションを動的に追加
+    if spec_metadata:
+        lines.append("    ")
+        for key, value in spec_metadata.items():
+            metadata_lines = format_metadata_section(key, value, indent=4)
+            lines.extend(metadata_lines)
+            lines.append("    ")  # セクション間の空行
+
     lines.append('    """')
     lines.append("    # TODO: Implement transformation logic")
 
@@ -239,3 +267,53 @@ def render_imports(imports: set[str]) -> str:
     if not imports:
         return ""
     return "\n".join(sorted(imports))
+
+
+def format_metadata_section(key: str, value: object, indent: int = 4) -> list[str]:
+    """メタデータの値を適切にフォーマット
+
+    Args:
+        key: メタデータのキー名
+        value: メタデータの値（str, list, dictなど）
+        indent: インデントレベル
+
+    Returns:
+        フォーマットされた行のリスト
+    """
+    lines = []
+    prefix = " " * indent
+
+    # キー名を人間が読みやすい形式に変換（snake_case -> Title Case）
+    display_name = key.replace("_", " ").title()
+
+    if isinstance(value, list):
+        # リスト形式: 箇条書き
+        lines.append(f"{prefix}{display_name}:")
+        for item in value:
+            lines.append(f"{prefix}    - {item}")
+
+    elif isinstance(value, dict):
+        # 辞書形式: キーバリューペア
+        lines.append(f"{prefix}{display_name}:")
+        for k, v in value.items():
+            if isinstance(v, (list, dict)):
+                # ネストされた構造
+                nested = format_metadata_section(k, v, indent + 4)
+                lines.extend(nested)
+            else:
+                lines.append(f"{prefix}    {k}: {v}")
+
+    elif isinstance(value, str):
+        # 文字列: 複数行対応
+        if "\n" in value:
+            lines.append(f"{prefix}{display_name}:")
+            for line in value.strip().split("\n"):
+                lines.append(f"{prefix}    {line}")
+        else:
+            lines.append(f"{prefix}{display_name}: {value}")
+
+    else:
+        # その他（数値、bool等）
+        lines.append(f"{prefix}{display_name}: {value}")
+
+    return lines

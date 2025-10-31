@@ -135,10 +135,15 @@ def test_full_form_impl_path_mixed_with_short_form(temp_project_dir, full_form_s
     # Check that both forms are handled correctly
     validator = IntegrityValidator(normalized)
 
-    # Before implementation, should report missing functions
+    # After skeleton generation, all functions should exist (as stubs)
     errors = validator.validate_integrity(temp_project_dir)
 
-    # Should have errors for missing implementations
-    assert len(errors["check_functions"]) > 0, "Should detect missing check functions"
-    assert len(errors["transform_functions"]) > 0, "Should detect missing transform functions"
-    assert len(errors["generator_functions"]) > 0, "Should detect missing generator functions"
+    # Skeleton generation should create stub functions, so no errors expected
+    # However, check_negative uses short-form impl, so it should still work
+    total_errors = sum(len(err_list) for err_list in errors.values())
+
+    # All functions should be found (including both full-form and short-form impl paths)
+    assert total_errors == 0, (
+        f"All skeleton functions should be found regardless of impl path format. "
+        f"Found {total_errors} errors. This indicates short-form impl path resolution is not working."
+    )

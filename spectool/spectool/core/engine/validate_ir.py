@@ -59,14 +59,13 @@ def _validate_meta_spec(ir: SpecIR) -> list[str]:
     """
     errors = []
 
-    if ir.meta and ir.meta.name:
+    if ir.meta and ir.meta.name and "-" in ir.meta.name:
         # プロジェクト名にハイフンが含まれていないかチェック
-        if "-" in ir.meta.name:
-            errors.append(
-                f"Meta 'name': '{ir.meta.name}' contains hyphen '-'. "
-                "Project names must use underscores '_' instead of hyphens. "
-                f"Please change to: '{ir.meta.name.replace('-', '_')}'"
-            )
+        errors.append(
+            f"Meta 'name': '{ir.meta.name}' contains hyphen '-'. "
+            "Project names must use underscores '_' instead of hyphens. "
+            f"Please change to: '{ir.meta.name.replace('-', '_')}'"
+        )
 
     return errors
 

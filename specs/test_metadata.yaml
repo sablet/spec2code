@@ -1,0 +1,66 @@
+version: "1"
+meta:
+  name: "test_metadata"
+  description: "Test spec for metadata feature"
+
+checks:
+  - id: check_valid
+    description: "Validate data is valid"
+    impl: "apps.test_metadata.checks.validators:check_valid"
+    file_path: "checks/validators.py"
+
+datatypes:
+  - id: InputData
+    description: "Input data structure"
+    pydantic_model:
+      fields:
+        - name: value
+          type:
+            native: "builtins:int"
+          description: "Input value"
+
+  - id: OutputData
+    description: "Output data structure"
+    pydantic_model:
+      fields:
+        - name: result
+          type:
+            native: "builtins:int"
+          description: "Result value"
+
+transforms:
+  - id: simple_transform
+    description: "Simple transform without metadata"
+    impl: "apps.test_metadata.transforms.processors:simple_transform"
+    file_path: "transforms/processors.py"
+    parameters:
+      - name: data
+        datatype_ref: InputData
+    return_type_ref: OutputData
+
+  - id: transform_with_metadata
+    description: "Transform with detailed metadata"
+    impl: "apps.test_metadata.transforms.processors:transform_with_metadata"
+    file_path: "transforms/processors.py"
+    parameters:
+      - name: data
+        datatype_ref: InputData
+    return_type_ref: OutputData
+    spec_metadata:
+      logic_overview:
+        - "Extract value from input data"
+        - "Apply transformation logic"
+        - "Validate result"
+        - "Return output data"
+      pseudo_code: |
+        value = data.value
+        result = value * 2
+        if result < 0:
+            raise ValueError("Result cannot be negative")
+        return OutputData(result=result)
+      complexity: "O(1)"
+      dependencies:
+        - pydantic
+      notes: |
+        This is a simple doubling operation.
+        Negative results are not allowed.

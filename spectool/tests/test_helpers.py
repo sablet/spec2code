@@ -6,10 +6,12 @@
 from pathlib import Path
 from spectool.spectool.core.base.ir import SpecIR
 from spectool.spectool.backends.py_code import (
-    build_file_content,
     generate_dataframe_type_alias,
     generate_enum_type_alias,
     generate_pydantic_type_alias,
+)
+from spectool.spectool.backends.py_code_base import (
+    build_file_content,
     render_imports,
 )
 

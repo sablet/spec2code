@@ -134,6 +134,7 @@ class TransformSpec:
         parameters: パラメータリスト
         return_type_ref: 戻り値型参照
         default_args: デフォルト引数
+        spec_metadata: 追加のメタデータ（docstring生成用、任意の構造）
     """
 
     id: str
@@ -143,6 +144,7 @@ class TransformSpec:
     parameters: list[ParameterSpec] = field(default_factory=list)
     return_type_ref: str | None = None
     default_args: dict[str, Any] = field(default_factory=dict)
+    spec_metadata: dict[str, Any] | None = None
 
 
 @dataclass
