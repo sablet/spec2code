@@ -23,7 +23,7 @@ def test_transform_default_parameter_type_mismatch_detected(temp_spec_dir):
     """デフォルト値の型が宣言と不一致の場合にエラーが検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "type-mismatch-spec"},
+        "meta": {"name": "type-mismatch_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -75,7 +75,7 @@ def test_transform_default_parameter_correct_type_passes(temp_spec_dir):
     """デフォルト値の型が正しい場合はエラーが出ないことを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "correct-type-spec"},
+        "meta": {"name": "correct-type_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -117,7 +117,7 @@ def test_transform_default_parameter_int_float_coercion(temp_spec_dir):
     """int型のデフォルト値がfloat型宣言で許容されるか確認（または警告）"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "coercion-spec"},
+        "meta": {"name": "coercion_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -157,7 +157,7 @@ def test_transform_default_parameter_none_for_optional(temp_spec_dir):
     """optional=Trueの場合、default=Noneが許容されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "optional-none-spec"},
+        "meta": {"name": "optional-none_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -202,7 +202,7 @@ def test_transform_default_parameter_complex_type_mismatch(temp_spec_dir):
     """複雑な型（list, dict）のデフォルト値の型不一致も検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "complex-type-mismatch-spec"},
+        "meta": {"name": "complex-type-mismatch_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -246,7 +246,7 @@ def test_transform_default_parameter_bool_type_check(temp_spec_dir):
     """bool型のデフォルト値チェックが正しく動作することを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "bool-type-spec"},
+        "meta": {"name": "bool-type_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",

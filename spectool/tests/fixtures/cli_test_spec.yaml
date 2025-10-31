@@ -1,6 +1,6 @@
 version: "1"
 meta:
-  name: "cli-test-project"
+  name: "cli_test_project"
   description: "Simple spec for CLI testing"
 
 datatypes:

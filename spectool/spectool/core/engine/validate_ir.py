@@ -27,6 +27,9 @@ def validate_ir(ir: SpecIR, skip_impl_check: bool = False) -> list[str]:
     """
     errors: list[str] = []
 
+    # Meta定義の検証
+    errors.extend(_validate_meta_spec(ir))
+
     # DataFrame定義の検証
     errors.extend(_validate_dataframe_specs(ir))
 
@@ -41,6 +44,29 @@ def validate_ir(ir: SpecIR, skip_impl_check: bool = False) -> list[str]:
 
     # Python型参照の検証（実装チェック含む）
     errors.extend(_validate_type_references(ir, skip_impl_check=skip_impl_check))
+
+    return errors
+
+
+def _validate_meta_spec(ir: SpecIR) -> list[str]:
+    """Meta定義の検証
+
+    Args:
+        ir: 検証対象のIR
+
+    Returns:
+        エラーメッセージのリスト
+    """
+    errors = []
+
+    if ir.meta and ir.meta.name:
+        # プロジェクト名にハイフンが含まれていないかチェック
+        if "-" in ir.meta.name:
+            errors.append(
+                f"Meta 'name': '{ir.meta.name}' contains hyphen '-'. "
+                "Project names must use underscores '_' instead of hyphens. "
+                f"Please change to: '{ir.meta.name.replace('-', '_')}'"
+            )
 
     return errors
 

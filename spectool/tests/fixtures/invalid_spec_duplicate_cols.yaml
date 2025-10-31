@@ -1,6 +1,6 @@
 version: "1.0"
 meta:
-  name: invalid-duplicate-cols
+  name: invalid_duplicate_cols
   description: "Invalid spec with duplicate column names"
 
 datatypes:

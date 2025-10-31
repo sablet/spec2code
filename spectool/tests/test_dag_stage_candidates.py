@@ -22,7 +22,7 @@ def test_dag_stage_finds_all_matching_candidates(temp_spec_dir):
     """i/o dtypeに該当するtransform候補がN件ある時、全てM件が正確に取得できることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "candidate-match-spec"},
+        "meta": {"name": "candidate-match_spec"},
         "datatypes": [
             {
                 "id": "FrameA",
@@ -122,7 +122,7 @@ def test_dag_stage_explicit_candidates_validation(temp_spec_dir):
     """明示的に指定されたcandidatesが正しいことを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "explicit-candidates-spec"},
+        "meta": {"name": "explicit-candidates_spec"},
         "datatypes": [
             {
                 "id": "FrameA",
@@ -180,7 +180,7 @@ def test_config_invalid_transform_rejected_in_validation(temp_spec_dir):
     """該当しないtransform関数がconfigに記載されていた時、実行前validationで弾かれることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "invalid-transform-config-spec"},
+        "meta": {"name": "invalid-transform-config_spec"},
         "datatypes": [
             {
                 "id": "FrameA",
@@ -233,7 +233,7 @@ def test_config_invalid_transform_rejected_in_validation(temp_spec_dir):
 
     config_data = {
         "version": "1",
-        "meta": {"config_name": "invalid-config", "base_spec": "spec.yaml"},
+        "meta": {"config_name": "invalid_config", "base_spec": "spec.yaml"},
         "execution": {
             "stages": [
                 {
@@ -272,7 +272,7 @@ def test_config_undefined_transform_rejected_in_validation(temp_spec_dir):
     """未定義のtransformがconfigに記載されていた時、実行前validationで弾かれることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "undefined-transform-spec"},
+        "meta": {"name": "undefined-transform_spec"},
         "datatypes": [
             {
                 "id": "FrameA",
@@ -304,7 +304,7 @@ def test_config_undefined_transform_rejected_in_validation(temp_spec_dir):
 
     config_data = {
         "version": "1",
-        "meta": {"config_name": "undefined-config", "base_spec": "spec.yaml"},
+        "meta": {"config_name": "undefined_config", "base_spec": "spec.yaml"},
         "execution": {
             "stages": [
                 {
@@ -343,7 +343,7 @@ def test_dag_stage_auto_candidate_collection_filters_by_signature(temp_spec_dir)
     """複数パラメータを持つtransformでも、i/o型が一致すれば候補に含まれることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "multi-param-candidate-spec"},
+        "meta": {"name": "multi-param-candidate_spec"},
         "datatypes": [
             {
                 "id": "FrameA",

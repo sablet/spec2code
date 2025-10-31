@@ -11,7 +11,7 @@ def test_load_minimal_spec():
     spec_path = Path(__file__).parent / "fixtures" / "minimal_spec.yaml"
     ir = load_spec(spec_path)
 
-    assert ir.meta.name == "minimal-test"
+    assert ir.meta.name == "minimal_test"
     assert len(ir.frames) == 1
     assert ir.frames[0].id == "SampleFrame"
     assert ir.frames[0].index is not None
@@ -145,7 +145,7 @@ def test_load_meta():
     spec_path = Path(__file__).parent / "fixtures" / "minimal_spec.yaml"
     ir = load_spec(spec_path)
 
-    assert ir.meta.name == "minimal-test"
+    assert ir.meta.name == "minimal_test"
     assert ir.meta.description == "Minimal test spec"
     assert ir.meta.version == "1.0"
 

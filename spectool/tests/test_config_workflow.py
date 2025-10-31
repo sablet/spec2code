@@ -67,7 +67,7 @@ def sample_spec_with_config(temp_project_dir):
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "test-config",
+            "config_name": "test_config",
             "description": "Test configuration",
             "base_spec": "spec.yaml",
         },
@@ -292,7 +292,7 @@ def test_config_with_invalid_stage_fails_validation(temp_project_dir):
 
     config_data = {
         "version": "1",
-        "meta": {"config_name": "invalid-config", "base_spec": "spec.yaml"},
+        "meta": {"config_name": "invalid_config", "base_spec": "spec.yaml"},
         "execution": {
             "stages": [
                 {

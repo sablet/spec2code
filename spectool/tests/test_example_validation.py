@@ -22,7 +22,7 @@ def test_example_linked_to_datatype(temp_spec_dir):
     """ExampleがDataTypeに正しくリンクされることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "example-link-spec"},
+        "meta": {"name": "example-link_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -58,7 +58,7 @@ def test_example_without_datatype_ref_detected(temp_spec_dir):
     """datatype_refが指定されていないExampleが検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "missing-ref-spec"},
+        "meta": {"name": "missing-ref_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -95,7 +95,7 @@ def test_example_references_nonexistent_datatype(temp_spec_dir):
     """存在しないDataTypeを参照するExampleが検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "invalid-ref-spec"},
+        "meta": {"name": "invalid-ref_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -142,7 +142,7 @@ def test_example_input_matches_datatype_schema(temp_spec_dir):
     """ExampleのinputがDataTypeのschemaに一致することを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "schema-match-spec"},
+        "meta": {"name": "schema-match_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -183,7 +183,7 @@ def test_example_input_violates_datatype_schema(temp_spec_dir):
     """ExampleのinputがDataTypeのschemaに違反する場合にエラーが検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "schema-violation-spec"},
+        "meta": {"name": "schema-violation_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -221,7 +221,7 @@ def test_multiple_examples_for_same_datatype(temp_spec_dir):
     """同じDataTypeに対して複数のExampleが定義できることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "multiple-examples-spec"},
+        "meta": {"name": "multiple-examples_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -264,7 +264,7 @@ def test_example_expected_output_validation(temp_spec_dir):
     """Exampleのexpected outputも検証されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "expected-output-spec"},
+        "meta": {"name": "expected-output_spec"},
         "datatypes": [
             {
                 "id": "InputFrame",
@@ -315,7 +315,7 @@ def test_example_without_expected_is_valid(temp_spec_dir):
     """expectedがないExample（入力のみ）も有効であることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "input-only-example-spec"},
+        "meta": {"name": "input-only-example_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",

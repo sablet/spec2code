@@ -62,7 +62,7 @@ class TestCLIGenCommand:
         # Create a test spec
         spec_content = """version: "1"
 meta:
-  name: "test-project"
+  name: "test_project"
   description: "Test project"
 
 datatypes:
@@ -81,7 +81,7 @@ datatypes:
         spec_path.write_text(spec_content)
 
         # Use --output-dir to specify output location
-        output_dir = tmp_path / "apps" / "test-project" / "datatypes"
+        output_dir = tmp_path / "apps" / "test_project" / "datatypes"
 
         result = subprocess.run(
             [sys.executable, "-m", "spectool", "gen", str(spec_path), "--output-dir", str(output_dir)],
@@ -119,7 +119,7 @@ class TestCLIValidateIntegrityCommand:
         # Create a test spec
         spec_content = """version: "1"
 meta:
-  name: "integrity-test-project"
+  name: "integrity_test_project"
   description: "Integrity test project"
 
 datatypes:
@@ -138,7 +138,7 @@ datatypes:
         spec_path.write_text(spec_content)
 
         # Use --output-dir to specify output location
-        output_dir = tmp_path / "apps" / "integrity-test-project" / "datatypes"
+        output_dir = tmp_path / "apps" / "integrity_test_project" / "datatypes"
 
         # Generate code first
         gen_result = subprocess.run(

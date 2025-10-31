@@ -68,7 +68,7 @@ def sample_config_yaml(temp_config_dir, sample_spec_path):
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "test-config",
+            "config_name": "test_config",
             "description": "Test configuration",
             "base_spec": str(sample_spec_path),
         },
@@ -168,7 +168,7 @@ def test_load_config(sample_config_yaml):
     config = load_config(str(sample_config_yaml))
 
     assert config.version == "1"
-    assert config.meta.config_name == "test-config"
+    assert config.meta.config_name == "test_config"
     assert len(config.execution.stages) == 1
 
 
@@ -188,7 +188,7 @@ def test_validate_config_invalid_transform_id(temp_config_dir, sample_spec_path)
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "invalid-config",
+            "config_name": "invalid_config",
             "description": "Invalid configuration",
             "base_spec": str(sample_spec_path),
         },
@@ -220,7 +220,7 @@ def test_validate_config_exclusive_mode_multiple_selections(temp_config_dir, sam
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "invalid-exclusive",
+            "config_name": "invalid_exclusive",
             "description": "Invalid exclusive mode",
             "base_spec": str(sample_spec_path),
         },
@@ -256,7 +256,7 @@ def test_validate_config_invalid_parameter_type(temp_config_dir, sample_spec_pat
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "invalid-param-type",
+            "config_name": "invalid-param_type",
             "description": "Invalid parameter type",
             "base_spec": str(sample_spec_path),
         },
@@ -351,7 +351,7 @@ def test_config_runner_uses_default_parameters(temp_config_dir, sample_spec_path
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "default-params",
+            "config_name": "default_params",
             "description": "Use default parameters",
             "base_spec": str(sample_spec_path),
         },
@@ -437,7 +437,7 @@ def test_config_runner_validation_checks_missing_implementation(temp_config_dir,
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "missing-impl",
+            "config_name": "missing_impl",
             "description": "Missing implementation",
             "base_spec": str(sample_spec_path),
         },
@@ -468,7 +468,7 @@ def test_config_runner_skip_implementation_check(temp_config_dir, sample_spec_pa
     config_data = {
         "version": "1",
         "meta": {
-            "config_name": "skip-impl-check",
+            "config_name": "skip-impl_check",
             "description": "Skip implementation check",
             "base_spec": str(sample_spec_path),
         },

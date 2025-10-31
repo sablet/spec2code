@@ -1,6 +1,6 @@
 version: "1.0"
 meta:
-  name: pydantic-rowref-test
+  name: pydantic_rowref_test
   description: "Test spec with Pydantic row_model reference"
 
 datatypes:

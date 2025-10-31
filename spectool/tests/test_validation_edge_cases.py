@@ -23,7 +23,7 @@ def test_dag_stage_with_zero_transform_candidates_detected(temp_spec_dir):
     """i/o dtypeに対して候補のtransform関数がゼロ件のdag_stagesが検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "zero-candidates-spec"},
+        "meta": {"name": "zero-candidates_spec"},
         "datatypes": [
             {
                 "id": "FrameA",
@@ -107,7 +107,7 @@ def test_dag_stage_with_explicit_empty_candidates_detected(temp_spec_dir):
     """明示的に空のcandidatesが指定された場合も検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "explicit-empty-candidates-spec"},
+        "meta": {"name": "explicit-empty-candidates_spec"},
         "datatypes": [
             {
                 "id": "FrameA",
@@ -153,7 +153,7 @@ def test_datatype_with_zero_check_functions_detected(temp_spec_dir):
     """dtypeの型アノテーションのcheckがゼロ件の場合が検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "zero-checks-spec"},
+        "meta": {"name": "zero-checks_spec"},
         "datatypes": [
             {
                 "id": "ValidatedFrame",
@@ -213,7 +213,7 @@ def test_datatype_with_zero_examples_and_zero_generators_detected(temp_spec_dir)
     """example/generatorの両方がゼロ件の場合が検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "zero-examples-generators-spec"},
+        "meta": {"name": "zero-examples-generators_spec"},
         "datatypes": [
             {
                 "id": "FrameWithExample",
@@ -294,7 +294,7 @@ def test_datatype_completeness_all_three_checks(temp_spec_dir):
     """check/example/generatorの3つすべてがゼロの場合、最も重大なエラーとして検出されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "incomplete-datatype-spec"},
+        "meta": {"name": "incomplete-datatype_spec"},
         "datatypes": [
             {
                 "id": "CompleteFrame",
@@ -367,7 +367,7 @@ def test_validation_reports_all_incomplete_datatypes(temp_spec_dir):
     """複数のDataTypeに問題がある場合、すべて報告されることを確認（1つ目で停止しない）"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "multiple-incomplete-spec"},
+        "meta": {"name": "multiple-incomplete_spec"},
         "datatypes": [
             {
                 "id": "Frame1",
@@ -423,7 +423,7 @@ def test_dag_stage_zero_candidates_specific_error_message(temp_spec_dir):
     """候補がゼロのdag_stageのエラーメッセージが具体的であることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "specific-error-spec"},
+        "meta": {"name": "specific-error_spec"},
         "datatypes": [
             {
                 "id": "InputFrame",

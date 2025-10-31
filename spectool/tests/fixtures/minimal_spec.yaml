@@ -1,6 +1,6 @@
 version: "1.0"
 meta:
-  name: minimal-test
+  name: minimal_test
   description: "Minimal test spec"
 
 datatypes:

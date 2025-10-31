@@ -1,6 +1,6 @@
 version: "1.0"
 meta:
-  name: invalid-missing-type
+  name: invalid_missing_type
   description: "Invalid spec with missing dtype"
 
 datatypes:

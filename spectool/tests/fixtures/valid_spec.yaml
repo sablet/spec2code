@@ -1,6 +1,6 @@
 version: "1.0"
 meta:
-  name: valid-spec
+  name: valid_spec
   description: "Valid spec without errors"
 
 checks:

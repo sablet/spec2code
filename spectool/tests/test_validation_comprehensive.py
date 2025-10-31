@@ -24,7 +24,7 @@ def test_validation_returns_all_errors_not_exception(temp_spec_dir):
     """複数のエラーがある場合、すべてのエラーがリストで返されることを確認（例外を投げない）"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "multi-error-spec"},
+        "meta": {"name": "multi-error_spec"},
         "datatypes": [
             {
                 "id": "DataFrame1",
@@ -83,7 +83,7 @@ def test_validation_shows_warnings_and_successes(temp_spec_dir):
     """一部にエラーがあっても、警告や成功した項目も表示されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "partial-error-spec"},
+        "meta": {"name": "partial-error_spec"},
         "datatypes": [
             {
                 "id": "ValidFrame",
@@ -137,7 +137,7 @@ def test_validation_error_messages_are_descriptive(temp_spec_dir):
     """バリデーションエラーメッセージが詳細であることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "error-message-spec"},
+        "meta": {"name": "error-message_spec"},
         "datatypes": [
             {
                 "id": "TestFrame",
@@ -174,7 +174,7 @@ def test_validation_continues_after_first_error(temp_spec_dir):
     """最初のエラー後も検証が継続されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "continue-validation-spec"},
+        "meta": {"name": "continue-validation_spec"},
         "datatypes": [
             {
                 "id": "Frame1",
@@ -218,7 +218,7 @@ def test_validation_categorizes_errors_by_type(temp_spec_dir):
     """エラーが種類別にカテゴライズされて返されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "categorized-errors-spec"},
+        "meta": {"name": "categorized-errors_spec"},
         "datatypes": [
             {
                 "id": "BadFrame",
@@ -270,7 +270,7 @@ def test_validation_summary_includes_counts(temp_spec_dir):
     """バリデーション結果にエラー/警告/成功の件数が含まれることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "summary-spec"},
+        "meta": {"name": "summary_spec"},
         "datatypes": [
             {
                 "id": "ValidFrame",
@@ -325,7 +325,7 @@ def test_validation_handles_circular_dependencies_gracefully(temp_spec_dir):
     """循環依存がある場合も、他の検証項目は継続されることを確認"""
     spec_data = {
         "version": "1.0",
-        "meta": {"name": "circular-dep-spec"},
+        "meta": {"name": "circular-dep_spec"},
         "datatypes": [
             {
                 "id": "Frame1",
