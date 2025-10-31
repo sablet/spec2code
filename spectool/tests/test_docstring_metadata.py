@@ -85,7 +85,8 @@ class TestBuildTransformFunctionSignature:
         assert '    """TODO: Implement process_data' in result
         assert "    Process input data" in result
         assert '    """' in result
-        assert "    # TODO: Implement transformation logic" in result
+        # build_transform_function_signature doesn't include TODO comment anymore
+        # Each function generator adds its own specific TODO comment
 
     def test_signature_with_metadata(self):
         """メタデータ付きシグネチャ"""
@@ -190,3 +191,143 @@ class TestBuildTransformFunctionSignature:
 
         # メタデータセクションが追加されない
         assert "Logic Overview:" not in result_text
+
+
+class TestCheckFunctionWithMetadata:
+    """Check関数のspec_metadata docstring生成テスト"""
+
+    def test_check_function_without_metadata(self):
+        """メタデータなしのCheck関数"""
+        from spectool.spectool.core.base.ir import CheckSpec, SpecIR, MetaSpec
+        from spectool.spectool.backends.py_skeleton_functions import generate_check_function
+
+        check = CheckSpec(
+            id="test_check",
+            description="Validate data completeness",
+            impl="apps.checks:validate_data",
+            file_path="checks/validators.py",
+            input_type_ref="dict",
+        )
+        ir = SpecIR(meta=MetaSpec(name="test-app"))
+        imports = set()
+
+        result = generate_check_function(check, ir, imports)
+
+        # 基本構造の確認
+        assert "def validate_data(payload: dict) -> bool:" in result
+        assert "Validate data completeness" in result
+        assert "TODO: Implement validate_data" in result
+        # メタデータセクションがない
+        assert "Logic Overview:" not in result
+        assert "Validation Steps:" not in result
+
+    def test_check_function_with_metadata(self):
+        """メタデータ付きCheck関数"""
+        from spectool.spectool.core.base.ir import CheckSpec, SpecIR, MetaSpec
+        from spectool.spectool.backends.py_skeleton_functions import generate_check_function
+
+        check = CheckSpec(
+            id="test_check",
+            description="Validate data completeness",
+            impl="apps.checks:validate_data",
+            file_path="checks/validators.py",
+            input_type_ref="dict",
+            spec_metadata={
+                "validation_steps": [
+                    "Check for required fields",
+                    "Validate data types",
+                    "Check value ranges",
+                ],
+                "complexity": "O(1)",
+                "error_handling": "Returns False on validation failure",
+            },
+        )
+        ir = SpecIR(meta=MetaSpec(name="test-app"))
+        imports = set()
+
+        result = generate_check_function(check, ir, imports)
+
+        # 基本構造の確認
+        assert "def validate_data(payload: dict) -> bool:" in result
+        assert "Validate data completeness" in result
+
+        # メタデータの確認
+        assert "Validation Steps:" in result
+        assert "- Check for required fields" in result
+        assert "- Validate data types" in result
+        assert "- Check value ranges" in result
+        assert "Complexity: O(1)" in result
+        assert "Error Handling: Returns False on validation failure" in result
+
+
+class TestGeneratorFunctionWithMetadata:
+    """Generator関数のspec_metadata docstring生成テスト"""
+
+    def test_generator_function_without_metadata(self):
+        """メタデータなしのGenerator関数"""
+        from spectool.spectool.core.base.ir import GeneratorDef, SpecIR, MetaSpec, ParameterSpec
+        from spectool.spectool.backends.py_skeleton_functions import generate_generator_function
+
+        generator = GeneratorDef(
+            id="test_gen",
+            description="Generate sample data",
+            impl="apps.generators:generate_sample",
+            file_path="generators/data.py",
+            parameters=[ParameterSpec(name="size", type_ref="builtins:int", default=10)],
+            return_type_ref="builtins:list",
+        )
+        ir = SpecIR(meta=MetaSpec(name="test-app"))
+        imports = set()
+
+        result = generate_generator_function(generator, ir, imports)
+
+        # 基本構造の確認
+        assert "def generate_sample(size: int = 10) -> list:" in result
+        assert "Generate sample data" in result
+        assert "TODO: Implement generate_sample" in result
+        # メタデータセクションがない
+        assert "Logic Overview:" not in result
+        assert "Generation Steps:" not in result
+
+    def test_generator_function_with_metadata(self):
+        """メタデータ付きGenerator関数"""
+        from spectool.spectool.core.base.ir import GeneratorDef, SpecIR, MetaSpec, ParameterSpec
+        from spectool.spectool.backends.py_skeleton_functions import generate_generator_function
+
+        generator = GeneratorDef(
+            id="test_gen",
+            description="Generate OHLCV sample data",
+            impl="apps.generators:generate_ohlcv",
+            file_path="generators/data.py",
+            parameters=[ParameterSpec(name="size", type_ref="builtins:int", default=100)],
+            return_type_ref="DataFrame",
+            spec_metadata={
+                "generation_steps": [
+                    "Create timestamp index",
+                    "Generate random OHLCV values",
+                    "Apply realistic constraints",
+                ],
+                "complexity": "O(n)",
+                "dependencies": ["pandas", "numpy"],
+                "notes": "Generated data follows realistic market patterns",
+            },
+        )
+        ir = SpecIR(meta=MetaSpec(name="test-app"))
+        imports = set()
+
+        result = generate_generator_function(generator, ir, imports)
+
+        # 基本構造の確認
+        assert "def generate_ohlcv(size: int = 100)" in result
+        assert "Generate OHLCV sample data" in result
+
+        # メタデータの確認
+        assert "Generation Steps:" in result
+        assert "- Create timestamp index" in result
+        assert "- Generate random OHLCV values" in result
+        assert "- Apply realistic constraints" in result
+        assert "Complexity: O(n)" in result
+        assert "Dependencies:" in result
+        assert "- pandas" in result
+        assert "- numpy" in result
+        assert "Notes: Generated data follows realistic market patterns" in result

@@ -178,13 +178,23 @@ class DAGStageSpec:
 
 @dataclass
 class CheckSpec:
-    """Check関数定義"""
+    """Check関数定義
+
+    Attributes:
+        id: Check ID
+        description: 説明
+        impl: 実装関数参照（"module:function"形式）
+        file_path: ファイルパス
+        input_type_ref: 入力型参照
+        spec_metadata: 追加のメタデータ（docstring生成用、任意の構造）
+    """
 
     id: str
     description: str = ""
     impl: str = ""
     file_path: str = ""
     input_type_ref: str | None = None
+    spec_metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -201,7 +211,17 @@ class ExampleCase:
 
 @dataclass
 class GeneratorDef:
-    """データ生成関数定義"""
+    """データ生成関数定義
+
+    Attributes:
+        id: Generator ID
+        description: 説明
+        impl: 実装関数参照（"module:function"形式）
+        file_path: ファイルパス
+        parameters: パラメータリスト
+        return_type_ref: 戻り値型参照
+        spec_metadata: 追加のメタデータ（docstring生成用、任意の構造）
+    """
 
     id: str
     description: str = ""
@@ -209,6 +229,7 @@ class GeneratorDef:
     file_path: str = ""
     parameters: list[ParameterSpec] = field(default_factory=list)
     return_type_ref: str | None = None
+    spec_metadata: dict[str, Any] | None = None
 
 
 @dataclass

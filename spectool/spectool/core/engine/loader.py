@@ -354,6 +354,7 @@ def _load_check_specs(checks_data: list[dict[str, Any]]) -> list[CheckSpec]:
             impl=check_data.get("impl", ""),
             file_path=check_data.get("file_path", ""),
             input_type_ref=check_data.get("input_type_ref"),
+            spec_metadata=check_data.get("spec_metadata"),  # メタデータをパース
         )
         checks.append(check)
     return checks
@@ -395,6 +396,7 @@ def _load_generator_specs(generators_data: dict[str, Any] | list[dict[str, Any]]
             file_path=gen_data.get("file_path", ""),
             parameters=parameters,
             return_type_ref=gen_data.get("return_type_ref", ""),
+            spec_metadata=gen_data.get("spec_metadata"),  # メタデータをパース
         )
         generators.append(generator)
     return generators

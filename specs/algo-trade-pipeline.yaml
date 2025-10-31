@@ -41,6 +41,14 @@ checks:
     impl: "apps.algo_trade_pipeline.checks.feature_checks:check_ohlcv"
     file_path: "checks/feature_checks.py"
     input_type_ref: OHLCVFrame
+    spec_metadata:
+      validation_steps:
+        - "Verify DataFrame has required columns (open, high, low, close)"
+        - "Check datetime index exists and is monotonic"
+        - "Validate price relationships (high >= open/close, low <= open/close)"
+        - "Check for missing or invalid values"
+      complexity: "O(n)"
+      error_handling: "Returns False if any validation fails"
 
   - id: check_target
     description: "Validate target variable DataFrame"
@@ -66,6 +74,13 @@ checks:
     impl: "apps.algo_trade_pipeline.checks.model_checks:check_cv_config"
     file_path: "checks/model_checks.py"
     input_type_ref: SimpleCVConfig
+    spec_metadata:
+      validation_steps:
+        - "Verify method is one of TIME_SERIES, EXPANDING_WINDOW, or SLIDING_WINDOW"
+        - "Check n_splits is positive integer"
+        - "Validate test_size is between 0 and 1 if provided"
+        - "Ensure gap is non-negative integer"
+      complexity: "O(1)"
 
   - id: check_cv_result
     description: "Validate CV training result"
@@ -376,6 +391,16 @@ generators:
     impl: "apps.algo_trade_pipeline.generators.feature_engineering:generate_ohlcv_frame"
     file_path: "generators/feature_engineering.py"
     return_type_ref: OHLCVFrame
+    spec_metadata:
+      generation_steps:
+        - "Create datetime index with 1-hour frequency"
+        - "Generate realistic OHLCV values with price constraints"
+        - "Ensure high >= max(open, close) and low <= min(open, close)"
+        - "Add optional volume column with random integer values"
+      complexity: "O(n)"
+      dependencies:
+        - pandas
+        - numpy
 
   - id: gen_feature_frame
     description: "Assemble a feature DataFrame"
@@ -400,6 +425,13 @@ generators:
     impl: "apps.algo_trade_pipeline.generators.model:generate_cv_result"
     file_path: "generators/model.py"
     return_type_ref: CVResult
+    spec_metadata:
+      generation_steps:
+        - "Generate FoldResult for each fold with random scores"
+        - "Create OOS predictions DataFrame with timestamps and predictions"
+        - "Combine all results into CVResult structure"
+      complexity: "O(n_folds)"
+      notes: "Generates synthetic cross-validation results for testing"
 
   - id: gen_simulation_result
     description: "Create a simulation result payload"

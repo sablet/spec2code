@@ -245,7 +245,6 @@ def build_transform_function_signature(
             lines.append("    ")  # セクション間の空行
 
     lines.append('    """')
-    lines.append("    # TODO: Implement transformation logic")
 
     return lines
 

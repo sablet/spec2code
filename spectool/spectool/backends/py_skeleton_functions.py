@@ -32,16 +32,16 @@ def generate_check_function(check: CheckSpec, ir: SpecIR, imports: set[str]) -> 
     # input_type_refがある場合は型解決、ない場合はdictをデフォルトとする
     input_type = _resolve_type_ref(check.input_type_ref, ir, imports) if check.input_type_ref else "dict"
 
-    lines = []
-    if check.description:
-        lines.append(f"# {check.description}")
+    # メタデータ付きdocstringを生成（build_transform_function_signatureを再利用）
+    lines = build_transform_function_signature(
+        func_name,
+        f"payload: {input_type}",
+        "bool",
+        check.description,
+        spec_metadata=check.spec_metadata,  # メタデータを渡す
+    )
 
-    lines.append(f"def {func_name}(payload: {input_type}) -> bool:")
-    lines.append(f'    """TODO: Implement {func_name}')
-    lines.append("    ")
-    if check.description:
-        lines.append(f"    {check.description}")
-    lines.append('    """')
+    # Validation logic placeholderを追加
     lines.append("    # TODO: Implement validation logic")
     lines.append("    return True")
 
@@ -73,6 +73,7 @@ def generate_transform_function(transform: TransformSpec, ir: SpecIR, imports: s
         transform.description,
         spec_metadata=transform.spec_metadata,  # メタデータを渡す
     )
+    lines.append("    # TODO: Implement transformation logic")
     lines.extend(build_function_body_placeholder(return_type))
 
     return "\n".join(lines)
@@ -100,16 +101,16 @@ def generate_generator_function(generator: GeneratorDef, ir: SpecIR, imports: se
     # resolve_transform_return_typeは、.return_type_refを持つオブジェクトを受け取る
     return_type = resolve_transform_return_type(generator, ir, imports)
 
-    lines = []
-    if generator.description:
-        lines.append(f"# {generator.description}")
+    # メタデータ付きdocstringを生成（build_transform_function_signatureを再利用）
+    lines = build_transform_function_signature(
+        func_name,
+        param_str,
+        return_type,
+        generator.description,
+        spec_metadata=generator.spec_metadata,  # メタデータを渡す
+    )
 
-    lines.append(f"def {func_name}({param_str}) -> {return_type}:")
-    lines.append(f'    """TODO: Implement {func_name}')
-    lines.append("    ")
-    if generator.description:
-        lines.append(f"    {generator.description}")
-    lines.append('    """')
+    # Data generation logic placeholderを追加
     lines.append("    # TODO: Implement data generation logic")
 
     # プレースホルダーの返り値を生成
