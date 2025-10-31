@@ -171,18 +171,18 @@ examples:
     expected:
       valid: true
 
-  - id: ex_ohlcv_row
-    description: "OHLCV row example"
-    datatype_ref: OHLCVRow
-    input:
-      timestamp: "2024-01-01T00:00:00"
-      open: 145.50
-      high: 146.00
-      low: 145.00
-      close: 145.80
-      volume: 1000000
-    expected:
-      valid: true
+  # - id: ex_ohlcv_row
+  #   description: "OHLCV row example"
+  #   datatype_ref: OHLCVRow
+  #   input:
+  #     timestamp: "2024-01-01T00:00:00"
+  #     open: 145.50
+  #     high: 146.00
+  #     low: 145.00
+  #     close: 145.80
+  #     volume: 1000000
+  #   expected:
+  #     valid: true
 
   - id: ex_cv_config
     description: "CV configuration example"
@@ -601,47 +601,47 @@ datatypes:
                 native: "builtins:str"
           description: "List of included symbols"
 
-  # OHLCVRow: 単一行データの構造定義（exampleバリデーション用）
-  - id: OHLCVRow
-    description: "Single OHLCV row data structure for validation"
-    examples:
-      - timestamp: "2024-01-01T00:00:00"
-        open: 145.50
-        high: 146.00
-        low: 145.00
-        close: 145.80
-        volume: 1000000
-    pydantic_model:
-      fields:
-        - name: timestamp
-          type:
-            native: "datetime:datetime"
-          description: "Timestamp (index)"
-        - name: open
-          type:
-            native: "builtins:float"
-          description: "Open price"
-        - name: high
-          type:
-            native: "builtins:float"
-          description: "High price"
-        - name: low
-          type:
-            native: "builtins:float"
-          description: "Low price"
-        - name: close
-          type:
-            native: "builtins:float"
-          description: "Close price"
-        - name: volume
-          type:
-            native: "builtins:int"
-          optional: true
-          description: "Volume"
+  # # OHLCVRow: 単一行データの構造定義（exampleバリデーション用）
+  # - id: OHLCVRow
+  #   description: "Single OHLCV row data structure for validation"
+  #   examples:
+  #     - timestamp: "2024-01-01T00:00:00"
+  #       open: 145.50
+  #       high: 146.00
+  #       low: 145.00
+  #       close: 145.80
+  #       volume: 1000000
+  #   pydantic_model:
+  #     fields:
+  #       - name: timestamp
+  #         type:
+  #           native: "datetime:datetime"
+  #         description: "Timestamp (index)"
+  #       - name: open
+  #         type:
+  #           native: "builtins:float"
+  #         description: "Open price"
+  #       - name: high
+  #         type:
+  #           native: "builtins:float"
+  #         description: "High price"
+  #       - name: low
+  #         type:
+  #           native: "builtins:float"
+  #         description: "Low price"
+  #       - name: close
+  #         type:
+  #           native: "builtins:float"
+  #         description: "Close price"
+  #       - name: volume
+  #         type:
+  #           native: "builtins:int"
+  #         optional: true
+  #         description: "Volume"
 
   # ===== Phase 2: Feature Engineering =====
   - id: OHLCVFrame
-    description: "OHLCV DataFrame where each row conforms to OHLCVRow structure"
+    description: "OHLCV DataFrame"
     check_functions:
       - check_ohlcv
     type_alias:

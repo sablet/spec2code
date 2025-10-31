@@ -16,6 +16,7 @@
     "next": "15.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-syntax-highlighter": "^16.1.0",
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
@@ -23,6 +24,7 @@
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "eslint": "^9.38.0",
     "eslint-config-next": "^16.0.0",
     "jscpd": "^4.0.5",

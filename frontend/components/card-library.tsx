@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Search, Shuffle, Upload, CheckCircle, FileType, FileText, Workflow, Sparkles } from "lucide-react"
 import Link from "next/link"
+import { Light as SyntaxHighlighter } from "react-syntax-highlighter"
+import json from "react-syntax-highlighter/dist/esm/languages/hljs/json"
+import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs"
+
+SyntaxHighlighter.registerLanguage("json", json)
 
 interface CardDefinition {
   id: string
@@ -36,6 +41,8 @@ interface CardDefinition {
   stage_id?: string
   selection_mode?: string
   candidates?: string[]
+  // 生データ（元のJSONから）
+  raw_metadata?: Record<string, any>
 }
 
 interface SpecMetadata {
@@ -58,7 +65,7 @@ const defaultCards: CardDefinition[] = [
   {
     id: "check_example",
     name: "check_example",
-    category: "checks",
+    category: "check",
     description: "Example check function for data validation",
     source_spec: "default",
     icon: CheckCircle,
@@ -69,7 +76,7 @@ const defaultCards: CardDefinition[] = [
   {
     id: "ExampleFrame",
     name: "ExampleFrame",
-    category: "dtype",
+    category: "dtype_frame",
     description: "Example data type definition",
     source_spec: "default",
     icon: FileType,
@@ -120,7 +127,12 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
   const cards: CardDefinition[] = []
 
   const iconMap: Record<string, any> = {
-    "checks": CheckCircle,
+    "check": CheckCircle,
+    "dtype_frame": FileType,
+    "dtype_enum": FileType,
+    "dtype_pydantic": FileType,
+    "dtype_alias": FileType,
+    "dtype_generic": FileType,
     "dtype": FileType,
     "example": FileText,
     "transform": Shuffle,
@@ -131,12 +143,15 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
 
   for (const card of jsonData.cards || []) {
     const icon = iconMap[card.category] || FileType
-    const metadata = card.metadata || {}
+    const metadata = card.data || {}
+
+    // dtype_* カテゴリを dtype にマップ
+    const displayCategory = card.category.startsWith("dtype_") ? "dtype" : card.category
 
     cards.push({
       id: card.id,
       name: card.name,
-      category: card.category,
+      category: displayCategory,
       description: card.description,
       source_spec: card.source_spec || "unknown",
       icon,
@@ -158,6 +173,8 @@ function convertJsonToCards(jsonData: any): CardDefinition[] {
       stage_id: card.id,
       selection_mode: metadata.selection_mode,
       candidates: metadata.candidates || [metadata.from, metadata.to].filter(Boolean),
+      // 生データを保存（id, name, description以外）
+      raw_metadata: metadata,
     })
   }
 
@@ -202,11 +219,40 @@ export function CardLibrary() {
   const [detailPanelTab, setDetailPanelTab] = useState<"details" | "ungrouped">("details")
   const [referencedKeys, setReferencedKeys] = useState<Set<string>>(new Set())
   const [unlinkedKeys, setUnlinkedKeys] = useState<Set<string>>(new Set())
+  const [detailPanelWidth, setDetailPanelWidth] = useState(512) // 32rem = 512px
+  const [isResizing, setIsResizing] = useState(false)
   const cardLookup = useMemo(() => {
     const map = new Map<string, CardDefinition>()
     cardDefinitions.forEach((card) => map.set(`${card.source_spec}::${card.id}`, card))
     return map
   }, [cardDefinitions])
+
+  // Handle resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      const newWidth = window.innerWidth - e.clientX
+      setDetailPanelWidth(Math.max(320, Math.min(newWidth, window.innerWidth * 0.6)))
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+      document.body.style.cursor = "ew-resize"
+      document.body.style.userSelect = "none"
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [isResizing])
 
   // Load unified JSON on mount
   useEffect(() => {
@@ -274,33 +320,33 @@ export function CardLibrary() {
   const categories = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.category)))]
   const specs = ["All", ...Array.from(new Set(cardDefinitions.map((c) => c.source_spec)))]
 
+  // Helper function to create card matcher
+  const createCardMatcher = useCallback(
+    (filters: { category?: string; spec?: string }) => (card: CardDefinition) => {
+      const matchesSearch =
+        card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        card.description.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesCategory = !filters.category || filters.category === "All" || card.category === filters.category
+      const matchesSpec = !filters.spec || filters.spec === "All" || card.source_spec === filters.spec
+      return matchesSearch && matchesCategory && matchesSpec
+    },
+    [searchQuery],
+  )
+
   // For category counts: apply spec and search filters only (not category filter)
-  const cardsFilteredBySpecAndSearch = cardDefinitions.filter((card) => {
-    const matchesSearch =
-      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.description.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesSpec = selectedSpec === "All" || card.source_spec === selectedSpec
-    return matchesSearch && matchesSpec
-  })
+  const cardsFilteredBySpecAndSearch = cardDefinitions.filter(
+    createCardMatcher({ spec: selectedSpec }),
+  )
 
   // For spec counts: apply category and search filters only (not spec filter)
-  const cardsFilteredByCategoryAndSearch = cardDefinitions.filter((card) => {
-    const matchesSearch =
-      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.description.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCategory = selectedCategory === "All" || card.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  const cardsFilteredByCategoryAndSearch = cardDefinitions.filter(
+    createCardMatcher({ category: selectedCategory }),
+  )
 
   // Final filtered cards: apply all filters
-  const filteredCards = cardDefinitions.filter((card) => {
-    const matchesSearch =
-      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.description.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCategory = selectedCategory === "All" || card.category === selectedCategory
-    const matchesSpec = selectedSpec === "All" || card.source_spec === selectedSpec
-    return matchesSearch && matchesCategory && matchesSpec
-  })
+  const filteredCards = cardDefinitions.filter(
+    createCardMatcher({ category: selectedCategory, spec: selectedSpec }),
+  )
 
   const filteredDagStageGroups = dagStageGroups.filter((group) => {
     const matchesSpec = selectedSpec === "All" || group.spec_name === selectedSpec
@@ -331,13 +377,7 @@ export function CardLibrary() {
     })
   }, [cardDefinitions, unlinkedKeys])
 
-  const filteredUngroupedCards = ungroupedCards.filter((card) => {
-    const matchesSearch =
-      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.description.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesSpec = selectedSpec === "All" || card.source_spec === selectedSpec
-    return matchesSearch && matchesSpec
-  })
+  const filteredUngroupedCards = ungroupedCards.filter(createCardMatcher({ spec: selectedSpec }))
 
   const shouldShowDagStageGroups = selectedCategory === "All" && dagStageGroups.length > 0
 
@@ -409,7 +449,7 @@ export function CardLibrary() {
           {card.source_spec}
         </Badge>
       </div>
-      {card.category === "checks" && card.target_dtype && <div>対象型: {card.target_dtype}</div>}
+      {card.category === "check" && card.target_dtype && <div>対象型: {card.target_dtype}</div>}
       {card.category === "dtype" && card.schema && <div>フィールド数: {Object.keys(card.schema).length}</div>}
       {card.category === "example" && card.dtype && <div>データ型: {card.dtype}</div>}
       {card.category === "transform" && (
@@ -424,6 +464,34 @@ export function CardLibrary() {
         <div>選択モード: {card.selection_mode}</div>
       )}
     </div>
+  )
+
+  const CardContent = ({
+    card,
+    label,
+    labelColor,
+  }: {
+    card: CardDefinition
+    label?: string
+    labelColor?: string
+  }) => (
+    <>
+      {label && <div className={`text-xs font-semibold ${labelColor} mb-2`}>{label}</div>}
+      <div className="flex items-start gap-3 mb-3">
+        <div className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}>
+          <card.icon className={`w-5 h-5 text-${card.color}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
+          <Badge variant="secondary" className="text-xs">
+            {card.category}
+          </Badge>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
+      <CardDetailLines card={card} />
+    </>
   )
 
   const renderDagCard = (
@@ -457,21 +525,7 @@ export function CardLibrary() {
         }}
         aria-disabled={isDisabled}
       >
-        {label && <div className={`text-xs font-semibold ${labelColor} mb-2`}>{label}</div>}
-        <div className="flex items-start gap-3 mb-3">
-          <div className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}>
-            <card.icon className={`w-5 h-5 text-${card.color}`} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
-            <Badge variant="secondary" className="text-xs">
-              {card.category}
-            </Badge>
-          </div>
-        </div>
-
-        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
-        <CardDetailLines card={card} />
+        <CardContent card={card} label={label} labelColor={labelColor} />
       </Card>
     )
   }
@@ -760,23 +814,7 @@ export function CardLibrary() {
                   }`}
                   onClick={() => handleCardSelect(card)}
                 >
-                  <div className="flex items-start gap-3 mb-3">
-                    <div
-                      className={`w-10 h-10 rounded-lg bg-${card.color}/10 flex items-center justify-center flex-shrink-0`}
-                    >
-                      <card.icon className={`w-5 h-5 text-${card.color}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-card-foreground mb-1">{card.name}</h3>
-                      <Badge variant="secondary" className="text-xs">
-                        {card.category}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{card.description}</p>
-
-                  <CardDetailLines card={card} />
+                  <CardContent card={card} />
                 </Card>
               ))}
             </div>
@@ -784,7 +822,15 @@ export function CardLibrary() {
         </main>
 
         {/* Details Panel */}
-        <aside className="w-96 border-l border-border bg-card p-6 overflow-y-auto flex-shrink-0">
+        <aside
+          className="border-l border-border bg-card p-6 overflow-y-auto flex-shrink-0 relative"
+          style={{ width: `${detailPanelWidth}px` }}
+        >
+          {/* Resize Handle */}
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/50 transition-colors"
+            onMouseDown={() => setIsResizing(true)}
+          />
           <div className="flex items-center justify-between mb-6">
             <div className="inline-flex rounded-md border border-border bg-background">
               {[
@@ -835,178 +881,26 @@ export function CardLibrary() {
                     <p className="text-sm text-muted-foreground leading-relaxed">{selectedCard.description}</p>
                   </div>
 
-                  {selectedCard.category === "checks" && (
-                    <>
-                      {selectedCard.target_dtype && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">対象データ型</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.target_dtype}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.implementation && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
-                          </Card>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {selectedCard.category === "dtype" && (
-                    <>
-                      {selectedCard.schema && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">スキーマ</h3>
-                          <Card className="p-3 bg-background">
-                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                              {JSON.stringify(selectedCard.schema, null, 2)}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.example_id && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータID</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.example_id}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.check_ids && selectedCard.check_ids.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">チェック関数</h3>
-                          <div className="space-y-2">
-                            {selectedCard.check_ids.map((check) => (
-                              <Card key={check} className="p-3 bg-background">
-                                <code className="text-xs font-mono text-foreground">{check}</code>
-                              </Card>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {selectedCard.category === "example" && (
-                    <>
-                      {selectedCard.dtype && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">データ型</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.dtype}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.data && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">サンプルデータ</h3>
-                          <Card className="p-3 bg-background">
-                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                              {JSON.stringify(selectedCard.data, null, 2)}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {selectedCard.category === "transform" && (
-                    <>
-                      {selectedCard.params && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">パラメータ</h3>
-                          <Card className="p-3 bg-background">
-                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                              {JSON.stringify(selectedCard.params, null, 2)}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.input_dtype && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">入力データ型</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.input_dtype}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.output_dtype && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">出力データ型</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.output_dtype}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.implementation && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
-                          </Card>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {selectedCard.category === "generator" && (
-                    <>
-                      {selectedCard.params && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">パラメータ</h3>
-                          <Card className="p-3 bg-background">
-                            <pre className="text-xs text-muted-foreground font-mono overflow-x-auto">
-                              {JSON.stringify(selectedCard.params, null, 2)}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.implementation && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">実装パス</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.implementation}</code>
-                          </Card>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {(selectedCard.category === "dag" || selectedCard.category === "dag_stage") && (
-                    <>
-                      {selectedCard.stage_id && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">ステージID</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.stage_id}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.selection_mode && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">選択モード</h3>
-                          <Card className="p-3 bg-background">
-                            <code className="text-xs font-mono text-foreground">{selectedCard.selection_mode}</code>
-                          </Card>
-                        </div>
-                      )}
-                      {selectedCard.candidates && selectedCard.candidates.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground mb-2">候補</h3>
-                          <div className="space-y-2">
-                            {selectedCard.candidates.map((candidate) => (
-                              <Card key={candidate} className="p-3 bg-background">
-                                <code className="text-xs font-mono text-foreground">{candidate}</code>
-                              </Card>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
+                  {selectedCard.raw_metadata && Object.keys(selectedCard.raw_metadata).length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-2">メタデータ</h3>
+                      <Card className="p-0 bg-background overflow-hidden">
+                        <SyntaxHighlighter
+                          language="json"
+                          style={atomOneDark}
+                          customStyle={{
+                            margin: 0,
+                            padding: "0.75rem",
+                            fontSize: "0.75rem",
+                            lineHeight: "1.5",
+                            borderRadius: "0.375rem",
+                          }}
+                          wrapLongLines={true}
+                        >
+                          {JSON.stringify(selectedCard.raw_metadata, null, 2)}
+                        </SyntaxHighlighter>
+                      </Card>
+                    </div>
                   )}
 
                   <Button className="w-full">キャンバスに追加</Button>

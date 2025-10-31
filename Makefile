@@ -180,7 +180,7 @@ install-python: ## Python依存関係インストール
 # フロントエンド開発
 export-cards: ## YAML仕様をJSON cardに変換
 	@mkdir -p frontend/public/cards
-	uv run python main.py export_cards specs/*.yaml --output=frontend/public/cards
+	uv run python -m spectool export-cards specs/*.yaml --output frontend/public/cards
 	@echo "✓ All cards exported to frontend/public/cards/"
 
 front-run: export-cards ## フロントエンド開発サーバー起動

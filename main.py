@@ -22,6 +22,7 @@ from spectool.spectool.core.engine.integrity import IntegrityValidator
 from spectool.spectool.core.engine.dag_runner import DAGRunner
 from spectool.spectool.core.engine.config_runner import ConfigRunner
 from spectool.spectool.backends.py_skeleton import generate_skeleton
+from spectool.spectool.core.export.card_exporter import export_spec_to_cards
 
 __version__ = "2.0.0-alpha"
 
@@ -342,6 +343,121 @@ class SpectoolCLI:
     def version(self) -> None:
         """Show version information."""
         print(f"spectool {__version__}")
+
+    def _collect_referenced_card_keys(self, dag_stage_groups: list) -> set[str]:
+        """DAGステージグループから参照されているカードキーを収集"""
+        referenced_card_keys = set()
+
+        for group in dag_stage_groups:
+            related = group["related_cards"]
+
+            # 単一カード
+            for card_key in ["stage_card", "input_dtype_card", "output_dtype_card"]:
+                if related.get(card_key):
+                    card = related[card_key]
+                    referenced_card_keys.add(f"{card['source_spec']}::{card['id']}")
+
+            # リスト型カード
+            for card_list_key in [
+                "transform_cards",
+                "generator_cards",
+                "param_dtype_cards",
+                "input_example_cards",
+                "output_example_cards",
+                "input_check_cards",
+                "output_check_cards",
+            ]:
+                for card in related.get(card_list_key, []):
+                    referenced_card_keys.add(f"{card['source_spec']}::{card['id']}")
+
+        return referenced_card_keys
+
+    def _process_spec_file(self, spec_file: str) -> dict | None:
+        """単一のspecファイルを処理してカードデータを返す"""
+        spec_path = Path(spec_file)
+        if not spec_path.exists():
+            print(f"⚠️  Skipped: {spec_file} (not found)")
+            return None
+
+        try:
+            print(f"\n📖 Processing: {spec_path}")
+            ir = load_spec(str(spec_path))
+            normalized = normalize_ir(ir)
+            cards_data = export_spec_to_cards(normalized, spec_file)
+
+            num_cards = len(cards_data["cards"])
+            num_groups = len(cards_data["dag_stage_groups"])
+            print(f"✅ Exported {num_cards} cards, {num_groups} DAG stage groups from {spec_path.name}")
+
+            return cards_data
+
+        except Exception as e:
+            print(f"⚠️  Skipped {spec_file}: {e}")
+            return None
+
+    def export_cards(self, *specs: str, output: str = "frontend/public/cards") -> None:
+        """Export YAML specs to JSON cards for frontend display.
+
+        Args:
+            *specs: Spec YAML files (e.g., specs/*.yaml)
+            output: Output directory (default: frontend/public/cards)
+
+        Example:
+            python -m spectool export-cards specs/*.yaml --output frontend/public/cards
+        """
+        import json
+
+        if not specs:
+            print("❌ Error: No spec files provided")
+            print("   Usage: spectool export-cards specs/*.yaml [--output DIR]")
+            sys.exit(1)
+
+        # 出力ディレクトリ作成
+        output_dir = Path(output)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"📁 Output directory: {output_dir}")
+
+        # 統合データを準備
+        all_specs = []
+        all_cards = []
+        all_dag_stage_groups = []
+
+        # 各specファイルを処理
+        for spec_file in specs:
+            cards_data = self._process_spec_file(spec_file)
+            if cards_data:
+                all_specs.append(cards_data["metadata"])
+                all_cards.extend(cards_data["cards"])
+                all_dag_stage_groups.extend(cards_data["dag_stage_groups"])
+
+        # referenced_card_keysとunlinked_card_keysを計算
+        all_card_keys = {f"{card['source_spec']}::{card['id']}" for card in all_cards}
+        referenced_card_keys = self._collect_referenced_card_keys(all_dag_stage_groups)
+        unlinked_card_keys = all_card_keys - referenced_card_keys
+
+        # 統合JSONを構築
+        output_data = {
+            "specs": all_specs,
+            "cards": all_cards,
+            "dag_stage_groups": all_dag_stage_groups,
+            "referenced_card_keys": sorted(list(referenced_card_keys)),
+            "unlinked_card_keys": sorted(list(unlinked_card_keys)),
+        }
+
+        # all-cards.json に書き込み
+        output_file = output_dir / "all-cards.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+        print("\n✅ Export complete!")
+        print(f"   Total specs: {len(all_specs)}")
+        print(f"   Total cards: {len(all_cards)}")
+        print(f"   Total DAG stage groups: {len(all_dag_stage_groups)}")
+        print(f"   Referenced cards: {len(referenced_card_keys)}")
+        print(f"   Unlinked cards: {len(unlinked_card_keys)}")
+        coverage_pct = 100 * len(referenced_card_keys) // len(all_cards)
+        print(f"   Coverage: {len(referenced_card_keys)}/{len(all_cards)} ({coverage_pct}%)")
+        print(f"   Output file: {output_file}")
 
 
 def spectool_main() -> None:
