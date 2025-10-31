@@ -5,9 +5,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
-from spectool.spectool.core.base.ir import FrameSpec, ParameterSpec, SpecIR, TransformSpec
+from spectool.spectool.core.base.ir import FrameSpec, ParameterSpec, SpecIR
+
+
+class HasReturnTypeRef(Protocol):
+    """return_type_ref属性を持つオブジェクトのプロトコル"""
+
+    return_type_ref: str | None
 
 
 def extract_function_name(impl: str) -> str:
@@ -193,11 +199,11 @@ def render_parameter_signature(param: ParameterSpec, ir: SpecIR, imports: set[st
     return f"{param.name}: {type_annotation}"
 
 
-def resolve_transform_return_type(transform: TransformSpec, ir: SpecIR, imports: set[str] | None = None) -> str:
+def resolve_transform_return_type(transform: HasReturnTypeRef, ir: SpecIR, imports: set[str] | None = None) -> str:
     """Resolve return type for transform function.
 
     Args:
-        transform: Transform定義
+        transform: return_type_ref属性を持つオブジェクト（TransformSpec, GeneratorDefなど）
         ir: SpecIR（型参照解決用）
         imports: インポート文を蓄積するセット（指定時のみimportを追加）
 

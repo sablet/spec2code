@@ -87,12 +87,13 @@ def generate_generator_function(generator: GeneratorDef, ir: SpecIR, imports: se
     func_name = extract_function_name(generator.impl)
 
     # パラメータリストを生成
-    params = [render_parameter_signature(p, ir) for p in generator.parameters]
+    params = [render_parameter_signature(p, ir, imports) for p in generator.parameters]
     param_str = ", ".join(params) if params else ""
 
-    # Generator関数は常にpd.DataFrameを返すと仮定
-    return_type = "pd.DataFrame"
-    imports.add("import pandas as pd")
+    # return_type_refを解決（Transform関数と同じロジックを使用）
+    # GeneratorDefをTransformSpecのように扱うために、return_type_refを持つオブジェクトとして渡す
+    # resolve_transform_return_typeは、.return_type_refを持つオブジェクトを受け取る
+    return_type = resolve_transform_return_type(generator, ir, imports)
 
     lines = []
     if generator.description:
@@ -105,6 +106,9 @@ def generate_generator_function(generator: GeneratorDef, ir: SpecIR, imports: se
         lines.append(f"    {generator.description}")
     lines.append('    """')
     lines.append("    # TODO: Implement data generation logic")
-    lines.append("    return pd.DataFrame()")
+
+    # プレースホルダーの返り値を生成
+    placeholder_lines = build_function_body_placeholder(return_type)
+    lines.extend(placeholder_lines)
 
     return "\n".join(lines)

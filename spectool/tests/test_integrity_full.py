@@ -107,19 +107,25 @@ __all__ = ["process_data"]
     generator_file = app_root / "generators" / "data_generators.py"
     generator_code = """# Generator functions
 from typing import Any
+from apps.sample_project.models.models import DataPoint
 
 def generate_timeseries() -> dict[str, Any]:
     '''Generate time series data'''
     return {"timestamp": [], "value": [], "status": []}
+
+
+def generate_datapoint() -> DataPoint:
+    '''Generate a single data point'''
+    return DataPoint(timestamp="2024-01-01T00:00:00", value=100.0)
 """
     generator_file.write_text(generator_code)
 
     # __init__.pyから関数を再エクスポート
     generators_init_file = app_root / "generators" / "__init__.py"
     generators_init_code = """# Generator functions
-from .data_generators import generate_timeseries
+from .data_generators import generate_timeseries, generate_datapoint
 
-__all__ = ["generate_timeseries"]
+__all__ = ["generate_timeseries", "generate_datapoint"]
 """
     generators_init_file.write_text(generators_init_code)
 
@@ -278,10 +284,16 @@ def test_detect_generator_signature_mismatch(implemented_project, sample_spec_pa
 
     generator_code = """# Generator functions
 from typing import Any
+from apps.sample_project.models.models import DataPoint
 
 def generate_timeseries(extra: int = 1) -> dict[str, Any]:  # 余分なパラメータ
     '''Generate time series data'''
     return {"timestamp": [], "value": [], "status": []}
+
+
+def generate_datapoint() -> DataPoint:
+    '''Generate a single data point'''
+    return DataPoint(timestamp="2024-01-01T00:00:00", value=100.0)
 """
     generator_file.write_text(generator_code)
 
@@ -308,7 +320,14 @@ def generate_timeseries() -> dict[str, Any]:
     return {"timestamp": [], "value": [], "status": []}
 """
     helper_file.write_text(helper_code)
-    generator_file.write_text("from .helper_generators import generate_timeseries\n")
+    generator_code = """from .helper_generators import generate_timeseries
+from apps.sample_project.models.models import DataPoint
+
+def generate_datapoint() -> DataPoint:
+    '''Generate a single data point'''
+    return DataPoint(timestamp="2024-01-01T00:00:00", value=100.0)
+"""
+    generator_file.write_text(generator_code)
 
     ir = load_spec(sample_spec_path)
     validator = IntegrityValidator(ir)

@@ -207,7 +207,7 @@ class GeneratorDef:
     impl: str = ""
     file_path: str = ""
     parameters: list[ParameterSpec] = field(default_factory=list)
-    return_type_ref: str = ""
+    return_type_ref: str | None = None
 
 
 @dataclass

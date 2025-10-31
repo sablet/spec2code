@@ -226,3 +226,31 @@ def test_generate_dataframe_schemas(sample_spec_path, temp_output_dir):
 
     # TimeSeriesFrame Schemaが生成されていることを確認
     assert "TimeSeriesFrameSchema" in content
+
+
+def test_generator_function_return_type_is_resolved(sample_spec_path, temp_output_dir):
+    """Generator関数のreturn_type_refが正しく解決されることを確認
+
+    問題：generator関数が全てpd.DataFrameを返すようにハードコードされていた。
+    修正後：return_type_refを使って正しい型を返すべき。
+    """
+    ir = load_spec(sample_spec_path)
+    generate_skeleton(ir, temp_output_dir)
+
+    generator_file = temp_output_dir / "apps" / "sample_project" / "generators" / "data_generators.py"
+    content = generator_file.read_text()
+
+    # generate_timeseries は TimeSeriesFrame (DataFrame型エイリアス) を返すべき
+    # TimeSeriesFrameはdataframe_schemaなので、pd.DataFrameとして解決されるはず
+    assert "def generate_timeseries() -> " in content
+    # TimeSeriesFrameはDataFrameなので、Annotated[pd.DataFrame, ...] または pd.DataFrame になるはず
+
+    # generate_datapoint は DataPoint (Pydanticモデル) を返すべき
+    assert "def generate_datapoint() -> DataPoint:" in content
+
+    # Pydanticモデルの場合、適切なインポートが追加されているべき
+    assert "from apps.sample_project.models.models import DataPoint" in content
+
+    # 全ての関数が pd.DataFrame を返しているわけではないことを確認
+    # （つまり return_type_ref が正しく反映されていることを確認）
+    assert content.count("-> pd.DataFrame") < content.count("def generate_")

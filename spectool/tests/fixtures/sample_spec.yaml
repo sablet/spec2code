@@ -71,6 +71,13 @@ generators:
     impl: "apps.generators:generate_timeseries"
     file_path: "apps/generators/data_generators.py"
     parameters: []
+    return_type_ref: TimeSeriesFrame
+  - id: generate_datapoint
+    description: "Generate a single data point"
+    impl: "apps.generators:generate_datapoint"
+    file_path: "apps/generators/data_generators.py"
+    parameters: []
+    return_type_ref: DataPoint
 
 transforms:
   - id: process_data
