@@ -622,6 +622,41 @@ DAGステージは単一責任の原則に従い、各ステージが明確な�
 
 ---
 
+## スキーマ変更の検出
+
+このディレクトリには `.schema_snapshot.json` ファイルがあり、IRスキーマの構造をハッシュ値で記録しています。
+
+### スキーマ変更時の手順
+
+`spectool/spectool/core/base/ir.py` を変更した場合：
+
+1. **変更を検証する**:
+   ```bash
+   make test-schema-sync
+   ```
+
+2. **README.mdを更新する**:
+   - 追加されたフィールド: ドキュメントに追加
+   - 削除されたフィールド: ドキュメントから削除
+   - 変更されたフィールド: ドキュメントを更新
+
+3. **スナップショットを更新する**:
+   ```bash
+   make update-schema-snapshot
+   ```
+
+4. **変更をコミットする**:
+   ```bash
+   git add specs/README.md specs/.schema_snapshot.json
+   git commit -m "docs: Update spec README for schema changes"
+   ```
+
+### CI/CDでの自動チェック
+
+GitHub ActionsでPR作成時に自動的にスキーマとドキュメントの同期状態をチェックします。スキーマが変更されているのにREADMEが更新されていない場合、PRに警告コメントが追加されます。
+
+---
+
 ## サンプル仕様
 
 完全なサンプル仕様は以下を参照してください：
@@ -635,5 +670,17 @@ DAGステージは単一責任の原則に従い、各ステージが明確な�
 
 - プロジェクトルートの `CLAUDE.md`: 開発ワークフロー全体のガイド
 - `spectool/spectool/core/base/ir.py`: 内部中間表現（IR）のデータ構造定義
+  - `SpecIR`: 統合IR（中間表現）のルートデータ構造
+  - `MetaSpec`: プロジェクトメタデータ
+  - `FrameSpec`: DataFrame型定義
+  - `EnumSpec`: Enum型定義
+  - `PydanticModelSpec`: Pydanticモデル定義
+  - `TypeAliasSpec`: 型エイリアス定義
+  - `GenericSpec`: Generic型定義
+  - `TransformSpec`: Transform関数定義
+  - `DAGStageSpec`: DAGステージ定義
+  - `CheckSpec`: Check関数定義
+  - `ExampleCase`: 例示データ定義
+  - `GeneratorDef`: Generator関数定義
 - `spectool/spectool/core/engine/loader.py`: YAML仕様のロード処理
 - `spectool/spectool/core/engine/validate_ir.py`: IR検証ロジック
